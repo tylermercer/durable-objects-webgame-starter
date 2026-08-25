@@ -1,10 +1,14 @@
 {
   "name": "durable-objects-webgame-starter",
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  "main": "./src/worker-entry.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"
   },
   "compatibility_date": "2024-12-04",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "GAME_SESSION", "class_name": "GameSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameSession"] }]
 }
