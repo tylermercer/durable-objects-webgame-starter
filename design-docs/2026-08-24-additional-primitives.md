@@ -2,7 +2,7 @@
 
 ## Scope
 
-This is an addendum to `design-docs/2026-08-24-core-architecture.md`. It adds generic, game-agnostic primitives to the starter template — things any real-time console/controller game will likely need, not specific to any one game. (These came up while sketching a collaborative Zelda-like, but nothing here is dungeon- or Zelda-specific; that logic belongs in the game built on top of this template, not in the template itself.)
+This is an addendum to `design-docs/2026-08-24-core-architecture.md`. It adds generic, game-agnostic primitives to the starter template — things any real-time console/controller game will likely need, not specific to any one game.
 
 Every primitive here is additive and opt-in: the existing touch/canvas demo should keep working unmodified. A game either ignores a primitive entirely or wires into it.
 
