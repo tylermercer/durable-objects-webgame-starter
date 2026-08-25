@@ -43,6 +43,7 @@ class ConsoleApp {
   canvas: HTMLCanvasElement | null = null;
   ctx: CanvasRenderingContext2D | null = null;
   reconnectTimer: number | null = null;
+  modal: HTMLDialogElement | null = null;
 
   constructor() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -57,10 +58,92 @@ class ConsoleApp {
   }
 
   async init() {
+    this.setupUIHandlers();
     this.renderHeader();
     this.initCanvas();
+    this.updateDemoViewVisibility();
     this.connectSignaling();
     this.startAnimationLoop();
+  }
+
+  setupUIHandlers() {
+    this.modal = document.getElementById("room-modal") as HTMLDialogElement;
+
+    const newGameBtn = document.getElementById("new-game-btn");
+    if (newGameBtn) {
+      newGameBtn.addEventListener("click", () => this.openModal());
+    }
+
+    const addPlayersBtn = document.getElementById("add-players-btn");
+    if (addPlayersBtn) {
+      addPlayersBtn.addEventListener("click", () => this.openModal());
+    }
+
+    const modalCloseBtn = document.getElementById("modal-close-btn");
+    if (modalCloseBtn) {
+      modalCloseBtn.addEventListener("click", () => this.closeModal());
+    }
+
+    if (this.modal) {
+      // Backdrop click support
+      this.modal.addEventListener("click", (e) => {
+        if (e.target === this.modal) {
+          this.closeModal();
+        }
+      });
+      // Fires on Escape press as well as explicit close() call
+      this.modal.addEventListener("close", () => {
+        this.handleModalClosed();
+      });
+    }
+
+    const joinForm = document.getElementById("join-game-form") as HTMLFormElement;
+    const joinInput = document.getElementById("join-code-input") as HTMLInputElement;
+    if (joinForm && joinInput) {
+      joinForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const code = joinInput.value.trim().toUpperCase();
+        if (code) {
+          window.location.href = `/?code=${encodeURIComponent(code)}`;
+        }
+      });
+    }
+  }
+
+  openModal() {
+    if (this.modal && !this.modal.open) {
+      this.modal.showModal();
+    }
+  }
+
+  closeModal() {
+    if (this.modal && this.modal.open) {
+      this.modal.close();
+    }
+  }
+
+  handleModalClosed() {
+    const startScreen = document.getElementById("start-screen");
+    if (startScreen) {
+      startScreen.classList.add("u-hidden");
+    }
+
+    const addPlayersBtn = document.getElementById("add-players-btn");
+    if (addPlayersBtn) {
+      addPlayersBtn.classList.remove("u-hidden");
+    }
+  }
+
+  updateDemoViewVisibility() {
+    const demoView = document.getElementById("demo-view");
+    if (!demoView) return;
+
+    if (this.controllers.size > 0) {
+      demoView.classList.remove("u-hidden");
+      this.resizeCanvas();
+    } else {
+      demoView.classList.add("u-hidden");
+    }
   }
 
   renderHeader() {
@@ -94,8 +177,10 @@ class ConsoleApp {
   resizeCanvas() {
     if (!this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
-    this.canvas.width = rect.width * window.devicePixelRatio;
-    this.canvas.height = rect.height * window.devicePixelRatio;
+    if (rect.width > 0 && rect.height > 0) {
+      this.canvas.width = rect.width * window.devicePixelRatio;
+      this.canvas.height = rect.height * window.devicePixelRatio;
+    }
   }
 
   connectSignaling() {
@@ -149,6 +234,7 @@ class ConsoleApp {
 
     this.controllers.set(id, controller);
     this.updateControllerUI();
+    this.updateDemoViewVisibility();
   }
 
   removeController(id: string) {
@@ -157,6 +243,7 @@ class ConsoleApp {
       controller.pc?.close();
       this.controllers.delete(id);
       this.updateControllerUI();
+      this.updateDemoViewVisibility();
     }
   }
 
