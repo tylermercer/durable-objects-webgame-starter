@@ -2,14 +2,16 @@ import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
+import { createFixedTickLoop } from "../utils/gameLoop";
 import { PeerConnection, type TouchMessage } from "./peer-connection";
+import { loadConsoleGame, buildJoinUrl } from "./gameSource";
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
   "#B10DC9", "#FF851B", "#7FDBFF", "#F012BE"
 ];
 
-interface ControllerState {
+export interface ControllerState {
   id: string;
   name: string;
   color: string;
@@ -40,10 +42,10 @@ class ConsoleApp {
   code: string;
   controllers = new Map<string, ControllerState>();
   api: RpcStub<ConsoleApi> | null = null;
-  canvas: HTMLCanvasElement | null = null;
-  ctx: CanvasRenderingContext2D | null = null;
   reconnectTimer: number | null = null;
   modal: HTMLDialogElement | null = null;
+  gameLoop: { stop: () => void } | null = null;
+  activeGame: { tick?: (dt: number) => void; render?: (alpha: number) => void } | null = null;
 
   constructor() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -60,10 +62,24 @@ class ConsoleApp {
   async init() {
     this.setupUIHandlers();
     this.renderHeader();
-    this.initCanvas();
     this.updateDemoViewVisibility();
+    await this.initGame();
     this.connectSignaling();
-    this.startAnimationLoop();
+  }
+
+  async initGame() {
+    try {
+      const { createGame } = await loadConsoleGame();
+      this.activeGame = createGame({ session: this.api, peers: this.controllers });
+      if (this.gameLoop) this.gameLoop.stop();
+      this.gameLoop = createFixedTickLoop({
+        tickRate: 30,
+        onTick: (dt) => this.activeGame?.tick?.(dt),
+        onRender: (alpha) => this.activeGame?.render?.(alpha),
+      });
+    } catch (err) {
+      console.error("Failed to load console game:", err);
+    }
   }
 
   setupUIHandlers() {
@@ -85,13 +101,11 @@ class ConsoleApp {
     }
 
     if (this.modal) {
-      // Backdrop click support
       this.modal.addEventListener("click", (e) => {
         if (e.target === this.modal) {
           this.closeModal();
         }
       });
-      // Fires on Escape press as well as explicit close() call
       this.modal.addEventListener("close", () => {
         this.handleModalClosed();
       });
@@ -108,6 +122,11 @@ class ConsoleApp {
         }
       });
     }
+
+    window.addEventListener("example-changed", async () => {
+      this.renderHeader();
+      await this.initGame();
+    });
   }
 
   openModal() {
@@ -140,7 +159,6 @@ class ConsoleApp {
 
     if (this.controllers.size > 0) {
       demoView.classList.remove("u-hidden");
-      this.resizeCanvas();
     } else {
       demoView.classList.add("u-hidden");
     }
@@ -150,9 +168,10 @@ class ConsoleApp {
     const roomCodeEl = document.getElementById("room-code");
     if (roomCodeEl) roomCodeEl.textContent = this.code;
 
+    const joinUrl = buildJoinUrl(window.location.origin, this.code);
+
     const qrContainer = document.getElementById("qr-canvas") as HTMLCanvasElement;
     if (qrContainer) {
-      const joinUrl = `${window.location.origin}/?code=${this.code}`;
       QRCode.toCanvas(qrContainer, joinUrl, { width: 180, margin: 1 }, err => {
         if (err) console.error("Failed to render QR code", err);
       });
@@ -160,26 +179,7 @@ class ConsoleApp {
 
     const qrUrlEl = document.getElementById("qr-url");
     if (qrUrlEl) {
-      const url = `${window.location.origin}/?code=${this.code}`;
-      qrUrlEl.textContent = url;
-    }
-  }
-
-  initCanvas() {
-    this.canvas = document.getElementById("touch-canvas") as HTMLCanvasElement;
-    if (this.canvas) {
-      this.ctx = this.canvas.getContext("2d");
-      this.resizeCanvas();
-      window.addEventListener("resize", () => this.resizeCanvas());
-    }
-  }
-
-  resizeCanvas() {
-    if (!this.canvas) return;
-    const rect = this.canvas.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      this.canvas.width = rect.width * window.devicePixelRatio;
-      this.canvas.height = rect.height * window.devicePixelRatio;
+      qrUrlEl.textContent = joinUrl;
     }
   }
 
@@ -189,8 +189,6 @@ class ConsoleApp {
 
     try {
       this.api = newWebSocketRpcSession<ConsoleApi>(wsUrl);
-
-      // Handle session broken / reconnect
       this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ConsoleCallbacksHandler(this);
@@ -313,46 +311,6 @@ class ConsoleApp {
       row.appendChild(nameEl);
       row.appendChild(badge);
       listEl.appendChild(row);
-    }
-  }
-
-  startAnimationLoop() {
-    const render = () => {
-      this.drawTouches();
-      requestAnimationFrame(render);
-    };
-    requestAnimationFrame(render);
-  }
-
-  drawTouches() {
-    if (!this.ctx || !this.canvas) return;
-
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    for (const controller of this.controllers.values()) {
-      if (controller.lastTouch && controller.lastTouch.phase !== "end" && controller.lastTouch.phase !== "cancel") {
-        const x = controller.lastTouch.x * this.canvas.width;
-        const y = controller.lastTouch.y * this.canvas.height;
-
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, 20 * window.devicePixelRatio, 0, Math.PI * 2);
-        this.ctx.fillStyle = controller.color;
-        this.ctx.globalAlpha = 0.7;
-        this.ctx.fill();
-
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, 35 * window.devicePixelRatio, 0, Math.PI * 2);
-        this.ctx.strokeStyle = controller.color;
-        this.ctx.globalAlpha = 0.4;
-        this.ctx.lineWidth = 3 * window.devicePixelRatio;
-        this.ctx.stroke();
-
-        this.ctx.globalAlpha = 1.0;
-        this.ctx.fillStyle = "#ffffff";
-        this.ctx.font = `${14 * window.devicePixelRatio}px sans-serif`;
-        this.ctx.textAlign = "center";
-        this.ctx.fillText(controller.name, x, y - 25 * window.devicePixelRatio);
-      }
     }
   }
 }

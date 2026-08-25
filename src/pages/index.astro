@@ -1,5 +1,6 @@
 ---
 import Layout from '@layouts/Base.astro';
+import DemoSwitcher from '@components/DemoSwitcher.astro';
 
 export const prerender = false;
 
@@ -30,7 +31,8 @@ const isController = Boolean(code);
 
       <!-- Desktop Console (wide viewport) -->
       <div class="desktop-console">
-        <!-- Initial centered "New Game" button -->
+        <!-- Switcher UI & Initial centered "New Game" button -->
+        <DemoSwitcher />
         <div id="start-screen" class="start-screen">
           <button id="new-game-btn" class="btn-new-game" type="button">
             New Game

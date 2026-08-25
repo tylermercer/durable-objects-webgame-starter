@@ -1,6 +1,7 @@
 import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
-import { PeerConnection, type TouchMessage } from "./peer-connection";
+import { PeerConnection } from "./peer-connection";
+import { loadControllerGame } from "./gameSource";
 
 class ControllerCallbacksHandler extends RpcTarget implements ControllerCallbacks {
   constructor(private app: ControllerApp) {
@@ -27,9 +28,8 @@ class ControllerApp {
   color: string = "";
   api: RpcStub<ControllerApi> | null = null;
   pc: PeerConnection | null = null;
-  pendingTouch: TouchMessage | null = null;
-  rafPending = false;
   reconnectTimer: number | null = null;
+  activeGame: unknown = null;
 
   constructor() {
     const params = new URLSearchParams(window.location.search);
@@ -38,7 +38,6 @@ class ControllerApp {
 
   async init() {
     this.updateStatus("Connecting to signaling server...");
-    this.setupTouchSurface();
     this.connectSignaling();
   }
 
@@ -113,7 +112,7 @@ class ControllerApp {
       },
       onStateChange: state => {
         if (state === "connected") {
-          this.updateStatus(`Connected to Console! Touch screen to send input.`);
+          this.updateStatus(`Connected to Console!`);
         } else {
           this.updateStatus(`Connection state: ${state}`);
         }
@@ -127,6 +126,13 @@ class ControllerApp {
         }
       }
     });
+
+    try {
+      const { createGame } = await loadControllerGame(new URL(window.location.href));
+      this.activeGame = createGame({ peerConnection: this.pc });
+    } catch (err) {
+      console.error("Failed to load controller game logic:", err);
+    }
 
     try {
       const offer = await this.pc.createOffer();
@@ -150,49 +156,6 @@ class ControllerApp {
         console.error("Error handling signal from console:", err);
       });
     }
-  }
-
-  setupTouchSurface() {
-    const surface = document.getElementById("touch-surface");
-    if (!surface) return;
-
-    const handlePointer = (phase: "start" | "move" | "end" | "cancel", e: PointerEvent) => {
-      e.preventDefault();
-      const rect = surface.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-
-      this.pendingTouch = {
-        type: "touch",
-        phase,
-        pointerId: e.pointerId,
-        x,
-        y,
-        t: performance.now()
-      };
-
-      this.scheduleTouchSend();
-    };
-
-    surface.addEventListener("pointerdown", e => handlePointer("start", e));
-    surface.addEventListener("pointermove", e => {
-      if (e.buttons > 0) handlePointer("move", e);
-    });
-    surface.addEventListener("pointerup", e => handlePointer("end", e));
-    surface.addEventListener("pointercancel", e => handlePointer("cancel", e));
-  }
-
-  scheduleTouchSend() {
-    if (this.rafPending) return;
-    this.rafPending = true;
-
-    requestAnimationFrame(() => {
-      this.rafPending = false;
-      if (this.pendingTouch && this.pc) {
-        this.pc.sendInput(this.pendingTouch);
-        this.pendingTouch = null;
-      }
-    });
   }
 
   updateStatus(text: string) {
