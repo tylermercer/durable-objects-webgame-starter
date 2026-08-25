@@ -42,6 +42,15 @@ class ControllerApp {
     this.connectSignaling();
   }
 
+  private getRejoinToken(): string {
+    let token = localStorage.getItem("rejoinToken");
+    if (!token) {
+      token = crypto.randomUUID();
+      localStorage.setItem("rejoinToken", token);
+    }
+    return token;
+  }
+
   connectSignaling() {
     if (!this.code) {
       this.updateStatus("Error: Missing room code.");
@@ -57,9 +66,14 @@ class ControllerApp {
       this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ControllerCallbacksHandler(this);
-      this.api.join(callbacks).then(res => {
+      const token = this.getRejoinToken();
+
+      this.api.join(callbacks, token).then(res => {
         this.id = res.id;
         this.name = res.name;
+        if (res.rejoinToken) {
+          localStorage.setItem("rejoinToken", res.rejoinToken);
+        }
         this.updatePlayerInfo(this.name, this.color);
 
         if (res.consoleConnected) {

@@ -18,10 +18,17 @@ export interface ControllerCallbacks extends RpcTarget {
 export interface ConsoleApi extends RpcTarget {
   join(callbacks: ConsoleCallbacks): { controllers: { id: string; name: string }[] } | Promise<{ controllers: { id: string; name: string }[] }>;
   sendSignal(to: string, signal: RTCSignal): void;
+  saveGameState(state: unknown): void;
+  loadGameState(): unknown | Promise<unknown>;
 }
 
 // Exposed by the DO when role=controller.
 export interface ControllerApi extends RpcTarget {
-  join(callbacks: ControllerCallbacks): { id: string; name: string; consoleConnected: boolean } | Promise<{ id: string; name: string; consoleConnected: boolean }>;
+  join(
+    callbacks: ControllerCallbacks,
+    rejoinToken?: string
+  ):
+    | { id: string; name: string; consoleConnected: boolean; rejoinToken: string }
+    | Promise<{ id: string; name: string; consoleConnected: boolean; rejoinToken: string }>;
   sendSignal(signal: RTCSignal): void; // implicitly addressed to the room's console
 }

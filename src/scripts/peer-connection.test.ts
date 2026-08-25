@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PeerConnection, type ControlMessage, type IdentityMessage, type PingMessage, type PongMessage, type TouchMessage } from "./peer-connection";
+import { PeerConnection, CoalescingSender, type ControlMessage, type IdentityMessage, type PingMessage, type PongMessage, type TouchMessage } from "./peer-connection";
 
 class MockRTCSessionDescription {
   type: string;
@@ -64,7 +64,7 @@ class MockRTCPeerConnection {
   close() {}
 }
 
-describe("peer-connection message formats", () => {
+describe("peer-connection message formats and CoalescingSender", () => {
   it("serializes and deserializes touch messages correctly", () => {
     const touchMsg: TouchMessage = {
       type: "touch",
@@ -175,5 +175,25 @@ describe("peer-connection message formats", () => {
       (globalThis as any).RTCSessionDescription = origSD;
       (globalThis as any).RTCIceCandidate = origIC;
     }
+  });
+
+  it("coalesces control messages by key until flushed in microtask", async () => {
+    const sendMock = vi.fn();
+    const channel = { readyState: "open", send: sendMock } as unknown as RTCDataChannel;
+
+    const coalescer = new CoalescingSender(() => channel);
+
+    coalescer.send("hp", { type: "hp", val: 100 });
+    coalescer.send("hp", { type: "hp", val: 90 });
+    coalescer.send("pos", { type: "pos", x: 1, y: 2 });
+    coalescer.send("hp", { type: "hp", val: 80 });
+
+    expect(sendMock).not.toHaveBeenCalled();
+
+    await Promise.resolve(); // wait for microtask flush
+
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(sendMock).toHaveBeenNthCalledWith(1, JSON.stringify({ type: "hp", val: 80 }));
+    expect(sendMock).toHaveBeenNthCalledWith(2, JSON.stringify({ type: "pos", x: 1, y: 2 }));
   });
 });

@@ -9,10 +9,20 @@ type Session = {
   role: Role;
   name: string;
   callbacks: RpcStub<ConsoleCallbacks | ControllerCallbacks>;
+  rejoinToken?: string;
 };
+
+type ControllerRecord = {
+  id: string;
+  name: string;
+  disconnectedAt: number | null;
+};
+
+const DISCONNECT_GRACE_PERIOD_MS = 45000;
 
 export class GameSession extends DurableObject {
   sessions = new Map<WebSocket, Session>();
+  rejoinTokens = new Map<string, ControllerRecord>();
   private nextPlayerNumber = 1;
 
   async fetch(request: Request): Promise<Response> {
@@ -52,6 +62,31 @@ export class GameSession extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    let earliestNextDisconnect: number | null = null;
+
+    for (const [token, record] of Array.from(this.rejoinTokens.entries())) {
+      if (record.disconnectedAt !== null) {
+        const elapsed = now - record.disconnectedAt;
+        if (elapsed >= DISCONNECT_GRACE_PERIOD_MS) {
+          this.rejoinTokens.delete(token);
+          this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(record.id));
+        } else {
+          const remaining = DISCONNECT_GRACE_PERIOD_MS - elapsed;
+          const nextTime = now + remaining;
+          if (earliestNextDisconnect === null || nextTime < earliestNextDisconnect) {
+            earliestNextDisconnect = nextTime;
+          }
+        }
+      }
+    }
+
+    if (earliestNextDisconnect !== null && this.ctx?.storage?.setAlarm) {
+      await this.ctx.storage.setAlarm(earliestNextDisconnect);
+    }
+  }
+
   private makeConsoleApi(ws: WebSocket): ConsoleApi {
     const self = this;
     return new (class extends RpcTarget implements ConsoleApi {
@@ -84,31 +119,69 @@ export class GameSession extends DurableObject {
       sendSignal(to: string, signal: RTCSignal) {
         self.sendToId(to, cb => (cb as RpcStub<ControllerCallbacks>).onSignal(signal));
       }
+
+      async saveGameState(state: unknown): Promise<void> {
+        if (self.ctx?.storage?.put) {
+          await self.ctx.storage.put("gameState", state);
+        }
+      }
+
+      async loadGameState(): Promise<unknown> {
+        if (self.ctx?.storage?.get) {
+          const state = await self.ctx.storage.get("gameState");
+          return state ?? null;
+        }
+        return null;
+      }
     })();
   }
 
   private makeControllerApi(ws: WebSocket): ControllerApi {
     const self = this;
     return new (class extends RpcTarget implements ControllerApi {
-      join(callbacks: ControllerCallbacks) {
-        const id = crypto.randomUUID();
-        const name = self.nextPlayerName();
+      join(callbacks: ControllerCallbacks, rejoinToken?: string) {
+        let id: string;
+        let name: string;
+        let token: string;
+        let isRejoin = false;
+
+        if (rejoinToken && self.rejoinTokens.has(rejoinToken)) {
+          const record = self.rejoinTokens.get(rejoinToken)!;
+          id = record.id;
+          name = record.name;
+          token = rejoinToken;
+          record.disconnectedAt = null;
+          isRejoin = true;
+        } else {
+          id = crypto.randomUUID();
+          name = self.nextPlayerName();
+          token = rejoinToken || crypto.randomUUID();
+          self.rejoinTokens.set(token, {
+            id,
+            name,
+            disconnectedAt: null
+          });
+        }
+
         const consoleConnected = [...self.sessions.values()].some(s => s.role === "console");
 
         self.sessions.set(ws, {
           id,
           role: "controller",
           name,
-          callbacks: (callbacks as unknown as RpcStub<ControllerCallbacks>).dup()
+          callbacks: (callbacks as unknown as RpcStub<ControllerCallbacks>).dup(),
+          rejoinToken: token
         });
 
         ws.addEventListener("close", () => self.handleClose(ws));
         ws.addEventListener("error", () => self.handleClose(ws));
 
-        // Announce new controller to console
-        self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name));
+        // Announce controller join to console if not a seamless rejoin while connected
+        if (!isRejoin) {
+          self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name));
+        }
 
-        return { id, name, consoleConnected };
+        return { id, name, consoleConnected, rejoinToken: token };
       }
 
       sendSignal(signal: RTCSignal) {
@@ -120,7 +193,7 @@ export class GameSession extends DurableObject {
     })();
   }
 
-  private handleClose(ws: WebSocket) {
+  private async handleClose(ws: WebSocket) {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
@@ -132,7 +205,15 @@ export class GameSession extends DurableObject {
     }
 
     if (session.role === "controller") {
-      this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(session.id));
+      if (session.rejoinToken && this.rejoinTokens.has(session.rejoinToken)) {
+        const record = this.rejoinTokens.get(session.rejoinToken)!;
+        record.disconnectedAt = Date.now();
+        if (this.ctx?.storage?.setAlarm) {
+          await this.ctx.storage.setAlarm(Date.now() + DISCONNECT_GRACE_PERIOD_MS);
+        }
+      } else {
+        this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(session.id));
+      }
     } else {
       for (const s of this.sessions.values()) {
         if (s.role === "controller") {
