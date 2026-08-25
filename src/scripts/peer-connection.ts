@@ -14,7 +14,7 @@ export class CoalescingSender {
     }
   }
 
-  private flush() {
+  flush() {
     this.flushing = false;
     const ch = this.channel();
     if (!ch || ch.readyState !== "open") return;
@@ -53,7 +53,8 @@ export type UnknownControlMessage = { type: string } & Record<string, unknown>;
 export type ControlMessage =
   | IdentityMessage
   | PingMessage
-  | PongMessage;
+  | PongMessage
+  | UnknownControlMessage;
 
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
@@ -126,6 +127,12 @@ export class PeerConnection {
   }
 
   private setupChannel(channel: RTCDataChannel) {
+    channel.onopen = () => {
+      if (channel.label === "control") {
+        this.coalescingControlSender.flush();
+      }
+    };
+
     channel.onmessage = event => {
       try {
         const data = JSON.parse(event.data);
