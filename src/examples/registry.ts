@@ -9,6 +9,11 @@ export const EXAMPLES = {
     console: () => import("@examples/liars-dice/console"),
     controller: () => import("@examples/liars-dice/controller"),
   },
+  "flappy-royale": {
+    label: "Flappy Royale",
+    console: () => import("@examples/flappy-royale/console"),
+    controller: () => import("@examples/flappy-royale/controller"),
+  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;
