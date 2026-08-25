@@ -42,6 +42,7 @@ export class PeerConnection {
   pc: RTCPeerConnection;
   inputChannel: RTCDataChannel | null = null;
   controlChannel: RTCDataChannel | null = null;
+  pendingIceCandidates: RTCIceCandidateInit[] = [];
 
   constructor(
     public isInitiator: boolean,
@@ -111,15 +112,27 @@ export class PeerConnection {
   }
 
   async handleSignal(signal: RTCSignal) {
-    if (signal.sdp) {
+    if ("sdp" in signal && signal.sdp) {
       await this.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      await this.flushIceCandidates();
       if (signal.sdp.type === "offer") {
         const answer = await this.pc.createAnswer();
         await this.pc.setLocalDescription(answer);
         this.callbacks.onSignal({ sdp: answer });
       }
-    } else if (signal.candidate) {
-      await this.pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+    } else if ("candidate" in signal && signal.candidate) {
+      if (this.pc.remoteDescription) {
+        await this.pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      } else {
+        this.pendingIceCandidates.push(signal.candidate);
+      }
+    }
+  }
+
+  private async flushIceCandidates() {
+    while (this.pendingIceCandidates.length > 0) {
+      const candidate = this.pendingIceCandidates.shift()!;
+      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
     }
   }
 

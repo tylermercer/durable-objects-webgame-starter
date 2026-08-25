@@ -34,3 +34,21 @@ The `src/pages` directory is where Astro's file-based routing happens. Each `.as
 - **Static Routes**: Files like `src/pages/index.astro` create routes corresponding to their path (e.g., `/`).
 - **Dynamic Routes**: The project uses dynamic routes for content collections. For example, `src/pages/posts/[slug].astro` generates pages for individual blog posts. The `getStaticPaths` function in these files is responsible for determining which paths are generated at build time.
 - **API Routes**: Files in `src/pages/api/` are used to create API endpoints. For example, `src/pages/api/submit-form.ts`.
+
+## WebGame Core Architecture
+
+For complete architectural details, consult `design-docs/2026-08-24-core-architecture.md` as the authoritative source of truth.
+
+### Key Files
+- `src/lib/GameSession.ts`: Cloudflare Durable Object managing room sessions, presence, and capnweb RPC signaling relay.
+- `src/lib/signaling-api.ts`: Shared capnweb RPC interface definitions for console and controller roles.
+- `src/scripts/console.ts`: Client-side logic for the console application (host/shared screen).
+- `src/scripts/controller.ts`: Client-side logic for controller application (player device/phone).
+- `src/scripts/peer-connection.ts`: WebRTC peer connection manager handling data channels and ICE candidate exchanges.
+
+### Data Channels & Protocols
+The project uses two WebRTC data channels between the console and each controller:
+- `input`: Unreliable and unordered channel used for high-frequency touch/pointer events.
+- `control`: Reliable and ordered channel used for identity assignment, ping/pong latency checks, and game protocol messages.
+
+When extending or building new gameplay features, extend the `control` channel's message protocol rather than modifying the signaling layer.
