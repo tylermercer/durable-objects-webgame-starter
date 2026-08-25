@@ -325,18 +325,26 @@ export function createGame(ctx: ConsoleContext) {
   }
 
   function syncPeersAndListeners() {
-    // Check for new peer connections and attach message listeners
+    // Remove listeners for peers that no longer exist or whose connection state was reset
+    for (const id of attachedListeners) {
+      const peer = ctx.peers.get(id);
+      if (!peer || !peer.pc || peer.state !== "connected") {
+        attachedListeners.delete(id);
+      }
+    }
+
+    // Check for new peer connections and attach message listeners when control channel is open
     for (const [id, peer] of ctx.peers) {
-      if (peer.pc && !attachedListeners.has(id)) {
+      if (peer.pc && peer.pc.controlChannel?.readyState === "open" && !attachedListeners.has(id)) {
         attachedListeners.add(id);
         peer.pc.addControlListener((msg) => {
-          handleControlMessage(id, msg as LiarsDiceControlMessage);
+          handleControlMessage(id, msg as unknown as LiarsDiceControlMessage);
         });
 
         // Send existing dice hand and state if rejoining mid-round
         const hand = playerHands.get(id);
         if (hand) {
-          peer.pc.sendControl({ type: "privateDice", dice: hand });
+          peer.pc.sendControl({ type: "privateDice", dice: hand } as unknown as LiarsDiceControlMessage);
         }
         peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicGameState() });
       }

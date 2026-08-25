@@ -28,7 +28,7 @@ export function createGame(ctx: ControllerContext) {
 
   if (ctx.peerConnection) {
     ctx.peerConnection.addControlListener((msg) => {
-      const ldMsg = msg as LiarsDiceControlMessage;
+      const ldMsg = msg as unknown as LiarsDiceControlMessage;
       if (ldMsg.type === "privateDice") {
         myDice = ldMsg.dice;
         render();
@@ -63,7 +63,7 @@ export function createGame(ctx: ControllerContext) {
         type: "bid",
         count: selectedCount,
         face: selectedFace
-      });
+      } as unknown as LiarsDiceControlMessage);
     }
   }
 
@@ -71,7 +71,7 @@ export function createGame(ctx: ControllerContext) {
     if (!ctx.peerConnection || !gameState || !gameState.currentBid) return;
     ctx.peerConnection.sendControl({
       type: "challenge"
-    });
+    } as unknown as LiarsDiceControlMessage);
   }
 
   function render() {

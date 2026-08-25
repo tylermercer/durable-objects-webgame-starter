@@ -196,4 +196,24 @@ describe("peer-connection message formats and CoalescingSender", () => {
     expect(sendMock).toHaveBeenNthCalledWith(1, JSON.stringify({ type: "hp", val: 80 }));
     expect(sendMock).toHaveBeenNthCalledWith(2, JSON.stringify({ type: "pos", x: 1, y: 2 }));
   });
+
+  it("flushes queued coalesced messages when data channel transitions to open", () => {
+    const sendMock = vi.fn();
+    const channel = { readyState: "connecting", send: sendMock } as unknown as RTCDataChannel;
+
+    const coalescer = new CoalescingSender(() => channel);
+
+    coalescer.send("gameState", { type: "gameState", state: {} });
+
+    // While channel is connecting, microtask flush does not send messages
+    coalescer.flush();
+    expect(sendMock).not.toHaveBeenCalled();
+
+    // Now channel opens
+    (channel as any).readyState = "open";
+    coalescer.flush();
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(JSON.stringify({ type: "gameState", state: {} }));
+  });
 });
