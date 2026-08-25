@@ -11,6 +11,8 @@
       "@assets/*": ["src/assets/*"],
       "@layouts/*": ["src/layouts/*"],
       "@utils/*": ["src/utils/*"],
+      "@examples/*": ["src/examples/*"],
+      "@logic/*": ["src/logic/*"]
     }
   }
 }

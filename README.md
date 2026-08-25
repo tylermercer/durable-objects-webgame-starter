@@ -25,21 +25,34 @@ For the full design — Durable Object structure, the signaling protocol, WebRTC
     bun ./scripts/init.ts
     ```
     Handles installing dependencies (via `pnpm`), customizing your project name and theme, setting up GitHub Secrets for deployment to Cloudflare, and — as its last step — verifying the production deploy pipeline and printing the deployed URL.
-4.  **Try the demo as-is** before changing anything: open the deployed URL from step 3 on your laptop, scan the QR code with your phone. You should see a live dot on the console tracking your finger on the phone. That confirms the console → DO → controller → WebRTC pipe works end-to-end before you touch any game logic.
+4.  **Try the demo as-is** before changing anything: open the deployed URL from step 3 on your laptop, pick `touch-demo` from the switcher UI, and scan the QR code with your phone. You should see a live dot on the console tracking your finger on the phone. That confirms the console → DO → controller → WebRTC pipe works end-to-end before you touch any game logic.
+
+## Trying the examples
+
+The switcher is the default experience out of the box with no setup needed.
+- `touch-demo`: Raw touch input tracking showing real-time dot visualization across WebRTC data channels.
 
 ## What's already here
 
 | Piece | File(s) | What it does |
 |---|---|---|
 | Signaling Durable Object | `src/lib/GameSession.ts`, `src/lib/signaling-api.ts` | One DO instance per room code. Relays WebRTC offer/answer/ICE between a console and its controllers over a [capnweb](https://github.com/cloudflare/capnweb) RPC session — no hand-rolled message parsing. |
-| Room codes & QR join | `src/utils/generateRoomCode.ts`, console-side QR rendering | Console mints a short code client-side; the QR just links to `/?code=<CODE>` — no in-app scanning needed. |
+| Room codes & QR join | `src/utils/generateRoomCode.ts`, console-side QR rendering | Console mints a short code client-side; the QR links to `/?code=<CODE>&game=<GAME>` — no in-app scanning needed. |
 | WebRTC data channels | `src/scripts/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
-| Console app | `src/scripts/console.ts` | Renders the QR code, tracks connection status per controller, demo visualization of raw touch events. This is where your game's render loop and simulation go. |
-| Controller app | `src/scripts/controller.ts` | Connects using the code from the URL, shows connection status, captures touch/pointer input and sends it. This is where your game's on-screen controls (joystick, buttons) go. |
+| Game source seam | `src/scripts/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
+| Examples & Switcher | `src/examples/`, `src/components/DemoSwitcher.astro` | Out-of-the-box examples registry and UI switcher for testing before building your own game. |
+| Custom Game Logic location | `src/logic/` | The scaffolded directory (`console.ts` & `controller.ts`) where your own game's logic will live. |
+| Console app | `src/scripts/console.ts` | Generic console bootstrap handling QR rendering, connection tracking, and fixed-tick animation loop through `gameSource.ts`. |
+| Controller app | `src/scripts/controller.ts` | Generic controller bootstrap handling WebRTC connection setup through `gameSource.ts`. |
 
-## Building a game on top of this
+## Building your own game
 
-The demo proves the plumbing works; it isn't a game. Building one means replacing the demo's touch-tracking with your own input handling and simulation, using the primitives below.
+Transitioning from the initial example switcher state (State 1) to building your own game (State 2) is a simple 4-step checklist:
+
+1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`), and try it via the switcher.
+2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
+3. Replace the contents of `src/scripts/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
+4. Delete `src/examples/` and `src/components/DemoSwitcher.astro`.
 
 ### Input: discrete events vs. continuous state
 
