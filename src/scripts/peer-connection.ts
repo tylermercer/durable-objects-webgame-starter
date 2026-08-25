@@ -48,7 +48,12 @@ export type PongMessage = {
   t: number;
 };
 
-export type ControlMessage = IdentityMessage | PingMessage | PongMessage | { type: string; [key: string]: unknown };
+export type UnknownControlMessage = { type: string } & Record<string, unknown>;
+
+export type ControlMessage =
+  | IdentityMessage
+  | PingMessage
+  | PongMessage;
 
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
