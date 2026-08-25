@@ -73,12 +73,12 @@ jobs:
 
       - name: Extract variables
         id: extract_vars
-        run: | # slugified_branch is the branch slugified and truncated to 23 chars, so full worker name is <= 54 chars
+        run: | # slugified_branch is the branch slugified and truncated to 22 chars, so full worker name is <= 54 chars (22 + 32 suffix length = 54)
           branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
           # Slugify the branch name: replace non-alphanumeric with hyphens, convert to lowercase
           slugified_branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--\+/-/g' | sed 's/^-//;s/-$//')
-          # Truncate the slugified branch name to 23 characters so script name + suffix <= 54 chars limit
-          truncated_slugified_branch=${slugified_branch:0:23}
+          # Truncate the slugified branch name to 22 characters so script name + suffix <= 54 chars limit
+          truncated_slugified_branch=${slugified_branch:0:22}
           # Remove trailing hyphen if truncation caused one
           if [[ "${truncated_slugified_branch: -1}" == "-" ]]; then
             truncated_slugified_branch=${truncated_slugified_branch::-1}
@@ -135,7 +135,7 @@ jobs:
         run: |
           branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
           slugified_branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--\+/-/g' | sed 's/^-//;s/-$//')
-          truncated_slugified_branch=${slugified_branch:0:23}
+          truncated_slugified_branch=${slugified_branch:0:22}
           if [[ "${truncated_slugified_branch: -1}" == "-" ]]; then
             truncated_slugified_branch=${truncated_slugified_branch::-1}
           fi
