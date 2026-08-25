@@ -54,7 +54,7 @@ class ControllerApp {
     try {
       this.api = newWebSocketRpcSession<ControllerApi>(wsUrl);
 
-      (this.api as any).onRpcBroken?.(() => this.scheduleReconnect());
+      this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ControllerCallbacksHandler(this);
       this.api.join(callbacks).then(res => {

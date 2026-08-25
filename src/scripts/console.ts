@@ -106,7 +106,7 @@ class ConsoleApp {
       this.api = newWebSocketRpcSession<ConsoleApi>(wsUrl);
 
       // Handle session broken / reconnect
-      (this.api as any).onRpcBroken?.(() => this.scheduleReconnect());
+      this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ConsoleCallbacksHandler(this);
       this.api.join(callbacks).then(res => {

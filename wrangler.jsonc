@@ -17,12 +17,6 @@
       }
     ]
   },
-  "kv_namespaces": [
-    {
-      "binding": "SESSION",
-      "id": "3317bf333c4b453f832a8b8941479b6d"
-    }
-  ],
   "migrations": [
     {
       "tag": "v1",

@@ -61,7 +61,7 @@ export class GameSession extends DurableObject {
           id: "console",
           role: "console",
           name: "console",
-          callbacks: callbacks.dup()
+          callbacks: (callbacks as unknown as RpcStub<ConsoleCallbacks>).dup()
         });
 
         ws.addEventListener("close", () => self.handleClose(ws));
@@ -99,7 +99,7 @@ export class GameSession extends DurableObject {
           id,
           role: "controller",
           name,
-          callbacks: callbacks.dup()
+          callbacks: (callbacks as unknown as RpcStub<ControllerCallbacks>).dup()
         });
 
         ws.addEventListener("close", () => self.handleClose(ws));
