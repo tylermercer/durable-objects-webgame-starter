@@ -1,7 +1,5 @@
 # Example Switcher + Liar's Dice
 
-Status: proposed
-Author: (drafted with Claude, for Jules to implement)
 Related docs: `2026-08-24-core-architecture.md`, `2026-08-24-framework-primitives.md`
 
 ## Goal
