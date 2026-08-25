@@ -1,0 +1,31 @@
+@layer utilities {
+    .u-guttered {
+        padding: var(--space-m);
+        margin-inline: auto;
+        max-inline-size: 60ch;
+    }
+
+    .u-guttered-lg {
+        padding: var(--space-m);
+        margin-inline: auto;
+        max-inline-size: 90ch;
+    }
+
+    .u-break-words {
+        overflow-wrap: break-words;
+    }
+
+    .u-danger {
+        color: var(--danger);
+    }
+
+    .u-step--1 { font-size: var(--step--1); }
+    .u-step-0 { font-size: var(--step-0); }
+    .u-step-1 { font-size: var(--step-1); }
+    .u-step-2 { font-size: var(--step-2); }
+
+    .u-font-body { font-family: var(--font-body); }
+    .u-font-heading { font-family: var(--font-heading); }
+
+    .u-bold { font-weight: bold; }
+}

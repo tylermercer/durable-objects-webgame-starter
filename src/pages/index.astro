@@ -1,0 +1,60 @@
+---
+import Layout from '@layouts/Base.astro';
+---
+
+<Layout>
+	<main class="u-guttered-lg l-stack l-space-xl">
+		<section class="l-center l-space-m">
+			<h1>Welcome to My Styled Astro Site</h1>
+			<p class="u-step-1">
+				This site uses CSS layers for organized, scalable styling.
+				Experience your custom theme and fluid Utopia-powered spacing!
+			</p>
+			<div class="l-cluster l-space-s">
+				<a href="https://tylermercer.net/posts/software/how-i-organize-my-css/" role="button">Read the explainer</a>
+			</div>
+		</section>
+
+		<section class="l-switcher l-space-m">
+			<div class="l-box l-stack l-space-s">
+				<h2>The Theme</h2>
+				<p>
+					Design tokens are defined in the <code>theme</code> layer.
+					We're using a custom primary scale generated via Radix UI color algorithms.
+				</p>
+			</div>
+			<div class="l-box l-stack l-space-s">
+				<h2>Layouts</h2>
+				<p>
+					Layout classes like <code>l-switcher</code>, <code>l-stack</code>, and <code>l-cluster</code>
+					(prefixed with <code>l-</code>) manage the structural arrangement of components.
+				</p>
+			</div>
+			<div class="l-box l-stack l-space-s">
+				<h2>Utilities</h2>
+				<p>
+					Utility classes (prefixed with <code>u-</code>) provide fine-grained control
+					over things like typography, spacing, and colors.
+				</p>
+			</div>
+		</section>
+
+		<section class="l-sidebar l-space-l">
+			<div class="l-stack l-space-s">
+				<h3>Why CSS Layers?</h3>
+				<p>
+					Layers allow us to control specificity explicitly.
+					Styles in the <code>utilities</code> layer will always override those in <code>base</code>,
+					regardless of selector complexity.
+				</p>
+			</div>
+			<div class="l-box">
+				<h3>Modern Normalize</h3>
+				<p>
+					We've integrated <code>modern-normalize</code> directly into our <code>base</code> layer
+					to ensure a consistent starting point across browsers.
+				</p>
+			</div>
+		</section>
+	</main>
+</Layout>

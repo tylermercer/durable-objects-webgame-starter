@@ -1,0 +1,105 @@
+@use 'sass:map';
+@use 'utopia-core-scss/src/utopia' as utopia;
+@use '../../lib/plugins/sass/radix-ui-colors/radix-color-mixin' as radix;
+
+@layer theme {
+    // Note: To use self-hosted custom fonts, you can use @fontsource-variable
+    // @import '@fontsource-variable/figtree';
+    // @import '@fontsource-variable/rubik';
+
+    :root {
+        // Dynamic Utopia type and space scales
+        $min-width: 320;
+        $max-width: 1240;
+        $use-viewport-width: true; // Toggle for viewport-width-based dynamism
+
+        @include utopia.generateSpaceScale((
+            "minWidth": $min-width,
+            "maxWidth": $max-width,
+            "minSize": 16,
+            "maxSize": 18,
+            "positiveSteps": (1.5, 2, 3, 4, 6),
+            "negativeSteps": (0.75, 0.5, 0.25),
+            "customSizes": ("s-l"),
+            "prefix": "space-",
+            "useViewportWidth": $use-viewport-width,
+        ));
+
+        @include utopia.generateTypeScale((
+            "minWidth": $min-width,
+            "maxWidth": $max-width,
+            "minFontSize": 16,
+            "maxFontSize": 18,
+            "minTypeScale": 1.2,
+            "maxTypeScale": 1.25,
+            "positiveSteps": 5,
+            "negativeSteps": 2,
+            "prefix": "step-",
+            "useViewportWidth": $use-viewport-width,
+        ));
+
+        // Fonts
+        --font-body: Georgia, 'Times New Roman', Times, serif;
+        --font-heading: Arial, Helvetica, sans-serif;
+
+        // Line heights
+        --lh--2: 2.10;
+        --lh--1: 1.80;
+        --lh-0: 1.60;
+        --lh-1: 1.30;
+        --lh-2: 1.10;
+        --lh-3: 1;
+        --lh-4: 1;
+        --lh-5: 1;
+    }
+
+    // Burnt Orange Theme
+    $themeColor: #CC5500;
+    $grayColor: #8b8d98;
+
+    @mixin apply-radix-scales($appearance) {
+        $background: #ffffff;
+        @if $appearance != 'light' {
+            $background: #111111;
+        }
+        $colors: generateRadixColors($appearance, '#{$themeColor}', '#{$grayColor}', '#{$background}');
+
+        $accent-vars: radix.generate-css-variables('primary',
+            map.get($colors, 'accentScale'),
+            map.get($colors, 'accentScaleAlpha'),
+            map.get($colors, 'accentSurface'),
+            map.get($colors, 'accentContrast'));
+
+        $gray-vars: radix.generate-css-variables('gray',
+            map.get($colors, 'grayScale'),
+            map.get($colors, 'grayScaleAlpha'),
+            map.get($colors, 'graySurface'),
+            map.get($colors, 'grayContrast'));
+
+        @include radix.output-css-variables($accent-vars);
+        @include radix.output-css-variables($gray-vars);
+    }
+
+    :root, .light, [data-theme="light"] {
+        color-scheme: light;
+        --danger: #d3003c;
+        --danger-alt: #a3002f;
+        @include apply-radix-scales('light');
+    }
+
+    .dark, [data-theme="dark"] {
+        color-scheme: dark;
+        --danger: #d02354;
+        --danger-alt: #fd316b;
+        @include apply-radix-scales('dark');
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            color-scheme: dark;
+            --danger: #d02354;
+            --danger-alt: #fd316b;
+            @include apply-radix-scales('dark');
+        }
+    }
+}

@@ -1,0 +1,64 @@
+---
+---
+
+<button id="theme-toggle" aria-label="Toggle theme" class="u-step--1">
+    Toggle theme
+</button>
+
+<script>
+    const THEME_KEY = 'theme';
+
+    function getCurrentTheme(): 'light' | 'dark' | null {
+        const stored = localStorage.getItem(THEME_KEY);
+        return stored === 'light' || stored === 'dark' ? stored : null;
+    }
+
+    function applyTheme(theme: 'light' | 'dark' | null) {
+        if (theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+    }
+
+    function handleToggleClick() {
+        const currentStored = getCurrentTheme();
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const systemTheme: 'light' | 'dark' = prefersDark ? 'dark' : 'light';
+        const displayedTheme = currentStored ?? systemTheme;
+
+        if (displayedTheme === systemTheme) {
+            const nextTheme = systemTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem(THEME_KEY, nextTheme);
+            applyTheme(nextTheme);
+        } else {
+            localStorage.removeItem(THEME_KEY);
+            applyTheme(null);
+        }
+    }
+
+    const toggleButton = document.querySelector('#theme-toggle');
+    toggleButton?.addEventListener('click', handleToggleClick);
+
+    applyTheme(getCurrentTheme());
+
+    window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+        if (event.persisted) {
+            applyTheme(getCurrentTheme());
+        }
+    });
+</script>
+
+<style>
+    button {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        background: var(--gray-3);
+        color: var(--gray-12);
+        border: 1px solid var(--gray-6);
+        border-radius: 4px;
+    }
+    button:hover {
+        background: var(--gray-4);
+    }
+</style>

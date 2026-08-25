@@ -1,0 +1,37 @@
+---
+import ThemeToggle from "@components/ThemeToggle.astro";
+import '../styles/styles.scss';
+---
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Astro Basics</title>
+		<script is:inline>
+			(function () {
+				const stored = localStorage.getItem('theme');
+				if (stored === 'light' || stored === 'dark') {
+					document.documentElement.setAttribute('data-theme', stored);
+				} else {
+					document.documentElement.removeAttribute('data-theme');
+				}
+			})();
+		</script>
+	</head>
+	<body>
+		<header class="u-guttered-lg l-cluster">
+			<div style="flex: 1;"><strong>My Styled Site</strong></div>
+			<ThemeToggle />
+		</header>
+		<slot />
+	</body>
+</html>
+
+<script>
+	import logCommitHash from "lib/logCommitHash";
+	// This makes it easy to see which version of the site is being served
+	logCommitHash();
+</script>
