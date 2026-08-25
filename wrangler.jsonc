@@ -6,9 +6,29 @@
     "binding": "ASSETS"
   },
   "compatibility_date": "2024-12-04",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "durable_objects": {
-    "bindings": [{ "name": "GAME_SESSION", "class_name": "GameSession" }]
+    "bindings": [
+      {
+        "name": "GAME_SESSION",
+        "class_name": "GameSession"
+      }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameSession"] }]
+  "kv_namespaces": [
+    {
+      "binding": "SESSION",
+      "id": "3317bf333c4b453f832a8b8941479b6d"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "GameSession"
+      ]
+    }
+  ]
 }
