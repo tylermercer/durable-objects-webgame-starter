@@ -72,6 +72,7 @@ export class PeerConnection {
   controlChannel: RTCDataChannel | null = null;
   pendingIceCandidates: RTCIceCandidateInit[] = [];
   private coalescingControlSender: CoalescingSender;
+  private controlListeners: Array<(msg: ControlMessage) => void> = [];
 
   constructor(
     public isInitiator: boolean,
@@ -117,6 +118,13 @@ export class PeerConnection {
     }
   }
 
+  addControlListener(listener: (msg: ControlMessage) => void) {
+    this.controlListeners.push(listener);
+    return () => {
+      this.controlListeners = this.controlListeners.filter(l => l !== listener);
+    };
+  }
+
   private setupChannel(channel: RTCDataChannel) {
     channel.onmessage = event => {
       try {
@@ -128,6 +136,9 @@ export class PeerConnection {
             this.sendControl({ type: "pong", t: data.t });
           }
           this.callbacks.onControlMessage?.(data as ControlMessage);
+          for (const listener of [...this.controlListeners]) {
+            listener(data as ControlMessage);
+          }
         }
       } catch {
         // Ignore unparseable message
