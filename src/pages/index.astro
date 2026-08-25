@@ -1,60 +1,155 @@
 ---
 import Layout from '@layouts/Base.astro';
+
+export const prerender = false;
+
+const code = Astro.url.searchParams.get('code');
+const isController = Boolean(code);
 ---
 
 <Layout>
-	<main class="u-guttered-lg l-stack l-space-xl">
-		<section class="l-center l-space-m">
-			<h1>Welcome to My Styled Astro Site</h1>
-			<p class="u-step-1">
-				This site uses CSS layers for organized, scalable styling.
-				Experience your custom theme and fluid Utopia-powered spacing!
-			</p>
-			<div class="l-cluster l-space-s">
-				<a href="https://tylermercer.net/posts/software/how-i-organize-my-css/" role="button">Read the explainer</a>
-			</div>
-		</section>
+  {isController ? (
+    <main class="controller-shell">
+      <header id="controller-header" class="controller-header u-guttered-md">
+        <h1 id="player-name" class="u-step-2">Controller</h1>
+        <p id="controller-status" class="u-step--1">Connecting...</p>
+      </header>
+      <div id="touch-surface" class="touch-surface">
+        <div class="touch-instructions u-step-0 u-color-muted">
+          Touch and drag anywhere on screen
+        </div>
+      </div>
+      <script src="../scripts/controller.ts"></script>
+    </main>
+  ) : (
+    <main class="console-shell u-guttered-lg l-stack l-space-l">
+      <section class="console-header l-cluster l-space-m u-box-shadow">
+        <div class="console-info l-stack l-space-xs" style="flex: 1;">
+          <h1 class="u-step-3">Console</h1>
+          <p class="u-step-1">
+            Room Code: <strong id="room-code" class="room-code">----</strong>
+          </p>
+          <p class="u-step--1 u-color-muted">
+            Scan QR code or open <span id="qr-url"></span> on your phone.
+          </p>
+        </div>
+        <div class="qr-container">
+          <canvas id="qr-canvas"></canvas>
+        </div>
+      </section>
 
-		<section class="l-switcher l-space-m">
-			<div class="l-box l-stack l-space-s">
-				<h2>The Theme</h2>
-				<p>
-					Design tokens are defined in the <code>theme</code> layer.
-					We're using a custom primary scale generated via Radix UI color algorithms.
-				</p>
-			</div>
-			<div class="l-box l-stack l-space-s">
-				<h2>Layouts</h2>
-				<p>
-					Layout classes like <code>l-switcher</code>, <code>l-stack</code>, and <code>l-cluster</code>
-					(prefixed with <code>l-</code>) manage the structural arrangement of components.
-				</p>
-			</div>
-			<div class="l-box l-stack l-space-s">
-				<h2>Utilities</h2>
-				<p>
-					Utility classes (prefixed with <code>u-</code>) provide fine-grained control
-					over things like typography, spacing, and colors.
-				</p>
-			</div>
-		</section>
+      <section class="console-body l-switcher l-space-m">
+        <div class="console-sidebar l-box l-stack l-space-s" style="flex-basis: 280px;">
+          <h2>Controllers</h2>
+          <div id="controller-list" class="controller-list l-stack l-space-xs">
+            <p class="u-step--1 u-color-muted">Initializing room...</p>
+          </div>
+        </div>
 
-		<section class="l-sidebar l-space-l">
-			<div class="l-stack l-space-s">
-				<h3>Why CSS Layers?</h3>
-				<p>
-					Layers allow us to control specificity explicitly.
-					Styles in the <code>utilities</code> layer will always override those in <code>base</code>,
-					regardless of selector complexity.
-				</p>
-			</div>
-			<div class="l-box">
-				<h3>Modern Normalize</h3>
-				<p>
-					We've integrated <code>modern-normalize</code> directly into our <code>base</code> layer
-					to ensure a consistent starting point across browsers.
-				</p>
-			</div>
-		</section>
-	</main>
+        <div class="console-main l-box l-stack l-space-s" style="flex-grow: 1;">
+          <h2>Live Touch Visualization</h2>
+          <div class="canvas-container">
+            <canvas id="touch-canvas"></canvas>
+          </div>
+        </div>
+      </section>
+      <script src="../scripts/console.ts"></script>
+    </main>
+  )}
 </Layout>
+
+<style>
+  .room-code {
+    font-size: 1.5em;
+    letter-spacing: 2px;
+    color: var(--color-primary-10, #0070f3);
+  }
+
+  .qr-container {
+    background: white;
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .console-body {
+    align-items: stretch;
+  }
+
+  .canvas-container {
+    width: 100%;
+    height: 400px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #touch-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .controller-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .controller-header {
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.05);
+    text-align: center;
+    transition: background-color 0.3s ease;
+  }
+
+  .touch-surface {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.02);
+    border: 2px dashed rgba(0, 0, 0, 0.15);
+    margin: 1rem;
+    border-radius: 12px;
+    touch-action: none;
+  }
+
+  .touch-instructions {
+    pointer-events: none;
+    text-align: center;
+  }
+
+  :global(.status-badge) {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: bold;
+    background: #ccc;
+    color: #333;
+  }
+
+  :global(.status-connected) {
+    background: #2ecc40;
+    color: white;
+  }
+
+  :global(.status-connecting),
+  :global(.status-negotiating) {
+    background: #ff851b;
+    color: white;
+  }
+
+  :global(.status-disconnected),
+  :global(.status-failed) {
+    background: #ff4136;
+    color: white;
+  }
+</style>

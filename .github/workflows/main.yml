@@ -96,8 +96,8 @@ jobs:
 
       - name: Deploy to Cloudflare (pull request)
         id: deploy-pr
-        if: github.event_name == 'pull_request' # wrangler versions upload for PRs
-        run: npx wrangler versions upload --preview-alias=${{ steps.extract_vars.outputs.slugified_branch }}
+        if: github.event_name == 'pull_request' # wrangler deploy --dry-run for PRs with DO migrations
+        run: npx wrangler deploy --dry-run
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
