@@ -1,5 +1,5 @@
 {
-  "name": "astroflare",
+  "name": "durable-objects-webgame-starter",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": {
     "directory": "./dist",

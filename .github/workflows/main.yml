@@ -18,7 +18,6 @@ on:
 
 jobs:
   build:
-    if: github.repository == 'tylermercer/astro-cloudflare-starter' # prevents failure before init; removed via init.ts
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -114,6 +113,6 @@ jobs:
 
             | Name                    | Result |
             | ----------------------- | - |
-            | **Preview URL**:        | https://${{ steps.extract_vars.outputs.slugified_branch }}-astroflare.tmercer.workers.dev |
+            | **Preview URL**:        | https://${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter.tmercer.workers.dev |
             | **Last commit:**        | `${{ steps.extract_vars.outputs.sha_short }}` |
             | **Deployed at**:        | `${{ steps.extract_vars.outputs.datetime }}` |

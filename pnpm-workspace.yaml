@@ -3,3 +3,7 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - '@astrojs/cloudflare@14.2.4'
+  - '@astrojs/markdown-satteri@0.3.8'
+  - astro@7.2.6

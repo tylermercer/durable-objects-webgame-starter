@@ -8,7 +8,7 @@ import rawFonts from './lib/plugins/vite/rawFonts.js';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://astroflare.tmercer.workers.dev',
+  site: 'https://durable-objects-webgame-starter.tmercer.workers.dev',
   adapter: cloudflare(),
   markdown: {
     processor: unified(),
