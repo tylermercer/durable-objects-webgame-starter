@@ -32,6 +32,7 @@ For the full design — Durable Object structure, the signaling protocol, WebRTC
 The switcher is the default experience out of the box with no setup needed.
 - `touch-demo`: Raw touch input tracking showing real-time dot visualization across WebRTC data channels.
 - `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
+- `flappy-royale`: Real-time simulation with per-player elimination, seeded/replayable procedural generation, and 60Hz tick-vs-render separation.
 
 ## What's already here
 
@@ -50,7 +51,7 @@ The switcher is the default experience out of the box with no setup needed.
 
 Transitioning from the initial example switcher state (State 1) to building your own game (State 2) is a simple 4-step checklist:
 
-1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo` and `liars-dice`), and try them via the switcher.
+1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`, `liars-dice`, and `flappy-royale`), and try them via the switcher.
 2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
 3. Replace the contents of `src/scripts/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
 4. Delete `src/examples/` and `src/components/DemoSwitcher.astro`.

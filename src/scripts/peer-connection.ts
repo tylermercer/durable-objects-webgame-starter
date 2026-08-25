@@ -53,7 +53,8 @@ export type UnknownControlMessage = { type: string } & Record<string, unknown>;
 export type ControlMessage =
   | IdentityMessage
   | PingMessage
-  | PongMessage;
+  | PongMessage
+  | UnknownControlMessage;
 
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
@@ -177,7 +178,7 @@ export class PeerConnection {
     }
   }
 
-  sendInput(msg: TouchMessage) {
+  sendInput(msg: unknown) {
     if (this.inputChannel && this.inputChannel.readyState === "open") {
       this.inputChannel.send(JSON.stringify(msg));
     }
