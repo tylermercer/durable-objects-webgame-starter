@@ -23,36 +23,80 @@ const isController = Boolean(code);
     </main>
   ) : (
     <main class="console-shell u-guttered-lg l-stack l-space-l">
-      <section class="console-header l-cluster l-space-m u-box-shadow">
-        <div class="console-info l-stack l-space-xs" style="flex: 1;">
-          <h1 class="u-step-3">Console</h1>
-          <p class="u-step-1">
-            Room Code: <strong id="room-code" class="room-code">----</strong>
-          </p>
-          <p class="u-step--1 u-color-muted">
-            Scan QR code or open <span id="qr-url"></span> on your phone.
-          </p>
-        </div>
-        <div class="qr-container">
-          <canvas id="qr-canvas"></canvas>
-        </div>
-      </section>
+      <!-- Fixed Top-Right "Add Players" button (hidden until modal is closed at least once) -->
+      <button id="add-players-btn" class="add-players-btn u-hidden" type="button">
+        Add Players
+      </button>
 
-      <section class="console-body l-switcher l-space-m">
-        <div class="console-sidebar l-box l-stack l-space-s" style="flex-basis: 280px;">
-          <h2>Controllers</h2>
-          <div id="controller-list" class="controller-list l-stack l-space-xs">
-            <p class="u-step--1 u-color-muted">Initializing room...</p>
-          </div>
+      <!-- Desktop Console (wide viewport) -->
+      <div class="desktop-console">
+        <!-- Initial centered "New Game" button -->
+        <div id="start-screen" class="start-screen">
+          <button id="new-game-btn" class="btn-new-game" type="button">
+            New Game
+          </button>
         </div>
 
-        <div class="console-main l-box l-stack l-space-s" style="flex-grow: 1;">
-          <h2>Live Touch Visualization</h2>
+        <!-- Touch-events demo view (hidden until 1st controller connects) -->
+        <div id="demo-view" class="demo-view u-hidden l-stack l-space-s">
+          <h2 class="u-step-2">Live Touch Visualization</h2>
           <div class="canvas-container">
             <canvas id="touch-canvas"></canvas>
           </div>
         </div>
-      </section>
+      </div>
+
+      <!-- Mobile Console (narrow viewport) -->
+      <div class="mobile-console">
+        <div class="join-game-card l-box l-stack l-space-s">
+          <h1 class="u-step-2">Join Game</h1>
+          <p class="u-step--1 u-color-muted">Enter a room code to join an existing session as a controller.</p>
+          <form id="join-game-form" method="GET" action="/" class="l-stack l-space-xs">
+            <label for="join-code-input" class="u-step--1 u-bold">Room Code</label>
+            <input
+              type="text"
+              id="join-code-input"
+              name="code"
+              class="join-code-input"
+              placeholder="e.g. 2A3B4"
+              maxlength="5"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              required
+            />
+            <button type="submit" class="btn-join-game">Join Game</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Native Modal Dialog for Desktop Console -->
+      <dialog id="room-modal" class="room-modal">
+        <div class="modal-content l-stack l-space-m">
+          <div class="modal-header l-stack l-space-xs">
+            <h2 class="u-step-2">Room Code: <strong id="room-code" class="room-code">----</strong></h2>
+            <p class="u-step--1 u-color-muted">
+              Scan QR code or open <span id="qr-url"></span> on your phone.
+            </p>
+          </div>
+
+          <div class="qr-container">
+            <canvas id="qr-canvas"></canvas>
+          </div>
+
+          <div class="modal-controllers l-stack l-space-xs">
+            <h3 class="u-step-0">Connected Players</h3>
+            <div id="controller-list" class="controller-list l-stack l-space-xs">
+              <p class="u-step--1 u-color-muted">Initializing room...</p>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button id="modal-close-btn" class="btn-done" type="button">Done</button>
+          </div>
+        </div>
+      </dialog>
+
       <script src="../scripts/console.ts"></script>
     </main>
   )}
@@ -74,10 +118,6 @@ const isController = Boolean(code);
     align-items: center;
   }
 
-  .console-body {
-    align-items: stretch;
-  }
-
   .canvas-container {
     width: 100%;
     height: 400px;
@@ -91,6 +131,162 @@ const isController = Boolean(code);
     width: 100%;
     height: 100%;
     display: block;
+  }
+
+  .console-shell {
+    position: relative;
+    min-height: calc(100vh - 4rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .desktop-console {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-console {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .desktop-console {
+      display: none !important;
+    }
+    .mobile-console {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 1rem;
+    }
+  }
+
+  :global(.u-hidden) {
+    display: none !important;
+  }
+
+  .start-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem 1rem;
+  }
+
+  .btn-new-game {
+    font-size: 1.5rem;
+    padding: 1rem 2.5rem;
+    font-weight: bold;
+    border-radius: 8px;
+    background-color: var(--primary-9, #0070f3);
+    color: var(--gray-contrast, #ffffff);
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-new-game:hover {
+    background-color: var(--primary-10, #0051a2);
+  }
+
+  .add-players-btn {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 100;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: var(--gray-3, #eee);
+    color: var(--gray-12, #111);
+    border: 1px solid var(--gray-6, #ccc);
+    cursor: pointer;
+  }
+
+  .add-players-btn:hover {
+    background-color: var(--gray-4, #ddd);
+  }
+
+  .demo-view {
+    width: 100%;
+    max-width: 900px;
+  }
+
+  /* Modal Styling */
+  .room-modal {
+    border: none;
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    background: var(--gray-1, #ffffff);
+    color: var(--gray-12, #000000);
+  }
+
+  .room-modal::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .btn-done {
+    padding: 0.5rem 1.5rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: var(--primary-9, #0070f3);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-done:hover {
+    background-color: var(--primary-10, #0051a2);
+  }
+
+  /* Mobile Join Form Styling */
+  .join-game-card {
+    max-width: 400px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .join-code-input {
+    font-size: 1.25rem;
+    padding: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    border: 1px solid var(--gray-6, #ccc);
+    border-radius: 6px;
+    width: 100%;
+  }
+
+  .btn-join-game {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: var(--primary-9, #0070f3);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .btn-join-game:hover {
+    background-color: var(--primary-10, #0051a2);
   }
 
   .controller-shell {

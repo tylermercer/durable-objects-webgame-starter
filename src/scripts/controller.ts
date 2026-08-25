@@ -120,8 +120,9 @@ class ControllerApp {
       },
       onControlMessage: msg => {
         if (msg.type === "identity") {
-          this.name = msg.name;
-          this.color = msg.color;
+          const identityMsg = msg as { type: "identity"; name: string; color: string };
+          this.name = identityMsg.name;
+          this.color = identityMsg.color;
           this.updatePlayerInfo(this.name, this.color);
         }
       }
