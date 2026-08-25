@@ -10,6 +10,19 @@ vi.mock("cloudflare:workers", () => {
 
 import { GameSession } from "./GameSession";
 
+function createMockWebSocket(): WebSocket {
+  const listeners: Record<string, Function[]> = {};
+  return {
+    addEventListener: vi.fn((event: string, fn: Function) => {
+      if (!listeners[event]) listeners[event] = [];
+      listeners[event].push(fn);
+    }),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    send: vi.fn()
+  } as unknown as WebSocket;
+}
+
 describe("GameSession Durable Object", () => {
   it("rejects non-websocket upgrade requests with status 426", async () => {
     const state = {} as any;
@@ -37,5 +50,87 @@ describe("GameSession Durable Object", () => {
     expect(response.status).toBe(400);
     const text = await response.text();
     expect(text).toContain("Invalid role");
+  });
+
+  it("saves and loads game state via storage", async () => {
+    const storageMap = new Map<string, any>();
+    const ctx = {
+      storage: {
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+    const consoleApi = (session as any).makeConsoleApi(createMockWebSocket());
+
+    await consoleApi.saveGameState({ score: 100, seed: 12345 });
+    expect(ctx.storage.put).toHaveBeenCalledWith("gameState", { score: 100, seed: 12345 });
+
+    const loaded = await consoleApi.loadGameState();
+    expect(loaded).toEqual({ score: 100, seed: 12345 });
+  });
+
+  it("handles rejoin tokens and disconnect grace period alarm", async () => {
+    const ctx = {
+      storage: {
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const controllerCallbacks = {
+      dup: () => controllerCallbacks,
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onSignal: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleCallbacks = {
+      dup: () => consoleCallbacks,
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onSignal: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const controllerWs1 = createMockWebSocket();
+
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    consoleApi.join(consoleCallbacks);
+
+    const controllerApi1 = (session as any).makeControllerApi(controllerWs1);
+    const joinRes1 = controllerApi1.join(controllerCallbacks);
+
+    expect(joinRes1.id).toBeDefined();
+    expect(joinRes1.name).toBe("Player 1");
+    expect(joinRes1.rejoinToken).toBeDefined();
+    expect(consoleCallbacks.onControllerJoined).toHaveBeenCalledWith(joinRes1.id, "Player 1");
+
+    // Disconnect controller 1
+    (session as any).handleClose(controllerWs1);
+    expect(ctx.storage.setAlarm).toHaveBeenCalled();
+    // onControllerLeft should NOT be called yet because token is in grace period
+    expect(consoleCallbacks.onControllerLeft).not.toHaveBeenCalledWith(joinRes1.id);
+
+    // Rejoin with same token
+    const controllerWs2 = createMockWebSocket();
+    const controllerApi2 = (session as any).makeControllerApi(controllerWs2);
+    const joinRes2 = controllerApi2.join(controllerCallbacks, joinRes1.rejoinToken);
+
+    expect(joinRes2.id).toBe(joinRes1.id);
+    expect(joinRes2.name).toBe("Player 1");
+
+    // Re-disconnect and let alarm fire after grace period
+    (session as any).handleClose(controllerWs2);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 50000);
+
+    await session.alarm();
+    expect(consoleCallbacks.onControllerLeft).toHaveBeenCalledWith(joinRes1.id);
+    vi.useRealTimers();
   });
 });

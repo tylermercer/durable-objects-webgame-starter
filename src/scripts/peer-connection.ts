@@ -1,5 +1,28 @@
 import type { RTCSignal } from "../lib/signaling-api";
 
+export class CoalescingSender {
+  private pending = new Map<string, unknown>();
+  private flushing = false;
+
+  constructor(private channel: () => RTCDataChannel | null) {}
+
+  send(key: string, msg: unknown) {
+    this.pending.set(key, msg); // overwrites any not-yet-sent value for this key
+    if (!this.flushing) {
+      this.flushing = true;
+      queueMicrotask(() => this.flush());
+    }
+  }
+
+  private flush() {
+    this.flushing = false;
+    const ch = this.channel();
+    if (!ch || ch.readyState !== "open") return;
+    for (const msg of this.pending.values()) ch.send(JSON.stringify(msg));
+    this.pending.clear();
+  }
+}
+
 export type TouchMessage = {
   type: "touch";
   phase: "start" | "move" | "end" | "cancel";
@@ -25,7 +48,7 @@ export type PongMessage = {
   t: number;
 };
 
-export type ControlMessage = IdentityMessage | PingMessage | PongMessage;
+export type ControlMessage = IdentityMessage | PingMessage | PongMessage | { type: string; [key: string]: unknown };
 
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
@@ -43,12 +66,14 @@ export class PeerConnection {
   inputChannel: RTCDataChannel | null = null;
   controlChannel: RTCDataChannel | null = null;
   pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private coalescingControlSender: CoalescingSender;
 
   constructor(
     public isInitiator: boolean,
     private callbacks: PeerConnectionCallbacks
   ) {
     this.pc = new RTCPeerConnection(STUN_CONFIG);
+    this.coalescingControlSender = new CoalescingSender(() => this.controlChannel);
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
@@ -146,6 +171,10 @@ export class PeerConnection {
     if (this.controlChannel && this.controlChannel.readyState === "open") {
       this.controlChannel.send(JSON.stringify(msg));
     }
+  }
+
+  sendControlCoalesced(key: string, msg: unknown) {
+    this.coalescingControlSender.send(key, msg);
   }
 
   close() {
