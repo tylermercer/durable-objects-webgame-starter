@@ -31,6 +31,7 @@ For the full design — Durable Object structure, the signaling protocol, WebRTC
 
 The switcher is the default experience out of the box with no setup needed.
 - `touch-demo`: Raw touch input tracking showing real-time dot visualization across WebRTC data channels.
+- `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
 
 ## What's already here
 
@@ -49,7 +50,7 @@ The switcher is the default experience out of the box with no setup needed.
 
 Transitioning from the initial example switcher state (State 1) to building your own game (State 2) is a simple 4-step checklist:
 
-1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`), and try it via the switcher.
+1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo` and `liars-dice`), and try them via the switcher.
 2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
 3. Replace the contents of `src/scripts/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
 4. Delete `src/examples/` and `src/components/DemoSwitcher.astro`.
@@ -75,19 +76,19 @@ This replaces the demo's `startAnimationLoop`, which just redraws every frame.
 
 ### Player identity across reconnects
 
-By default, a controller refresh looks like a brand-new player joining — fine for the stateless demo, not fine for a game with per-player HP/position/inventory. `join()` on the signaling API accepts an optional `rejoinToken` (generate one with `crypto.randomUUID()`, persist it in `localStorage`); the DO reuses the player's existing `id`/`name` if the token matches a recent session, and holds their slot open for a grace period after a disconnect instead of immediately dropping them. Use this for any game where a player's state needs to survive a dropped connection or locked phone.
+By default, a controller refresh looks like a brand-new player joining — fine for the stateless demo, not fine for a game with per-player HP/position/inventory. `join()` on the signaling API accepts an optional `rejoinToken` (generate one with `crypto.randomUUID()`, persist it in `localStorage`); the DO reuses the player's existing `id`/`name` if the token matches a recent session, and holds their slot open for a grace period after a disconnect instead of immediately dropping them. Use this for any game where a player's state needs to survive a dropped connection or locked phone (see `src/examples/liars-dice/` for a complete example).
 
 ### Sending frequently-changing state reliably
 
-The `control` channel is reliable and ordered — good for state you can't afford to lose, bad for anything that changes faster than the channel drains (e.g. HP after every hit), since naive sends queue up into a stale backlog. Use `sendControlCoalesced(key, msg)` on `PeerConnection` for "latest value wins" state; it keeps only the newest message per key until the channel is ready to send. Use the plain `sendControl` for one-shot events that must all arrive (item pickups, identity assignment).
+The `control` channel is reliable and ordered — good for state you can't afford to lose, bad for anything that changes faster than the channel drains (e.g. HP after every hit), since naive sends queue up into a stale backlog. Use `sendControlCoalesced(key, msg)` on `PeerConnection` for "latest value wins" state (as demonstrated in `src/examples/liars-dice/console.ts` for broadcasting game state); it keeps only the newest message per key until the channel is ready to send. Use the plain `sendControl` for one-shot events that must all arrive (item pickups, identity assignment, or private dice dispatches).
 
 ### Deterministic randomness
 
-`createRng(seed)` (`src/utils/rng.ts`) is a seedable PRNG with the same `() => number` contract as `Math.random`. Use it anywhere your game needs reproducible randomness — procedural generation, shuffles, loot rolls — especially if that randomness needs to survive a console refresh from the same seed.
+`createRng(seed)` (`src/utils/rng.ts`) is a seedable PRNG with the same `() => number` contract as `Math.random`. Use it anywhere your game needs reproducible randomness — procedural generation, shuffles, loot rolls — especially if that randomness needs to survive a console refresh from the same seed (used in `src/examples/liars-dice/console.ts` to reproduce dice rolls across console reloads).
 
 ### Persisting game state
 
-The DO's `sessions` map is in-memory and doesn't survive eviction. For anything that should persist — score, world seed, progress — use `saveGameState`/`loadGameState` on the console's RPC session, backed by the DO's own durable storage. This is console-only by design: controllers report input, only the console's authoritative simulation writes shared state. Values are capped around 2MB; shard larger state across multiple keys if you need to.
+The DO's `sessions` map is in-memory and doesn't survive eviction. For anything that should persist — score, world seed, progress — use `saveGameState`/`loadGameState` on the console's RPC session, backed by the DO's own durable storage (see `src/examples/liars-dice/console.ts`). This is console-only by design: controllers report input, only the console's authoritative simulation writes shared state. Values are capped around 2MB; shard larger state across multiple keys if you need to.
 
 ## Design docs
 
