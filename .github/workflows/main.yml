@@ -14,10 +14,12 @@ on:
     types:
       - opened
       - synchronize
+      - closed
   workflow_dispatch: # Allows running this workflow manually
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -96,8 +98,8 @@ jobs:
 
       - name: Deploy to Cloudflare (pull request)
         id: deploy-pr
-        if: github.event_name == 'pull_request' # wrangler deploy --dry-run for PRs with DO migrations
-        run: npx wrangler deploy --dry-run
+        if: github.event_name == 'pull_request'
+        run: npx wrangler deploy --name ${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -116,3 +118,42 @@ jobs:
             | **Preview URL**:        | https://${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter.tmercer.workers.dev |
             | **Last commit:**        | `${{ steps.extract_vars.outputs.sha_short }}` |
             | **Deployed at**:        | `${{ steps.extract_vars.outputs.datetime }}` |
+
+  cleanup-pr:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract variables
+        id: extract_vars
+        run: |
+          branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          slugified_branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--\+/-/g' | sed 's/^-//;s/-$//')
+          truncated_slugified_branch=${slugified_branch:0:28}
+          if [[ "${truncated_slugified_branch: -1}" == "-" ]]; then
+            truncated_slugified_branch=${truncated_slugified_branch::-1}
+          fi
+          echo "branch=${branch}" >> $GITHUB_OUTPUT
+          echo "slugified_branch=${truncated_slugified_branch}" >> $GITHUB_OUTPUT
+
+      - name: Delete preview worker
+        run: npx wrangler delete --name ${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Comment PR cleanup
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b
+        with:
+          comment-tag: deploy_preview
+          mode: recreate
+          message: |
+            ## Preview Worker Cleaned Up :wastebasket:
+
+            The preview worker for branch `${{ steps.extract_vars.outputs.branch }}` (`${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter`) has been deleted.
