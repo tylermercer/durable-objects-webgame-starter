@@ -1,5 +1,5 @@
-import type { PeerConnection } from "../../scripts/peer-connection";
-import type { ControllerGameInstance } from "../../scripts/gameTypes";
+import type { PeerConnection } from "@transport/peer-connection";
+import type { ControllerGameInstance } from "@contract/gameTypes";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { LiarsDiceController } from "./LiarsDiceController";

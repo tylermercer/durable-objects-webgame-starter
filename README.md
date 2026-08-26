@@ -40,12 +40,12 @@ The switcher is the default experience out of the box with no setup needed.
 |---|---|---|
 | Signaling Durable Object | `src/lib/GameSession.ts`, `src/lib/signaling-api.ts` | One DO instance per room code. Relays WebRTC offer/answer/ICE between a console and its controllers over a [capnweb](https://github.com/cloudflare/capnweb) RPC session — no hand-rolled message parsing. Persists rejoin tokens and player numbers across DO cold-starts. |
 | Room codes & QR join | `src/utils/generateRoomCode.ts`, console-side QR rendering | Console mints a short code client-side; the QR links to `/?code=<CODE>&game=<GAME>` — no in-app scanning needed. |
-| WebRTC data channels | `src/scripts/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
-| Game source seam | `src/scripts/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
+| WebRTC data channels | `src/transport/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
+| Game source seam | `src/contract/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
 | Examples & Switcher | `src/examples/`, `src/components/DemoSwitcher.astro` | Out-of-the-box examples registry and UI switcher for testing before building your own game. |
 | Custom Game Logic location | `src/logic/` | The scaffolded directory (`console.ts` & `controller.ts`) where your own game's logic will live. |
-| Console app | `src/scripts/console.ts` | Generic console bootstrap handling QR rendering, connection tracking, and fixed-tick animation loop through `gameSource.ts`. |
-| Controller app | `src/scripts/controller.ts` | Generic controller bootstrap handling WebRTC connection setup through `gameSource.ts`. |
+| Console app | `src/host/console.ts` | Generic console bootstrap handling QR rendering, connection tracking, and fixed-tick animation loop through `gameSource.ts`. |
+| Controller app | `src/host/controller.ts` | Generic controller bootstrap handling WebRTC connection setup through `gameSource.ts`. |
 
 ## Building your own game
 
@@ -53,7 +53,7 @@ Transitioning from the initial example switcher state (State 1) to building your
 
 1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`, `liars-dice`, and `flappy-royale`), and try them via the switcher.
 2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
-3. Replace the contents of `src/scripts/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
+3. Replace the contents of `src/contract/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
 4. Delete `src/examples/` and `src/components/DemoSwitcher.astro`.
 
 ### Input: discrete events vs. continuous state

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { createStore } from "../../utils/reactStore";
+import type { createStore } from "@react/reactStore";
 import type { PublicGameState } from "./types";
 import type { ConsoleContext } from "./console";
 

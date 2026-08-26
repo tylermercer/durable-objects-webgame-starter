@@ -1,4 +1,4 @@
-import type { PeerConnection } from "../scripts/peer-connection";
+import type { PeerConnection } from "@transport/peer-connection";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
