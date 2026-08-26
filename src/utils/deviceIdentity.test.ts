@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getOrCreateRejoinToken, persistRejoinToken } from "./deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "./deviceIdentity";
 
 describe("deviceIdentity", () => {
   let mockStorage: Record<string, string> = {};
@@ -61,5 +61,36 @@ describe("deviceIdentity", () => {
 
     persistRejoinToken("override-token", "ROOM2");
     expect(getOrCreateRejoinToken("ROOM2")).toBe("override-token");
+  });
+
+  describe("name persistence & sanitization", () => {
+    it("gets and saves name in localStorage", () => {
+      expect(getSavedName()).toBe("");
+      saveName("Alice");
+      expect(getSavedName()).toBe("Alice");
+    });
+
+    it("handles localStorage errors gracefully for name persistence", () => {
+      vi.stubGlobal("localStorage", {
+        getItem: () => {
+          throw new Error("SecurityError");
+        },
+        setItem: () => {
+          throw new Error("SecurityError");
+        }
+      });
+
+      expect(getSavedName()).toBe("");
+      expect(() => saveName("Bob")).not.toThrow();
+    });
+
+    it("sanitizes player names correctly", () => {
+      expect(sanitizeName(null)).toBeNull();
+      expect(sanitizeName(undefined)).toBeNull();
+      expect(sanitizeName("")).toBeNull();
+      expect(sanitizeName("   ")).toBeNull();
+      expect(sanitizeName("  Charlie  ")).toBe("Charlie");
+      expect(sanitizeName("A very long player name that exceeds limits")).toBe("A very long player n");
+    });
   });
 });

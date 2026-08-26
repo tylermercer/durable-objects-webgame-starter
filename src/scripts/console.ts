@@ -70,6 +70,10 @@ class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
   onFirstPlayerChanged(id: string | null) {
     this.app.handleFirstPlayerChanged(id);
   }
+
+  onControllerRenamed(id: string, name: string) {
+    this.app.handleControllerRenamed(id, name);
+  }
 }
 
 class ConsoleApp {
@@ -308,6 +312,14 @@ class ConsoleApp {
     if (controller) {
       controller.signalingConnected = false;
       this.updateControllerStatus(controller);
+    }
+  }
+
+  handleControllerRenamed(id: string, name: string) {
+    const controller = this.controllers.get(id);
+    if (controller) {
+      controller.name = name;
+      this.updateControllerUI();
     }
   }
 
