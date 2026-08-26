@@ -28,19 +28,23 @@ describe("Grid Dungeon room simulation", () => {
     expect(grid.get({ x: 1, y: 1 })?.walkable).toBe(true);
   });
 
-  it("spawns and retains player entities across rejoin", () => {
+  it("spawns and retains player entities across rejoin and handles connection statuses", () => {
     const registry = createInitialEntities();
     const activePeers = [
-      { id: "player-1", name: "Alice", color: "#ff0000" },
-      { id: "player-2", name: "Bob", color: "#00ff00" },
+      { id: "player-1", name: "Alice", color: "#ff0000", status: "live" as const },
+      { id: "player-2", name: "Bob", color: "#00ff00", status: "reconnecting" as const },
     ];
 
     syncPlayers(registry, activePeers);
     let p1 = registry.get("player-1") as PlayerEntity;
+    let p2 = registry.get("player-2") as PlayerEntity;
     expect(p1).toBeDefined();
     expect(p1.name).toBe("Alice");
     expect(p1.x).toBe(1.5);
     expect(p1.y).toBe(1.5);
+
+    expect(p2).toBeDefined();
+    expect(p2.name).toBe("Bob");
 
     // Move player 1
     p1.x = 5.0;
@@ -48,8 +52,8 @@ describe("Grid Dungeon room simulation", () => {
 
     // Simulate player 1 refreshing / rejoining
     const updatedPeers = [
-      { id: "player-1", name: "Alice Renamed", color: "#ff0000" },
-      { id: "player-2", name: "Bob", color: "#00ff00" },
+      { id: "player-1", name: "Alice Renamed", color: "#ff0000", status: "live" as const },
+      { id: "player-2", name: "Bob", color: "#00ff00", status: "reconnecting" as const },
     ];
     syncPlayers(registry, updatedPeers);
 
@@ -58,6 +62,23 @@ describe("Grid Dungeon room simulation", () => {
     // Position must be retained across rejoin!
     expect(p1.x).toBe(5.0);
     expect(p1.y).toBe(5.0);
+  });
+
+  it("filters out peers with grace-period or gone connection statuses when provided", () => {
+    const registry = createInitialEntities();
+    const peers = [
+      { id: "player-1", name: "Alice", color: "#ff0000", status: "live" as const },
+      { id: "player-2", name: "Bob", color: "#00ff00", status: "reconnecting" as const },
+      { id: "player-3", name: "Charlie", color: "#0000ff", status: "grace-period" as const },
+      { id: "player-4", name: "Dave", color: "#ffff00", status: "gone" as const },
+    ];
+
+    syncPlayers(registry, peers);
+
+    expect(registry.get("player-1")).toBeDefined();
+    expect(registry.get("player-2")).toBeDefined();
+    expect(registry.get("player-3")).toBeUndefined();
+    expect(registry.get("player-4")).toBeUndefined();
   });
 
   it("moves player according to joystick input and blocks on wall tiles", () => {

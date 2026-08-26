@@ -1,5 +1,6 @@
 import { TileGrid, type GridPos } from "../../utils/tileGrid";
 import { EntityRegistry } from "../../utils/entityRegistry";
+import type { PlayerConnectionStatus } from "@host/console";
 import type { DungeonEntity, GridCell, JoystickState, NpcEntity, PlayerEntity } from "./types";
 
 export const ROOM_WIDTH = 20;
@@ -68,9 +69,13 @@ export function createInitialEntities(): EntityRegistry<DungeonEntity> {
 
 export function syncPlayers(
   registry: EntityRegistry<DungeonEntity>,
-  activePeers: Array<{ id: string; name: string; color: string }>
+  activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus | string; state?: string }>
 ): void {
   for (const peer of activePeers) {
+    const status = peer.status ?? peer.state;
+    if (status && status !== "live" && status !== "reconnecting" && status !== "connected") {
+      continue;
+    }
     const existing = registry.get(peer.id);
     if (!existing) {
       // Spawn new player entity at spawn tile (1.5, 1.5)
