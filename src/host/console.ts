@@ -155,6 +155,23 @@ export class ConsoleApp {
       modalCloseBtn.addEventListener("click", () => this.closeModal());
     }
 
+    const copyLinkBtn = document.getElementById("copy-link-btn");
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener("click", async () => {
+        const joinUrl = buildJoinUrl(window.location.origin, this.code);
+        try {
+          await navigator.clipboard.writeText(joinUrl);
+          const originalText = copyLinkBtn.textContent;
+          copyLinkBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyLinkBtn.textContent = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error("Failed to copy join link:", err);
+        }
+      });
+    }
+
     if (this.modal) {
       this.modal.addEventListener("click", (e) => {
         if (e.target === this.modal) {
