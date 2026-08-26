@@ -280,3 +280,5 @@ it wrong.
 All three are pure additions under `@utils` — no existing export changes
 shape, and none of the three depend on each other or on any specific
 rendering framework, so a game can adopt any subset.
+
+For a worked reference example composing `TileGrid`, `Camera`, and `EntityRegistry` together, see `src/examples/grid-dungeon/` (`design-docs/2026-08-26-grid-dungeon-example.md`).
