@@ -1,8 +1,8 @@
 import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
-import { PeerConnection } from "./peer-connection";
-import { loadControllerGame } from "./gameSource";
-import type { ControllerGameInstance } from "./gameTypes";
+import { PeerConnection } from "@transport/peer-connection";
+import { loadControllerGame } from "@contract/gameSource";
+import type { ControllerGameInstance } from "@contract/gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 
 export interface ControllerContext {

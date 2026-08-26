@@ -1,5 +1,5 @@
-import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
-import type { ConsoleGameInstance } from "../../scripts/gameTypes";
+import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
+import type { ConsoleGameInstance } from "@contract/gameTypes";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../../lib/signaling-api";
 

@@ -1,4 +1,4 @@
-import type { PeerConnection, TouchMessage } from "../scripts/peer-connection";
+import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../lib/signaling-api";
 

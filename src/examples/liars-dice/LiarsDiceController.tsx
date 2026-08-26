@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import type { ControllerContext } from "./controller";
-import { usePeerControlMessage } from "../../utils/reactBridge";
+import { usePeerControlMessage } from "@react/reactBridge";
 import { isValidBid } from "./rules";
 import type {
   LiarsDiceControlMessage,

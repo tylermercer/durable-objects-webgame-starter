@@ -12,7 +12,11 @@
       "@layouts/*": ["src/layouts/*"],
       "@utils/*": ["src/utils/*"],
       "@examples/*": ["src/examples/*"],
-      "@logic/*": ["src/logic/*"]
+      "@logic/*": ["src/logic/*"],
+      "@host/*": ["src/host/*"],
+      "@transport/*": ["src/transport/*"],
+      "@contract/*": ["src/contract/*"],
+      "@react/*": ["src/react/*"]
     }
   }
 }

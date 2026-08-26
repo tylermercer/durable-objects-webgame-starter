@@ -1,10 +1,10 @@
-import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
-import type { ConsoleGameInstance } from "../../scripts/gameTypes";
+import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
+import type { ConsoleGameInstance } from "@contract/gameTypes";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../../lib/signaling-api";
-import type { PlayerConnectionStatus } from "../../scripts/console";
+import type { PlayerConnectionStatus } from "@host/console";
 import { createRng } from "../../utils/rng";
-import { createStore } from "../../utils/reactStore";
+import { createStore } from "@react/reactStore";
 import { isValidBid, resolveChallenge } from "./rules";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";

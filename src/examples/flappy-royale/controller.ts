@@ -1,4 +1,4 @@
-import type { PeerConnection } from "../../scripts/peer-connection";
+import type { PeerConnection } from "@transport/peer-connection";
 import type { FlappyControlMessage, RoundStateSnapshot } from "./types";
 
 export interface ControllerContext {

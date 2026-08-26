@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { PeerConnection, ControlMessage } from "../scripts/peer-connection";
+import type { PeerConnection, ControlMessage } from "@transport/peer-connection";
 
 export function usePeerControlMessage(
   pc: PeerConnection | null,

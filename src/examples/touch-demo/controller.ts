@@ -1,5 +1,5 @@
-import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
-import type { ControllerGameInstance } from "../../scripts/gameTypes";
+import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
+import type { ControllerGameInstance } from "@contract/gameTypes";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;

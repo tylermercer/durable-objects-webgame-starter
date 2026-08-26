@@ -3,9 +3,9 @@ import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
-import { PeerConnection, type TouchMessage } from "./peer-connection";
-import { loadConsoleGame, buildJoinUrl } from "./gameSource";
-import type { ConsoleGameInstance } from "./gameTypes";
+import { PeerConnection, type TouchMessage } from "@transport/peer-connection";
+import { loadConsoleGame, buildJoinUrl } from "@contract/gameSource";
+import type { ConsoleGameInstance } from "@contract/gameTypes";
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
