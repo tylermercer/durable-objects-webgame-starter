@@ -10,6 +10,7 @@ import rawFonts from './lib/plugins/vite/rawFonts.js';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://durable-objects-webgame-starter.tmercer.workers.dev',
+  session: false,
   adapter: cloudflare(),
   integrations: [react()],
   markdown: {
