@@ -163,18 +163,3 @@ is independently useful mid-way.
   the README already documents exactly how to remove it wholesale if a
   project doesn't want it. Flagging as a possible future follow-up, not
   bundling it here.
-
-## 6. Open questions
-
-- Should `contract/` fold into `host/` instead of standing alone? The
-  argument for splitting is that every example and `logic/` file imports the
-  contract but nothing from `host/` directly (only the built pages wire up
-  `host/console.ts`/`host/controller.ts`); the argument against is that it's
-  only two small files. Leaning toward keeping it split since "what a game
-  must implement" and "the thing that runs the console" are conceptually
-  different audiences (game author vs. template maintainer), but flagging
-  this as the one genuinely debatable call in this doc.
-- This lands as its own PR now that pixi is already merged, rather than
-  folded into the pixi PR — keeps the "pure move, no behavior change" diff
-  reviewable on its own, and meant pixi didn't have to land on a moving
-  floor while this was still being drafted.
