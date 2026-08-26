@@ -68,6 +68,7 @@ jobs:
           PUBLIC_COMMIT_HASH: ${{ github.sha }}
         run: |
           pnpm install --frozen-lockfile
+          pnpm test
           pnpm build
           echo "result=built" >> $GITHUB_OUTPUT
 
