@@ -5,6 +5,7 @@ import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import { PeerConnection, type TouchMessage } from "./peer-connection";
 import { loadConsoleGame, buildJoinUrl } from "./gameSource";
+import type { ConsoleGameInstance } from "./gameTypes";
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
@@ -85,7 +86,7 @@ class ConsoleApp {
   private reconnectAttempt = 0;
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
-  activeGame: { tick?: (dt: number) => void; render?: (alpha: number) => void } | null = null;
+  activeGame: ConsoleGameInstance | null = null;
 
   constructor() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -109,6 +110,7 @@ class ConsoleApp {
 
   async initGame() {
     try {
+      this.activeGame?.destroy?.();
       const { createGame } = await loadConsoleGame();
       this.activeGame = createGame({
         session: this.api,

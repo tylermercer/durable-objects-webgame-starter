@@ -1,5 +1,6 @@
 // @ts-check
 import cloudflare from "@astrojs/cloudflare";
+import react from "@astrojs/react";
 import { defineConfig } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
 import { generateRadixColorsSassFunctions } from "./lib/plugins/sass/radix-ui-colors/generateRadixColorsSassCustomFunction";
@@ -10,6 +11,7 @@ import rawFonts from './lib/plugins/vite/rawFonts.js';
 export default defineConfig({
   site: 'https://durable-objects-webgame-starter.tmercer.workers.dev',
   adapter: cloudflare(),
+  integrations: [react()],
   markdown: {
     processor: unified(),
     remarkPlugins: [remarkEmdash],

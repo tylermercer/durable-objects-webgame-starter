@@ -31,7 +31,7 @@ For the full design — Durable Object structure, the signaling protocol, WebRTC
 
 The switcher is the default experience out of the box with no setup needed.
 - `touch-demo`: Raw touch input tracking showing real-time dot visualization across WebRTC data channels.
-- `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
+- `liars-dice`: Full turn-based game implemented in React demonstrating multi-framework lifecycle support (`createRoot`/`destroy`), private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
 - `flappy-royale`: Real-time simulation with per-player elimination, seeded/replayable procedural generation, and 60Hz tick-vs-render separation.
 
 ## What's already here
@@ -41,6 +41,7 @@ The switcher is the default experience out of the box with no setup needed.
 | Signaling Durable Object | `src/lib/GameSession.ts`, `src/lib/signaling-api.ts` | One DO instance per room code. Relays WebRTC offer/answer/ICE between a console and its controllers over a [capnweb](https://github.com/cloudflare/capnweb) RPC session — no hand-rolled message parsing. Persists rejoin tokens and player numbers across DO cold-starts. |
 | Room codes & QR join | `src/utils/generateRoomCode.ts`, console-side QR rendering | Console mints a short code client-side; the QR links to `/?code=<CODE>&game=<GAME>` — no in-app scanning needed. |
 | WebRTC data channels | `src/scripts/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
+| Game contract & Types | `src/scripts/gameTypes.ts` | Contract defining `ConsoleGameInstance` (`tick`, `render`, `destroy`) and `ControllerGameInstance` (`destroy`) lifecycle hooks for clean teardown regardless of framework (Canvas, React, etc.). |
 | Game source seam | `src/scripts/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
 | Examples & Switcher | `src/examples/`, `src/components/DemoSwitcher.astro` | Out-of-the-box examples registry and UI switcher for testing before building your own game. |
 | Custom Game Logic location | `src/logic/` | The scaffolded directory (`console.ts` & `controller.ts`) where your own game's logic will live. |
@@ -60,6 +61,13 @@ Transitioning from the initial example switcher state (State 1) to building your
 
 - **Discrete events** (taps, swipes, gestures) — use the existing `input` channel event pattern directly (`{type:'touch', phase, x, y}` or your own event shape).
 - **Continuous input** (joystick position, held buttons) — use `InputStateSync` (`src/utils/InputStateSync.ts`), which sends a full state snapshot at a fixed rate rather than an event log. This matches the `input` channel's unreliable delivery: a dropped snapshot just means one stale frame, corrected by the next one.
+
+### Multi-Framework Support (React & Canvas)
+
+Games are framework-agnostic. `createGame(ctx)` can render using plain HTML5 Canvas (like `touch-demo` or `flappy-royale`) or mount a React tree (like `liars-dice`).
+- Canvas/imperative games return `{ tick, render, destroy }`. `render(alpha)` is called on the host's fixed-tick clock.
+- React games mount via `createRoot` inside `createGame()` and return `{ tick, destroy }` (omitting `render`). State is bridged via `createStore` (`src/utils/reactStore.ts`) and `useSyncExternalStore`, while controller events use `usePeerControlMessage` (`src/utils/reactBridge.ts`).
+- Whenever switching games or tearing down sessions, `destroy()` is called automatically to remove event listeners and unmount React roots.
 
 ### Simulation: fixed-tick loop
 
