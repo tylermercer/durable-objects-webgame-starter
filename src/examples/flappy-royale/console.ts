@@ -1,3 +1,4 @@
+import { Application, Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
 import type { ConsoleGameInstance } from "../../scripts/gameTypes";
 import type { RpcStub } from "capnweb";
@@ -9,12 +10,10 @@ import {
   WORLD_WIDTH,
   WORLD_HEIGHT,
   GROUND_Y,
-  CEILING_Y,
   BIRD_RADIUS,
+  PIPE_SPEED,
 } from "./sim";
 import type {
-  BirdState,
-  FlapMessage,
   FlappyControlMessage,
   PersistedFlappyState,
   RoundState,
@@ -36,10 +35,20 @@ export interface ConsoleContext {
   peers: Map<string, ControllerPeer>;
 }
 
-export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
-  const canvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
-  const ctx2d = canvas?.getContext("2d") || null;
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
+interface BirdDisplayObject {
+  container: Container;
+  body: Graphics;
+  eye: Graphics;
+  beak: Graphics;
+  nameTag: Text;
+  elimTag: Text;
+}
+
+export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Make sure canvas container is visible in demo view
   const demoView = document.getElementById("demo-view");
   if (demoView) {
@@ -54,19 +63,135 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
   }
 
-  function resizeCanvas() {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-    }
+  // Hide existing static touch canvas if present to avoid dual canvas rendering
+  const touchCanvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
+  const originalTouchCanvasDisplay = touchCanvas ? touchCanvas.style.display : "";
+  if (touchCanvas) {
+    touchCanvas.style.display = "none";
   }
 
-  if (typeof window !== "undefined" && canvas) {
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
+  // Create dedicated canvas element for Pixi WebGL context
+  const canvas = document.createElement("canvas");
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  const canvasContainer = document.querySelector(".canvas-container");
+  if (canvasContainer) {
+    canvasContainer.appendChild(canvas);
   }
+
+  let app: Application | null = null;
+  let ready = false;
+
+  // Root containers
+  const world = new Container();
+  const backgroundGraphics = new Graphics();
+  const groundGraphics = new Graphics();
+  const pipesContainer = new Container();
+  const birdsContainer = new Container();
+  const uiContainer = new Container();
+
+  // Pipe display objects map
+  const pipeSprites = new Map<number, Graphics>();
+  // Bird display objects map
+  const birdSprites = new Map<string, BirdDisplayObject>();
+
+  // UI Display objects
+  const overlayGraphics = new Graphics();
+  const titleText = new Text({
+    text: "",
+    style: new TextStyle({
+      fontFamily: "sans-serif",
+      fontSize: 32,
+      fontWeight: "bold",
+      fill: 0xffffff,
+      align: "center",
+    }),
+  });
+  titleText.anchor.set(0.5);
+
+  const subtitleText = new Text({
+    text: "",
+    style: new TextStyle({
+      fontFamily: "sans-serif",
+      fontSize: 18,
+      fill: 0xffffff,
+      align: "center",
+    }),
+  });
+  subtitleText.anchor.set(0.5);
+
+  const infoText = new Text({
+    text: "",
+    style: new TextStyle({
+      fontFamily: "sans-serif",
+      fontSize: 14,
+      fill: 0xffdc00,
+      align: "center",
+    }),
+  });
+  infoText.anchor.set(0.5);
+
+  const hudText = new Text({
+    text: "",
+    style: new TextStyle({
+      fontFamily: "sans-serif",
+      fontSize: 20,
+      fontWeight: "bold",
+      fill: 0xffffff,
+      stroke: { color: 0x000000, width: 4 },
+    }),
+  });
+
+  function applyWorldScale() {
+    if (!app) return;
+    const scaleX = app.screen.width / WORLD_WIDTH;
+    const scaleY = app.screen.height / WORLD_HEIGHT;
+    world.scale.set(scaleX, scaleY);
+  }
+
+  const appInstance = new Application();
+  const init = appInstance
+    .init({
+      canvas,
+      resizeTo: canvas.parentElement ?? undefined,
+      autoStart: false,
+      backgroundAlpha: 0,
+    })
+    .then(() => {
+      app = appInstance;
+
+      // Build scene graph
+      app.stage.addChild(world);
+      world.addChild(backgroundGraphics);
+      world.addChild(pipesContainer);
+      world.addChild(groundGraphics);
+      world.addChild(birdsContainer);
+      world.addChild(uiContainer);
+
+      uiContainer.addChild(overlayGraphics);
+      uiContainer.addChild(titleText);
+      uiContainer.addChild(subtitleText);
+      uiContainer.addChild(infoText);
+      uiContainer.addChild(hudText);
+
+      // Render static background & ground in world space (800x600)
+      backgroundGraphics
+        .rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+        .fill(0x70c5ce);
+
+      groundGraphics
+        .rect(0, GROUND_Y, WORLD_WIDTH, WORLD_HEIGHT - GROUND_Y)
+        .fill(0xddd894)
+        .rect(0, GROUND_Y, WORLD_WIDTH, 15)
+        .fill(0x73bf2e)
+        .stroke({ width: 2, color: 0x538021 });
+
+      applyWorldScale();
+      app.renderer.on("resize", applyWorldScale);
+
+      ready = true;
+    });
 
   let roundSeed = Math.floor(Math.random() * 2147483647);
   let currentState: RoundState = {
@@ -104,7 +229,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           const state = saved as PersistedFlappyState;
           if (state.seed && state.phase) {
             roundSeed = state.seed;
-            // Fast forward initial simulation to current tick index
             const players = Object.values(state.birds).map((b) => ({
               id: b.id,
               name: b.name,
@@ -112,7 +236,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
             }));
             let simState = createInitialRoundState(roundSeed, players);
 
-            // Reapply bird states (alive/place/y/vy)
             simState.birds = { ...state.birds };
             simState.phase = state.phase;
             simState.tickIndex = state.tickIndex;
@@ -225,7 +348,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           });
         }
 
-        // If player joined mid-game and has no bird yet in waiting phase, start round only if first player
         if (currentState.phase === "waiting" && !currentState.birds[id]) {
           const firstPlayerId = getFirstPlayerId();
           if (id === firstPlayerId) {
@@ -254,7 +376,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         const stepRes = stepRound(currentState, flaps, dt);
         currentState = stepRes.nextState;
 
-        // Dispatch one-shot died events
         for (const diedEvent of stepRes.events.died) {
           const peer = ctx.peers.get(diedEvent.id);
           if (peer && peer.pc) {
@@ -265,7 +386,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           }
         }
 
-        // Dispatch one-shot round over event
         if (stepRes.events.roundOver) {
           for (const peer of ctx.peers.values()) {
             if (peer.pc) {
@@ -280,201 +400,256 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
   });
 
-  // Canvas click listener to start game / play again from host screen
   const handleCanvasClick = () => {
     if (currentState.phase === "waiting" || currentState.phase === "roundOver") {
       startNewRound();
     }
   };
 
-  if (canvas) {
-    canvas.addEventListener("click", handleCanvasClick);
+  canvas.addEventListener("click", handleCanvasClick);
+
+  function syncPipes(alpha: number) {
+    const pipeInterpolatedDx = (alpha * (1 / 60)) * PIPE_SPEED;
+    const activePipeIds = new Set<number>();
+
+    for (const pipe of currentState.pipes) {
+      activePipeIds.add(pipe.id);
+      let g = pipeSprites.get(pipe.id);
+
+      if (!g) {
+        g = new Graphics();
+        pipesContainer.addChild(g);
+        pipeSprites.set(pipe.id, g);
+      }
+
+      const interpolatedX = pipe.x - pipeInterpolatedDx;
+      const pw = pipe.width;
+      const topH = pipe.topHeight;
+      const botY = pipe.bottomY;
+      const groundY = GROUND_Y;
+
+      g.clear();
+      // Top Pipe body & cap
+      g.rect(interpolatedX, 0, pw, topH)
+        .fill(0x73bf2e)
+        .stroke({ width: 3, color: 0x538021 })
+        .rect(interpolatedX - 4, topH - 20, pw + 8, 20)
+        .fill(0x73bf2e)
+        .stroke({ width: 3, color: 0x538021 });
+
+      // Bottom Pipe body & cap
+      g.rect(interpolatedX, botY, pw, groundY - botY)
+        .fill(0x73bf2e)
+        .stroke({ width: 3, color: 0x538021 })
+        .rect(interpolatedX - 4, botY, pw + 8, 20)
+        .fill(0x73bf2e)
+        .stroke({ width: 3, color: 0x538021 });
+    }
+
+    for (const [id, g] of pipeSprites) {
+      if (!activePipeIds.has(id)) {
+        g.destroy();
+        pipeSprites.delete(id);
+      }
+    }
+  }
+
+  function createBirdDisplayObject(name: string): BirdDisplayObject {
+    const container = new Container();
+
+    const body = new Graphics();
+    const eye = new Graphics();
+    const beak = new Graphics();
+
+    const nameTag = new Text({
+      text: name,
+      style: new TextStyle({
+        fontFamily: "sans-serif",
+        fontSize: 13,
+        fontWeight: "bold",
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 3 },
+      }),
+    });
+    nameTag.anchor.set(0.5, 1);
+    nameTag.position.set(0, -BIRD_RADIUS - 4);
+
+    const elimTag = new Text({
+      text: "",
+      style: new TextStyle({
+        fontFamily: "sans-serif",
+        fontSize: 12,
+        fontWeight: "bold",
+        fill: 0xff4136,
+        stroke: { color: 0x000000, width: 3 },
+      }),
+    });
+    elimTag.anchor.set(0.5, 1);
+    elimTag.position.set(0, -BIRD_RADIUS - 18);
+    elimTag.visible = false;
+
+    // Build eye & beak shapes relative to bird center (0,0)
+    eye
+      .circle(BIRD_RADIUS * 0.4, -BIRD_RADIUS * 0.3, BIRD_RADIUS * 0.3)
+      .fill(0xffffff)
+      .circle(BIRD_RADIUS * 0.5, -BIRD_RADIUS * 0.3, BIRD_RADIUS * 0.12)
+      .fill(0x000000);
+
+    beak
+      .moveTo(BIRD_RADIUS * 0.6, 0)
+      .lineTo(BIRD_RADIUS * 1.3, BIRD_RADIUS * 0.2)
+      .lineTo(BIRD_RADIUS * 0.6, BIRD_RADIUS * 0.4)
+      .closePath()
+      .fill(0xf7a100)
+      .stroke({ width: 2, color: 0x000000 });
+
+    container.addChild(body);
+    container.addChild(eye);
+    container.addChild(beak);
+    container.addChild(nameTag);
+    container.addChild(elimTag);
+
+    birdsContainer.addChild(container);
+
+    return { container, body, eye, beak, nameTag, elimTag };
+  }
+
+  function syncBirds(alpha: number) {
+    const activeBirdIds = new Set<string>();
+
+    for (const id in currentState.birds) {
+      activeBirdIds.add(id);
+      const currBird = currentState.birds[id];
+      const prevBird = prevState.birds[id] || currBird;
+
+      let bObj = birdSprites.get(id);
+      if (!bObj) {
+        bObj = createBirdDisplayObject(currBird.name);
+        birdSprites.set(id, bObj);
+      }
+
+      // Update position (interpolated Y)
+      const interpY = lerp(prevBird.y, currBird.y, alpha);
+      bObj.container.position.set(currBird.x, interpY);
+
+      // Render body fill/stroke based on alive state & color
+      bObj.body.clear();
+      bObj.body
+        .circle(0, 0, BIRD_RADIUS)
+        .fill(currBird.alive ? currBird.color : 0x666666)
+        .stroke({ width: 2, color: 0x000000 });
+
+      bObj.container.alpha = currBird.alive ? 1.0 : 0.35;
+
+      if (!currBird.alive && currBird.place) {
+        bObj.elimTag.text = `💀 #${currBird.place}`;
+        bObj.elimTag.visible = true;
+      } else {
+        bObj.elimTag.visible = false;
+      }
+    }
+
+    for (const [id, bObj] of birdSprites) {
+      if (!activeBirdIds.has(id)) {
+        bObj.container.destroy({ children: true });
+        birdSprites.delete(id);
+      }
+    }
+  }
+
+  function syncUI() {
+    overlayGraphics.clear();
+
+    if (currentState.phase === "waiting") {
+      overlayGraphics
+        .rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+        .fill({ color: 0x000000, alpha: 0.5 });
+
+      titleText.text = "Flappy Royale 🐤";
+      titleText.style.fill = 0xffffff;
+      titleText.style.fontSize = 32;
+      titleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 - 40);
+      titleText.visible = true;
+
+      subtitleText.text = "First player tap screen or click here to start round!";
+      subtitleText.style.fill = 0xffffff;
+      subtitleText.style.fontSize = 18;
+      subtitleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 10);
+      subtitleText.visible = true;
+
+      infoText.text = `Connected Players: ${ctx.peers.size}`;
+      infoText.style.fill = 0xffdc00;
+      infoText.style.fontSize = 14;
+      infoText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50);
+      infoText.visible = true;
+
+      hudText.visible = false;
+    } else if (currentState.phase === "roundOver") {
+      overlayGraphics
+        .rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+        .fill({ color: 0x000000, alpha: 0.6 });
+
+      titleText.text = "🏆 ROUND OVER! 🏆";
+      titleText.style.fill = 0xffdc00;
+      titleText.style.fontSize = 36;
+      titleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 - 60);
+      titleText.visible = true;
+
+      if (currentState.winner) {
+        subtitleText.text = `Winner: ${currentState.winner.name}!`;
+      } else {
+        subtitleText.text = "No Winner!";
+      }
+      subtitleText.style.fill = 0xffffff;
+      subtitleText.style.fontSize = 24;
+      subtitleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 - 10);
+      subtitleText.visible = true;
+
+      infoText.text = "First player tap screen or click here to Play Again!";
+      infoText.style.fill = 0x2ecc40;
+      infoText.style.fontSize = 20;
+      infoText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50);
+      infoText.visible = true;
+
+      hudText.visible = false;
+    } else if (currentState.phase === "active") {
+      overlayGraphics.clear();
+      titleText.visible = false;
+      subtitleText.visible = false;
+      infoText.visible = false;
+
+      const aliveCount = Object.values(currentState.birds).filter((b) => b.alive).length;
+      hudText.text = `🐤 Alive: ${aliveCount} / ${currentState.totalPlayersAtStart}`;
+      hudText.position.set(20, 20);
+      hudText.visible = true;
+    }
   }
 
   return {
     tick: (_dt: number) => {
-      // Tick handling done via createFixedTickLoop above
+      // Simulation loop driven by createFixedTickLoop above
     },
 
     render: (alpha: number) => {
-      if (!ctx2d || !canvas) return;
+      if (!ready || !app) return;
 
-      const w = canvas.width;
-      const h = canvas.height;
-      const scaleX = w / WORLD_WIDTH;
-      const scaleY = h / WORLD_HEIGHT;
+      syncPipes(alpha);
+      syncBirds(alpha);
+      syncUI();
 
-      // Clear screen
-      ctx2d.fillStyle = "#70c5ce"; // Sky blue
-      ctx2d.fillRect(0, 0, w, h);
-
-      // Interpolate pipe positions
-      const tickSpeed = 200; // PIPE_SPEED
-      const pipeInterpolatedDx = ((alpha * (1 / 60)) * tickSpeed) * scaleX;
-
-      // Render Pipes
-      ctx2d.fillStyle = "#73bf2e"; // Pipe green
-      ctx2d.strokeStyle = "#538021";
-      ctx2d.lineWidth = 3 * scaleX;
-
-      for (const pipe of currentState.pipes) {
-        const px = (pipe.x * scaleX) - pipeInterpolatedDx;
-        const pw = pipe.width * scaleX;
-        const topH = pipe.topHeight * scaleY;
-        const botY = pipe.bottomY * scaleY;
-        const groundY = GROUND_Y * scaleY;
-
-        // Top Pipe
-        ctx2d.fillRect(px, 0, pw, topH);
-        ctx2d.strokeRect(px, 0, pw, topH);
-
-        // Top Pipe Cap
-        ctx2d.fillRect(px - 4 * scaleX, topH - 20 * scaleY, pw + 8 * scaleX, 20 * scaleY);
-        ctx2d.strokeRect(px - 4 * scaleX, topH - 20 * scaleY, pw + 8 * scaleX, 20 * scaleY);
-
-        // Bottom Pipe
-        ctx2d.fillRect(px, botY, pw, groundY - botY);
-        ctx2d.strokeRect(px, botY, pw, groundY - botY);
-
-        // Bottom Pipe Cap
-        ctx2d.fillRect(px - 4 * scaleX, botY, pw + 8 * scaleX, 20 * scaleY);
-        ctx2d.strokeRect(px - 4 * scaleX, botY, pw + 8 * scaleX, 20 * scaleY);
-      }
-
-      // Render Ground
-      const groundY = GROUND_Y * scaleY;
-      ctx2d.fillStyle = "#ddd894"; // Sand ground
-      ctx2d.fillRect(0, groundY, w, h - groundY);
-      ctx2d.fillStyle = "#73bf2e"; // Grass top layer
-      ctx2d.fillRect(0, groundY, w, 15 * scaleY);
-      ctx2d.strokeStyle = "#538021";
-      ctx2d.lineWidth = 2 * scaleX;
-      ctx2d.strokeRect(0, groundY, w, 15 * scaleY);
-
-      // Render Birds
-      for (const id in currentState.birds) {
-        const currBird = currentState.birds[id];
-        const prevBird = prevState.birds[id] || currBird;
-
-        // Interpolate y position
-        const interpY = prevBird.y + (currBird.y - prevBird.y) * alpha;
-
-        const bx = currBird.x * scaleX;
-        const by = interpY * scaleY;
-        const radius = BIRD_RADIUS * scaleX;
-
-        ctx2d.save();
-        ctx2d.translate(bx, by);
-
-        // Bird body
-        ctx2d.beginPath();
-        ctx2d.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx2d.fillStyle = currBird.alive ? currBird.color : "#666666";
-        ctx2d.globalAlpha = currBird.alive ? 1.0 : 0.6;
-        ctx2d.fill();
-        ctx2d.strokeStyle = "#000000";
-        ctx2d.lineWidth = 2 * scaleX;
-        ctx2d.stroke();
-
-        // Eye
-        ctx2d.beginPath();
-        ctx2d.arc(radius * 0.4, -radius * 0.3, radius * 0.3, 0, Math.PI * 2);
-        ctx2d.fillStyle = "#ffffff";
-        ctx2d.fill();
-        ctx2d.beginPath();
-        ctx2d.arc(radius * 0.5, -radius * 0.3, radius * 0.12, 0, Math.PI * 2);
-        ctx2d.fillStyle = "#000000";
-        ctx2d.fill();
-
-        // Beak
-        ctx2d.beginPath();
-        ctx2d.moveTo(radius * 0.6, 0);
-        ctx2d.lineTo(radius * 1.3, radius * 0.2);
-        ctx2d.lineTo(radius * 0.6, radius * 0.4);
-        ctx2d.closePath();
-        ctx2d.fillStyle = "#f7a100";
-        ctx2d.fill();
-        ctx2d.stroke();
-
-        // Elimination indicator
-        if (!currBird.alive && currBird.place) {
-          ctx2d.fillStyle = "#ff4136";
-          ctx2d.font = `bold ${12 * scaleX}px sans-serif`;
-          ctx2d.textAlign = "center";
-          ctx2d.fillText(`💀 #${currBird.place}`, 0, -radius - 18 * scaleY);
-        }
-
-        // Player Name Tag
-        ctx2d.fillStyle = "#ffffff";
-        ctx2d.font = `bold ${13 * scaleX}px sans-serif`;
-        ctx2d.textAlign = "center";
-        ctx2d.shadowColor = "rgba(0,0,0,0.8)";
-        ctx2d.shadowBlur = 4;
-        ctx2d.fillText(currBird.name, 0, -radius - 4 * scaleY);
-        ctx2d.shadowBlur = 0;
-
-        ctx2d.restore();
-      }
-
-      // UI Overlay
-      if (currentState.phase === "waiting") {
-        ctx2d.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx2d.fillRect(0, 0, w, h);
-
-        ctx2d.fillStyle = "#ffffff";
-        ctx2d.font = `bold ${32 * scaleX}px sans-serif`;
-        ctx2d.textAlign = "center";
-        ctx2d.fillText("Flappy Royale 🐤", w / 2, h / 2 - 40 * scaleY);
-
-        ctx2d.font = `${18 * scaleX}px sans-serif`;
-        ctx2d.fillText("First player tap screen or click here to start round!", w / 2, h / 2 + 10 * scaleY);
-
-        ctx2d.font = `${14 * scaleX}px sans-serif`;
-        ctx2d.fillStyle = "#ffdc00";
-        ctx2d.fillText(`Connected Players: ${ctx.peers.size}`, w / 2, h / 2 + 50 * scaleY);
-      } else if (currentState.phase === "roundOver") {
-        ctx2d.fillStyle = "rgba(0, 0, 0, 0.6)";
-        ctx2d.fillRect(0, 0, w, h);
-
-        ctx2d.fillStyle = "#ffdc00";
-        ctx2d.font = `bold ${36 * scaleX}px sans-serif`;
-        ctx2d.textAlign = "center";
-        ctx2d.fillText("🏆 ROUND OVER! 🏆", w / 2, h / 2 - 60 * scaleY);
-
-        if (currentState.winner) {
-          ctx2d.fillStyle = "#ffffff";
-          ctx2d.font = `bold ${24 * scaleX}px sans-serif`;
-          ctx2d.fillText(`Winner: ${currentState.winner.name}!`, w / 2, h / 2 - 10 * scaleY);
-        } else {
-          ctx2d.fillStyle = "#ffffff";
-          ctx2d.font = `bold ${24 * scaleX}px sans-serif`;
-          ctx2d.fillText("No Winner!", w / 2, h / 2 - 10 * scaleY);
-        }
-
-        ctx2d.fillStyle = "#2ecc40";
-        ctx2d.font = `bold ${20 * scaleX}px sans-serif`;
-        ctx2d.fillText("First player tap screen or click here to Play Again!", w / 2, h / 2 + 50 * scaleY);
-      } else if (currentState.phase === "active") {
-        // HUD / Alive count
-        const aliveCount = Object.values(currentState.birds).filter((b) => b.alive).length;
-        ctx2d.fillStyle = "#ffffff";
-        ctx2d.font = `bold ${20 * scaleX}px sans-serif`;
-        ctx2d.textAlign = "left";
-        ctx2d.shadowColor = "rgba(0,0,0,0.8)";
-        ctx2d.shadowBlur = 4;
-        ctx2d.fillText(`🐤 Alive: ${aliveCount} / ${currentState.totalPlayersAtStart}`, 20 * scaleX, 40 * scaleY);
-        ctx2d.shadowBlur = 0;
-      }
+      app.render();
     },
 
     destroy: () => {
       loop.stop();
-      if (canvas) {
-        canvas.removeEventListener("click", handleCanvasClick);
+      canvas.removeEventListener("click", handleCanvasClick);
+      if (touchCanvas) {
+        touchCanvas.style.display = originalTouchCanvasDisplay;
       }
-      if (typeof window !== "undefined") {
-        window.removeEventListener("resize", resizeCanvas);
-      }
+      init.then(() => {
+        app?.destroy(true, { children: true, texture: true });
+        canvas.remove();
+      });
     },
   };
 }
