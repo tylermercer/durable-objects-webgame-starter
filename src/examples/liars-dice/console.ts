@@ -27,7 +27,6 @@ export interface ConsoleContext {
   peers: Map<string, ControllerPeer>;
 }
 
-const DEFAULT_TURN_TIME = 15; // 15 seconds turn timer
 const REVEAL_DURATION = 6; // 6 seconds reveal display
 
 export function createGame(ctx: ConsoleContext) {
@@ -39,7 +38,6 @@ export function createGame(ctx: ConsoleContext) {
   let turnOrder: string[] = []; // player IDs with diceCount > 0
   let turnIndex = 0;
   let currentBid: Bid | null = null;
-  let timerRemaining = DEFAULT_TURN_TIME;
   let revealTimer = 0;
   let lastChallengeResult: ChallengeResult | null = null;
   let winner: { id: string; name: string } | null = null;
@@ -149,7 +147,6 @@ export function createGame(ctx: ConsoleContext) {
 
     currentBid = null;
     phase = "bidding";
-    timerRemaining = DEFAULT_TURN_TIME;
 
     if (lastChallengeResult) {
       // Loser starts next round if still active, else next player
@@ -209,7 +206,6 @@ export function createGame(ctx: ConsoleContext) {
       turnPlayerId,
       turnPlayerName: turnPeer ? turnPeer.name : null,
       currentBid,
-      timerRemaining: Math.max(0, Math.ceil(timerRemaining)),
       totalDiceInPlay: totalDice,
       players,
       lastChallengeResult,
@@ -266,7 +262,6 @@ export function createGame(ctx: ConsoleContext) {
           bidderName: peer.name
         };
         turnIndex = (turnIndex + 1) % turnOrder.length;
-        timerRemaining = DEFAULT_TURN_TIME;
         broadcastState();
         persistState();
       }
@@ -367,28 +362,7 @@ export function createGame(ctx: ConsoleContext) {
           // Ready to start game
         }
       } else if (phase === "bidding") {
-        timerRemaining -= dt;
-        if (timerRemaining <= 0) {
-          // Timeout handling
-          const currentTurnId = turnOrder[turnIndex];
-          const currentTurnPeer = ctx.peers.get(currentTurnId);
-          if (currentBid) {
-            // Auto-challenge on timeout
-            executeChallenge(currentTurnId, currentTurnPeer ? currentTurnPeer.name : "Player");
-          } else {
-            // Auto-bid minimum if no bid yet
-            currentBid = {
-              count: 1,
-              face: 2,
-              bidderId: currentTurnId,
-              bidderName: currentTurnPeer ? currentTurnPeer.name : "Player"
-            };
-            turnIndex = (turnIndex + 1) % turnOrder.length;
-            timerRemaining = DEFAULT_TURN_TIME;
-            broadcastState();
-            persistState();
-          }
-        }
+        // Bidding phase - waiting for player input
       } else if (phase === "revealing") {
         revealTimer -= dt;
         if (revealTimer <= 0) {
@@ -449,9 +423,6 @@ export function createGame(ctx: ConsoleContext) {
               <div style="font-size:0.85rem; color:#aaa; text-transform:uppercase;">Turn</div>
               <div style="font-size:1.4rem; font-weight:bold; color:#7fdbff; margin:0.5rem 0;">
                 ${state.turnPlayerName || "—"}
-              </div>
-              <div style="font-size:1rem; font-weight:bold; color:#ff851b;">
-                ⏱️ ${state.timerRemaining}s
               </div>
             </div>
           </div>

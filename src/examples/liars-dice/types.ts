@@ -35,7 +35,6 @@ export interface PublicGameState {
   turnPlayerId: string | null;
   turnPlayerName: string | null;
   currentBid: Bid | null;
-  timerRemaining: number;
   totalDiceInPlay: number;
   players: PlayerPublicInfo[];
   lastChallengeResult: ChallengeResult | null;
