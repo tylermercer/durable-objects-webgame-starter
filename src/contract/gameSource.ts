@@ -13,8 +13,8 @@ export function buildJoinUrl(origin: string, code: string): string {
 }
 */
 
-import { EXAMPLES, DEFAULT_EXAMPLE } from "@examples/registry";
-import { getSelectedExampleId, exampleIdFromJoinUrl } from "@examples/switcherState";
+import { EXAMPLES, DEFAULT_EXAMPLE } from "../examples/registry";
+import { getSelectedExampleId, exampleIdFromJoinUrl } from "../examples/switcherState";
 
 export function loadConsoleGame() {
   const exampleId = getSelectedExampleId() ?? DEFAULT_EXAMPLE;
