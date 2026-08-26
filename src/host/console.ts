@@ -89,15 +89,7 @@ class ConsoleApp {
   activeGame: ConsoleGameInstance | null = null;
 
   constructor() {
-    const urlParams = new URLSearchParams(window.location.search);
-    let codeParam = urlParams.get("code");
-    if (!codeParam) {
-      codeParam = generateRoomCode();
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set("code", codeParam);
-      window.history.replaceState({}, "", newUrl.toString());
-    }
-    this.code = codeParam.toUpperCase();
+    this.code = generateRoomCode().toUpperCase();
   }
 
   async init() {
