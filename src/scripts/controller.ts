@@ -2,6 +2,7 @@ import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
 import { PeerConnection } from "./peer-connection";
 import { loadControllerGame } from "./gameSource";
+import type { ControllerGameInstance } from "./gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 
 export interface ControllerContext {
@@ -41,7 +42,7 @@ class ControllerApp {
   pc: PeerConnection | null = null;
   reconnectTimer: number | null = null;
   private reconnectAttempt = 0;
-  activeGame: unknown = null;
+  activeGame: ControllerGameInstance | null = null;
   chosenName: string = "";
 
   constructor() {
@@ -150,6 +151,9 @@ class ControllerApp {
   }
 
   async initiateWebRTC() {
+    this.activeGame?.destroy?.();
+    this.activeGame = null;
+
     if (this.pc) {
       this.pc.close();
     }
@@ -196,6 +200,8 @@ class ControllerApp {
   }
 
   handleConsoleGone() {
+    this.activeGame?.destroy?.();
+    this.activeGame = null;
     if (this.pc) {
       this.pc.close();
       this.pc = null;

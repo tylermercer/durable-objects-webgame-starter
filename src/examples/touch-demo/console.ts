@@ -1,4 +1,5 @@
 import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
+import type { ConsoleGameInstance } from "../../scripts/gameTypes";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../../lib/signaling-api";
 
@@ -17,7 +18,7 @@ export interface ConsoleContext {
   peers: Map<string, ControllerPeer>;
 }
 
-export function createGame(ctx: ConsoleContext) {
+export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const canvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
   const ctx2d = canvas?.getContext("2d") || null;
 
@@ -69,6 +70,11 @@ export function createGame(ctx: ConsoleContext) {
           ctx2d.textAlign = "center";
           ctx2d.fillText(controller.name, x, y - 25 * window.devicePixelRatio);
         }
+      }
+    },
+    destroy: () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", resizeCanvas);
       }
     }
   };
