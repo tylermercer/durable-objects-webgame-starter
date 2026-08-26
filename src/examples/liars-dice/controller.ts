@@ -118,7 +118,6 @@ export function createGame(ctx: ControllerContext) {
       if (isActuallyMyTurn) {
         html += `
           <div style="font-size:1.1rem; font-weight:bold; color:#2ecc40;">🔥 YOUR TURN!</div>
-          <div style="font-size:0.85rem; color:#aaa; margin-top:2px;">Timer: ${gameState.timerRemaining}s</div>
         `;
       } else {
         html += `
