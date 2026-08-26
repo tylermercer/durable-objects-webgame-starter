@@ -3,6 +3,7 @@ import type { FlappyControlMessage, RoundStateSnapshot } from "./types";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
+  isFirstPlayer?: () => boolean;
 }
 
 export function createGame(ctx: ControllerContext) {
@@ -21,6 +22,14 @@ export function createGame(ctx: ControllerContext) {
 
   function handleFlap() {
     if (!ctx.peerConnection) return;
+    const isFirst = ctx.isFirstPlayer ? ctx.isFirstPlayer() : false;
+    const phase = latestSnapshot?.phase || "waiting";
+
+    // Non-first players cannot start the game in lobby or results screen
+    if ((phase === "waiting" || phase === "roundOver") && !isFirst) {
+      return;
+    }
+
     // Send discrete flap message on both input (unreliable fast) and control (fallback)
     ctx.peerConnection.sendInput({ type: "flap" });
     ctx.peerConnection.sendControl({ type: "flap" });
@@ -37,8 +46,10 @@ export function createGame(ctx: ControllerContext) {
         latestSnapshot = fMsg.snapshot;
 
         // Check player status from snapshot
+        const rawName = document.getElementById("player-name")?.textContent || "";
+        const currentName = rawName.replace(/\s*\(Host\)$/, "");
         const me = latestSnapshot.birds.find(
-          (b) => b.name === (document.getElementById("player-name")?.textContent || "")
+          (b) => b.name === currentName || b.name === rawName
         );
         if (me) {
           if (!me.alive) {
@@ -59,30 +70,48 @@ export function createGame(ctx: ControllerContext) {
   function render() {
     if (!surface) return;
 
-    const currentName = document.getElementById("player-name")?.textContent || "";
-    const me = latestSnapshot?.birds.find((b) => b.name === currentName);
+    const rawName = document.getElementById("player-name")?.textContent || "";
+    const currentName = rawName.replace(/\s*\(Host\)$/, "");
+    const me = latestSnapshot?.birds.find((b) => b.name === currentName || b.name === rawName);
     const phase = latestSnapshot?.phase || "waiting";
     const aliveCount = latestSnapshot
       ? latestSnapshot.birds.filter((b) => b.alive).length
       : 0;
+
+    const isFirst = ctx.isFirstPlayer ? ctx.isFirstPlayer() : false;
+    const firstPlayerName = latestSnapshot?.firstPlayerId
+      ? latestSnapshot.birds.find(b => b.id === latestSnapshot.firstPlayerId)?.name || "first player"
+      : "first player";
 
     let buttonColor = "#0070f3"; // Blue default
     let statusText = "TAP TO FLAP! 🐤";
     let subText = "Keep tapping to stay airborne";
 
     if (phase === "waiting") {
-      buttonColor = "#2ecc40"; // Green
-      statusText = "START GAME 🚀";
-      subText = "Tap anywhere to launch round!";
-    } else if (phase === "roundOver") {
-      buttonColor = "#2ecc40"; // Green
-      statusText = "PLAY AGAIN 🔄";
-      if (latestSnapshot?.winner?.name === currentName) {
-        subText = "🏆 VICTORY ROYALE! You won!";
-      } else if (latestSnapshot?.winner) {
-        subText = `Winner: ${latestSnapshot.winner.name}`;
+      if (isFirst) {
+        buttonColor = "#2ecc40"; // Green
+        statusText = "START GAME 🚀";
+        subText = "Tap anywhere to launch round!";
       } else {
-        subText = "Round Over!";
+        buttonColor = "#333333";
+        statusText = "WAITING... ⏳";
+        subText = `Waiting for ${firstPlayerName} to start…`;
+      }
+    } else if (phase === "roundOver") {
+      if (isFirst) {
+        buttonColor = "#2ecc40"; // Green
+        statusText = "PLAY AGAIN 🔄";
+        if (latestSnapshot?.winner?.name === currentName || latestSnapshot?.winner?.name === rawName) {
+          subText = "🏆 VICTORY ROYALE! You won!";
+        } else if (latestSnapshot?.winner) {
+          subText = `Winner: ${latestSnapshot.winner.name}`;
+        } else {
+          subText = "Round Over!";
+        }
+      } else {
+        buttonColor = "#333333";
+        statusText = "ROUND OVER";
+        subText = `Waiting for ${firstPlayerName} to start next round…`;
       }
     } else if (isDead || (me && !me.alive)) {
       buttonColor = "#333333"; // Dark gray

@@ -40,6 +40,7 @@ export interface PublicGameState {
   players: PlayerPublicInfo[];
   lastChallengeResult: ChallengeResult | null;
   winner: { id: string; name: string } | null;
+  firstPlayerId?: string | null;
 }
 
 export interface PersistedGameState {
@@ -63,6 +64,10 @@ export type GameStateMessage = {
   state: PublicGameState;
 };
 
+export type RequestStartActionMessage = {
+  type: "requestStart";
+};
+
 export type BidActionMessage = {
   type: "bid";
   count: number;
@@ -80,6 +85,7 @@ export type NextRoundActionMessage = {
 export type LiarsDiceControlMessage =
   | PrivateDiceMessage
   | GameStateMessage
+  | RequestStartActionMessage
   | BidActionMessage
   | ChallengeActionMessage
   | NextRoundActionMessage;

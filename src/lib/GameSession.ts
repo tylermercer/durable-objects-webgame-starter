@@ -25,6 +25,7 @@ export class GameSession extends DurableObject {
   rejoinTokens = new Map<string, ControllerRecord>();
   consoleToken: string | null = null;
   private nextPlayerNumber = 1;
+  private currentFirstPlayerId: string | null = null;
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -53,6 +54,36 @@ export class GameSession extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  private getFirstPlayerId(): string | null {
+    for (const record of this.rejoinTokens.values()) {
+      if (record.disconnectedAt === null) return record.id;
+    }
+    return null;
+  }
+
+  private checkAndBroadcastFirstPlayer() {
+    const newFirstPlayerId = this.getFirstPlayerId();
+    if (newFirstPlayerId !== this.currentFirstPlayerId) {
+      this.currentFirstPlayerId = newFirstPlayerId;
+      this.forConsole(cb => {
+        try {
+          (cb as RpcStub<ConsoleCallbacks>).onFirstPlayerChanged(newFirstPlayerId);
+        } catch {
+          // Ignore RPC failure
+        }
+      });
+      for (const session of this.sessions.values()) {
+        if (session.role === "controller") {
+          try {
+            (session.callbacks as RpcStub<ControllerCallbacks>).onFirstPlayerChanged(newFirstPlayerId);
+          } catch {
+            // Ignore RPC failure
+          }
+        }
+      }
+    }
+  }
+
   async alarm(): Promise<void> {
     const now = Date.now();
     let earliestNextDisconnect: number | null = null;
@@ -72,6 +103,8 @@ export class GameSession extends DurableObject {
         }
       }
     }
+
+    this.checkAndBroadcastFirstPlayer();
 
     if (earliestNextDisconnect !== null && this.ctx?.storage?.setAlarm) {
       await this.ctx.storage.setAlarm(earliestNextDisconnect);
@@ -128,8 +161,11 @@ export class GameSession extends DurableObject {
           }
         }
 
+        self.currentFirstPlayerId = self.getFirstPlayerId();
+
         return {
           controllers: controllers.map(s => ({ id: s.id, name: s.name })),
+          firstPlayerId: self.currentFirstPlayerId,
           consoleToken: self.consoleToken
         };
       }
@@ -199,7 +235,12 @@ export class GameSession extends DurableObject {
           self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name));
         }
 
-        return { id, name, consoleConnected, rejoinToken: token };
+        const firstPlayerId = self.getFirstPlayerId();
+        const isFirstPlayer = (firstPlayerId === id);
+
+        self.checkAndBroadcastFirstPlayer();
+
+        return { id, name, consoleConnected, rejoinToken: token, isFirstPlayer };
       }
 
       sendSignal(signal: RTCSignal) {
@@ -232,6 +273,7 @@ export class GameSession extends DurableObject {
       } else {
         this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(session.id));
       }
+      this.checkAndBroadcastFirstPlayer();
     } else {
       for (const s of this.sessions.values()) {
         if (s.role === "controller") {

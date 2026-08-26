@@ -6,6 +6,7 @@ export interface ControllerPeer {
   id: string;
   name: string;
   color: string;
+  isFirstPlayer?: boolean;
   pc: PeerConnection | null;
   state: string;
   lastTouch?: TouchMessage;

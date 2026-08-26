@@ -24,6 +24,7 @@ export interface ControllerPeer {
   id: string;
   name: string;
   color: string;
+  isFirstPlayer?: boolean;
   pc: PeerConnection | null;
   state: string;
   lastTouch?: TouchMessage;
@@ -80,6 +81,18 @@ export function createGame(ctx: ConsoleContext) {
 
   const pendingFlaps = new Set<string>();
   const attachedListeners = new Set<string>();
+
+  function getFirstPlayerId(): string | null {
+    for (const peer of ctx.peers.values()) {
+      if (peer.isFirstPlayer && peer.state === "connected") {
+        return peer.id;
+      }
+    }
+    for (const peer of ctx.peers.values()) {
+      if (peer.state === "connected") return peer.id;
+    }
+    return null;
+  }
 
   // Load persisted game state if available
   if (ctx.session) {
@@ -171,6 +184,7 @@ export function createGame(ctx: ConsoleContext) {
         width: p.width,
       })),
       winner: currentState.winner,
+      firstPlayerId: getFirstPlayerId(),
     };
   }
 
@@ -190,8 +204,10 @@ export function createGame(ctx: ConsoleContext) {
     if (currentState.phase === "active") {
       pendingFlaps.add(fromId);
     } else if (currentState.phase === "waiting" || currentState.phase === "roundOver") {
-      // Flapping in lobby / results screen can trigger start game
-      startNewRound();
+      const firstPlayerId = getFirstPlayerId();
+      if (fromId === firstPlayerId) {
+        startNewRound();
+      }
     }
   }
 
@@ -208,9 +224,12 @@ export function createGame(ctx: ConsoleContext) {
           });
         }
 
-        // If player joined mid-game and has no bird yet, register as spectator/bird if waiting
+        // If player joined mid-game and has no bird yet in waiting phase, start round only if first player
         if (currentState.phase === "waiting" && !currentState.birds[id]) {
-          startNewRound();
+          const firstPlayerId = getFirstPlayerId();
+          if (id === firstPlayerId) {
+            startNewRound();
+          }
         }
       }
     }
@@ -222,9 +241,6 @@ export function createGame(ctx: ConsoleContext) {
       syncPeers();
 
       if (currentState.phase === "waiting") {
-        if (ctx.peers.size > 0 && Object.keys(currentState.birds).length === 0) {
-          startNewRound();
-        }
         return;
       }
 
@@ -410,7 +426,7 @@ export function createGame(ctx: ConsoleContext) {
         ctx2d.fillText("Flappy Royale 🐤", w / 2, h / 2 - 40 * scaleY);
 
         ctx2d.font = `${18 * scaleX}px sans-serif`;
-        ctx2d.fillText("Tap phone screen or click here to start round!", w / 2, h / 2 + 10 * scaleY);
+        ctx2d.fillText("First player tap screen or click here to start round!", w / 2, h / 2 + 10 * scaleY);
 
         ctx2d.font = `${14 * scaleX}px sans-serif`;
         ctx2d.fillStyle = "#ffdc00";
@@ -436,7 +452,7 @@ export function createGame(ctx: ConsoleContext) {
 
         ctx2d.fillStyle = "#2ecc40";
         ctx2d.font = `bold ${20 * scaleX}px sans-serif`;
-        ctx2d.fillText("Tap phone screen or click here to Play Again!", w / 2, h / 2 + 50 * scaleY);
+        ctx2d.fillText("First player tap screen or click here to Play Again!", w / 2, h / 2 + 50 * scaleY);
       } else if (currentState.phase === "active") {
         // HUD / Alive count
         const aliveCount = Object.values(currentState.birds).filter((b) => b.alive).length;
