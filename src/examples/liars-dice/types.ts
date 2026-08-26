@@ -14,6 +14,7 @@ export interface PlayerPublicInfo {
   diceCount: number;
   isTurn: boolean;
   connected: boolean;
+  dice?: number[];
 }
 
 export interface ChallengeResult {
