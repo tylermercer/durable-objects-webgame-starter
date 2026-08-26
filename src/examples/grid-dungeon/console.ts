@@ -1,6 +1,7 @@
 import type { PeerConnection } from "@transport/peer-connection";
 import type { ConsoleGameInstance } from "@contract/gameTypes";
 import type { RpcStub } from "capnweb";
+import type { PlayerConnectionStatus } from "@host/console";
 import type { ConsoleApi } from "../../lib/signaling-api";
 import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
@@ -25,6 +26,7 @@ export interface ControllerPeer {
   isFirstPlayer?: boolean;
   pc: PeerConnection | null;
   state: string;
+  status?: PlayerConnectionStatus;
 }
 
 export interface ConsoleContext {
@@ -116,7 +118,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function broadcastSnapshot() {
     const snapshot = getSnapshot();
     for (const peer of ctx.peers.values()) {
-      if (peer.pc) {
+      const isConnected = peer.status ? peer.status === "live" : (peer.state === "live" || peer.state === "connected");
+      if (peer.pc && isConnected) {
         peer.pc.sendControlCoalesced("roomState", {
           type: "roomState",
           snapshot,
@@ -126,10 +129,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeers() {
-    const activePeers: Array<{ id: string; name: string; color: string }> = [];
+    const activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus; state?: string }> = [];
     for (const [id, peer] of ctx.peers) {
-      if (peer.state === "connected") {
-        activePeers.push({ id, name: peer.name, color: peer.color });
+      const status = peer.status ?? peer.state;
+      if (status === "live" || status === "reconnecting" || status === "connected") {
+        activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status, state: peer.state });
       }
       if (peer.pc && !attachedListeners.has(id)) {
         attachedListeners.add(id);
