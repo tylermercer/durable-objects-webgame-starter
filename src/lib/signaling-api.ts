@@ -16,7 +16,12 @@ export interface ControllerCallbacks extends RpcTarget {
 
 // Exposed by the DO when role=console.
 export interface ConsoleApi extends RpcTarget {
-  join(callbacks: ConsoleCallbacks): { controllers: { id: string; name: string }[] } | Promise<{ controllers: { id: string; name: string }[] }>;
+  join(
+    callbacks: ConsoleCallbacks,
+    consoleToken?: string
+  ):
+    | { controllers: { id: string; name: string }[]; consoleToken: string }
+    | Promise<{ controllers: { id: string; name: string }[]; consoleToken: string }>;
   sendSignal(to: string, signal: RTCSignal): void;
   saveGameState(state: unknown): void;
   loadGameState(): unknown | Promise<unknown>;

@@ -183,6 +183,10 @@ class ConsoleApp {
     }
   }
 
+  private getConsoleToken(): string | undefined {
+    return localStorage.getItem(`console_token_${this.code}`) || undefined;
+  }
+
   connectSignaling() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/signaling?code=${this.code}&role=console`;
@@ -192,10 +196,16 @@ class ConsoleApp {
       this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ConsoleCallbacksHandler(this);
-      this.api.join(callbacks).then(res => {
-        if (res && res.controllers) {
-          for (const c of res.controllers) {
-            this.addController(c.id, c.name);
+      const token = this.getConsoleToken();
+      this.api.join(callbacks, token).then(res => {
+        if (res) {
+          if (res.consoleToken) {
+            localStorage.setItem(`console_token_${this.code}`, res.consoleToken);
+          }
+          if (res.controllers) {
+            for (const c of res.controllers) {
+              this.addController(c.id, c.name);
+            }
           }
         }
       }).catch(err => {
