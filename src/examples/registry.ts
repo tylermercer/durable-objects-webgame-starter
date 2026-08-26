@@ -14,6 +14,11 @@ export const EXAMPLES = {
     console: () => import("@examples/flappy-royale/console"),
     controller: () => import("@examples/flappy-royale/controller"),
   },
+  "grid-dungeon": {
+    label: "Grid Dungeon",
+    console: () => import("@examples/grid-dungeon/console"),
+    controller: () => import("@examples/grid-dungeon/controller"),
+  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;
