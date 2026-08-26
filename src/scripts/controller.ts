@@ -2,7 +2,7 @@ import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
 import { PeerConnection } from "./peer-connection";
 import { loadControllerGame } from "./gameSource";
-import { getOrCreateRejoinToken, persistRejoinToken } from "../utils/deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
@@ -42,6 +42,7 @@ class ControllerApp {
   reconnectTimer: number | null = null;
   private reconnectAttempt = 0;
   activeGame: unknown = null;
+  chosenName: string = "";
 
   constructor() {
     const params = new URLSearchParams(window.location.search);
@@ -49,6 +50,42 @@ class ControllerApp {
   }
 
   async init() {
+    const savedName = getSavedName();
+    const nameScreen = document.getElementById("name-screen");
+    const controllerMain = document.getElementById("controller-main");
+    const nameInput = document.getElementById("player-name-input") as HTMLInputElement;
+    const nameForm = document.getElementById("name-form") as HTMLFormElement;
+
+    if (nameInput && savedName) {
+      nameInput.value = savedName;
+    }
+
+    if (savedName && sanitizeName(savedName)) {
+      this.chosenName = savedName;
+      if (nameScreen) nameScreen.classList.add("u-hidden");
+      if (controllerMain) controllerMain.classList.remove("u-hidden");
+      this.startConnection();
+    } else if (nameForm && nameScreen && controllerMain) {
+      nameScreen.classList.remove("u-hidden");
+      controllerMain.classList.add("u-hidden");
+      nameForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const raw = nameInput?.value || "";
+        const clean = sanitizeName(raw);
+        if (clean) {
+          saveName(clean);
+          this.chosenName = clean;
+        }
+        nameScreen.classList.add("u-hidden");
+        controllerMain.classList.remove("u-hidden");
+        this.startConnection();
+      });
+    } else {
+      this.startConnection();
+    }
+  }
+
+  private startConnection() {
     this.updateStatus("Connecting to signaling server...");
     this.connectSignaling();
   }
@@ -75,7 +112,7 @@ class ControllerApp {
       const callbacks = new ControllerCallbacksHandler(this);
       const token = getOrCreateRejoinToken(this.code);
 
-      this.api.join(callbacks, token).then(res => {
+      this.api.join(callbacks, token, this.chosenName || undefined).then(res => {
         this.reconnectAttempt = 0;
         this.id = res.id;
         this.name = res.name;

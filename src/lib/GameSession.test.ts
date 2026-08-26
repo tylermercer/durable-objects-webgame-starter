@@ -90,6 +90,7 @@ describe("GameSession Durable Object", () => {
       onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -138,6 +139,7 @@ describe("GameSession Durable Object", () => {
       onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -204,6 +206,7 @@ describe("GameSession Durable Object", () => {
       onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 

@@ -35,3 +35,27 @@ export function persistRejoinToken(token: string, roomCode?: string): void {
   const sessionStore = ((globalThis as any).__sessionRejoinTokens ??= {});
   sessionStore[key] = token;
 }
+
+const NAME_KEY = "playerName";
+
+export function getSavedName(): string {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveName(name: string): void {
+  try {
+    localStorage.setItem(NAME_KEY, name);
+  } catch {
+    // best-effort; a fresh prompt next time is an acceptable fallback
+  }
+}
+
+export function sanitizeName(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().slice(0, 20);
+  return trimmed.length > 0 ? trimmed : null;
+}

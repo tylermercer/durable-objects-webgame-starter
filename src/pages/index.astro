@@ -11,13 +11,33 @@ const isController = Boolean(code);
 <Layout>
   {isController ? (
     <main class="controller-shell">
-      <header id="controller-header" class="controller-header u-guttered-md">
-        <h1 id="player-name" class="u-step-2">Controller</h1>
-        <p id="controller-status" class="u-step--1">Connecting...</p>
-      </header>
-      <div id="touch-surface" class="touch-surface">
-        <div class="touch-instructions u-step-0 u-color-muted">
-          Touch and drag anywhere on screen
+      <div id="name-screen" class="name-screen u-guttered-md u-hidden">
+        <div class="name-card l-box l-stack l-space-s">
+          <h1 class="u-step-2">Enter Your Name</h1>
+          <p class="u-step--1 u-color-muted">Choose a display name before joining the game.</p>
+          <form id="name-form" class="l-stack l-space-xs">
+            <label for="player-name-input" class="u-step--1 u-bold">Player Name</label>
+            <input
+              type="text"
+              id="player-name-input"
+              class="player-name-input"
+              placeholder="e.g. Alex"
+              maxlength="20"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn-join-game">Join Game</button>
+          </form>
+        </div>
+      </div>
+      <div id="controller-main" class="controller-main-container">
+        <header id="controller-header" class="controller-header u-guttered-md">
+          <h1 id="player-name" class="u-step-2">Controller</h1>
+          <p id="controller-status" class="u-step--1">Connecting...</p>
+        </header>
+        <div id="touch-surface" class="touch-surface">
+          <div class="touch-instructions u-step-0 u-color-muted">
+            Touch and drag anywhere on screen
+          </div>
         </div>
       </div>
       <script src="../scripts/controller.ts"></script>
@@ -275,6 +295,15 @@ const isController = Boolean(code);
     width: 100%;
   }
 
+  .player-name-input {
+    font-size: 1.25rem;
+    padding: 0.75rem;
+    text-align: center;
+    border: 1px solid var(--gray-6, #ccc);
+    border-radius: 6px;
+    width: 100%;
+  }
+
   .btn-join-game {
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
@@ -298,6 +327,28 @@ const isController = Boolean(code);
     overflow: hidden;
     touch-action: none;
     user-select: none;
+  }
+
+  .name-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 1rem;
+  }
+
+  .name-card {
+    max-width: 400px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .controller-main-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100%;
   }
 
   .controller-header {

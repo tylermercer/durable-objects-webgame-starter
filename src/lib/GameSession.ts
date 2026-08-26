@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { RpcTarget, newWebSocketRpcSession, type RpcStub } from "capnweb";
 import type { ConsoleApi, ConsoleCallbacks, ControllerApi, ControllerCallbacks, RTCSignal } from "./signaling-api";
+import { sanitizeName } from "../utils/deviceIdentity";
 
 type Role = "console" | "controller";
 
@@ -237,26 +238,32 @@ export class GameSession extends DurableObject {
   private makeControllerApi(ws: WebSocket): ControllerApi {
     const self = this;
     return new (class extends RpcTarget implements ControllerApi {
-      async join(callbacks: ControllerCallbacks, rejoinToken?: string) {
+      async join(callbacks: ControllerCallbacks, rejoinToken?: string, name?: string) {
+        const cleanName = sanitizeName(name);
         let id: string;
-        let name: string;
+        let name_: string;
         let token: string;
         let isRejoin = false;
+        let nameChangedOnRejoin = false;
 
         if (rejoinToken && self.rejoinTokens.has(rejoinToken)) {
           const record = self.rejoinTokens.get(rejoinToken)!;
           id = record.id;
-          name = record.name;
+          if (cleanName && cleanName !== record.name) {
+            nameChangedOnRejoin = true;
+          }
+          name_ = cleanName ?? record.name;
+          record.name = name_;
           token = rejoinToken;
           record.disconnectedAt = null;
           isRejoin = true;
         } else {
           id = crypto.randomUUID();
-          name = self.nextPlayerName();
+          name_ = cleanName ?? self.nextPlayerName();
           token = rejoinToken || crypto.randomUUID();
           self.rejoinTokens.set(token, {
             id,
-            name,
+            name: name_,
             disconnectedAt: null
           });
         }
@@ -268,7 +275,7 @@ export class GameSession extends DurableObject {
         self.sessions.set(ws, {
           id,
           role: "controller",
-          name,
+          name: name_,
           callbacks: (callbacks as unknown as RpcStub<ControllerCallbacks>).dup(),
           rejoinToken: token
         });
@@ -278,11 +285,14 @@ export class GameSession extends DurableObject {
 
         // Announce controller join to console if not a seamless rejoin while connected
         if (!isRejoin) {
-          self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name));
+          self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name_));
         } else {
           self.forConsole(cb => {
             try {
               (cb as RpcStub<ConsoleCallbacks>).onControllerRejoined(id);
+              if (nameChangedOnRejoin) {
+                (cb as RpcStub<ConsoleCallbacks>).onControllerRenamed(id, name_);
+              }
             } catch {
               // Ignore RPC failure
             }
@@ -294,7 +304,7 @@ export class GameSession extends DurableObject {
 
         self.checkAndBroadcastFirstPlayer();
 
-        return { id, name, consoleConnected, rejoinToken: token, isFirstPlayer };
+        return { id, name: name_, consoleConnected, rejoinToken: token, isFirstPlayer };
       }
 
       sendSignal(signal: RTCSignal) {

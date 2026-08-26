@@ -9,6 +9,7 @@ export interface ConsoleCallbacks extends RpcTarget {
   onControllerRejoined(id: string): void;
   onSignal(from: string, signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
+  onControllerRenamed(id: string, name: string): void;
 }
 
 export interface ControllerCallbacks extends RpcTarget {
@@ -36,7 +37,8 @@ export interface ConsoleApi extends RpcTarget {
 export interface ControllerApi extends RpcTarget {
   join(
     callbacks: ControllerCallbacks,
-    rejoinToken?: string
+    rejoinToken?: string,
+    name?: string
   ):
     | { id: string; name: string; consoleConnected: boolean; rejoinToken: string; isFirstPlayer: boolean }
     | Promise<{ id: string; name: string; consoleConnected: boolean; rejoinToken: string; isFirstPlayer: boolean }>;
