@@ -63,8 +63,17 @@ export interface PeerConnectionCallbacks {
   onControlMessage?: (msg: ControlMessage) => void;
 }
 
-const STUN_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    ...(import.meta.env.PUBLIC_TURN_URLS
+      ? [{
+          urls: import.meta.env.PUBLIC_TURN_URLS.split(","),
+          username: import.meta.env.PUBLIC_TURN_USERNAME,
+          credential: import.meta.env.PUBLIC_TURN_CREDENTIAL,
+        }]
+      : [])
+  ]
 };
 
 export class PeerConnection {
@@ -79,7 +88,7 @@ export class PeerConnection {
     public isInitiator: boolean,
     private callbacks: PeerConnectionCallbacks
   ) {
-    this.pc = new RTCPeerConnection(STUN_CONFIG);
+    this.pc = new RTCPeerConnection(ICE_CONFIG);
     this.coalescingControlSender = new CoalescingSender(() => this.controlChannel);
 
     this.pc.onicecandidate = event => {
@@ -89,7 +98,11 @@ export class PeerConnection {
     };
 
     this.pc.onconnectionstatechange = () => {
-      this.callbacks.onStateChange?.(this.pc.connectionState);
+      const state = this.pc.connectionState;
+      this.callbacks.onStateChange?.(state);
+      if (state === "failed" && this.isInitiator) {
+        this.restartIce().catch(() => {});
+      }
     };
 
     if (this.isInitiator) {
@@ -151,6 +164,27 @@ export class PeerConnection {
         // Ignore unparseable message
       }
     };
+  }
+
+  async restartIce() {
+    if (!this.isInitiator) return;
+    const offer = await this.pc.createOffer({ iceRestart: true });
+    await this.pc.setLocalDescription(offer);
+    this.callbacks.onSignal({ sdp: offer });
+  }
+
+  startHeartbeat(intervalMs = 3000, onRtt?: (ms: number) => void) {
+    const timer = setInterval(() => {
+      const t = performance.now();
+      this.sendControl({ type: "ping", t });
+      const off = this.addControlListener(msg => {
+        if (msg.type === "pong" && (msg as PongMessage).t === t) {
+          onRtt?.(performance.now() - t);
+          off();
+        }
+      });
+    }, intervalMs);
+    return () => clearInterval(timer);
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {

@@ -38,7 +38,7 @@ The switcher is the default experience out of the box with no setup needed.
 
 | Piece | File(s) | What it does |
 |---|---|---|
-| Signaling Durable Object | `src/lib/GameSession.ts`, `src/lib/signaling-api.ts` | One DO instance per room code. Relays WebRTC offer/answer/ICE between a console and its controllers over a [capnweb](https://github.com/cloudflare/capnweb) RPC session — no hand-rolled message parsing. |
+| Signaling Durable Object | `src/lib/GameSession.ts`, `src/lib/signaling-api.ts` | One DO instance per room code. Relays WebRTC offer/answer/ICE between a console and its controllers over a [capnweb](https://github.com/cloudflare/capnweb) RPC session — no hand-rolled message parsing. Persists rejoin tokens and player numbers across DO cold-starts. |
 | Room codes & QR join | `src/utils/generateRoomCode.ts`, console-side QR rendering | Console mints a short code client-side; the QR links to `/?code=<CODE>&game=<GAME>` — no in-app scanning needed. |
 | WebRTC data channels | `src/scripts/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
 | Game source seam | `src/scripts/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
@@ -78,6 +78,14 @@ This replaces the demo's `startAnimationLoop`, which just redraws every frame.
 ### Player identity across reconnects
 
 By default, a controller refresh looks like a brand-new player joining — fine for the stateless demo, not fine for a game with per-player HP/position/inventory. `join()` on the signaling API accepts an optional `rejoinToken` (generate one with `crypto.randomUUID()`, persist it in `localStorage`); the DO reuses the player's existing `id`/`name` if the token matches a recent session, and holds their slot open for a grace period after a disconnect instead of immediately dropping them. Use this for any game where a player's state needs to survive a dropped connection or locked phone (see `src/examples/liars-dice/` for a complete example).
+
+### TURN Relay Configuration (Optional)
+
+WebRTC STUN server is used by default for P2P connection establishment. In environments with restrictive NATs or firewalls (e.g., venue Wi-Fi), a TURN relay server is recommended. The template supports optional TURN server configuration via environment variables:
+
+- `PUBLIC_TURN_URLS`: Comma-separated list of TURN server URLs (e.g., `turn:turn.example.com:3478`).
+- `PUBLIC_TURN_USERNAME`: TURN server username.
+- `PUBLIC_TURN_CREDENTIAL`: TURN server password/credential.
 
 ### Sending frequently-changing state reliably
 

@@ -111,7 +111,7 @@ export function createGame(ctx: ControllerContext) {
 
     const connectedPlayersCount = gameState.players.filter(p => p.connected).length;
     const firstPlayerName = gameState.firstPlayerId
-      ? gameState.players.find(p => p.id === gameState.firstPlayerId)?.name || "host"
+      ? (gameState.players.find(p => p.id === gameState?.firstPlayerId)?.name || "host")
       : "host";
 
     let html = `
