@@ -42,10 +42,11 @@ class ControllerApp {
   }
 
   private getRejoinToken(): string {
-    let token = localStorage.getItem("rejoinToken");
+    const key = `rejoin_token_${this.code}`;
+    let token = localStorage.getItem(key);
     if (!token) {
       token = crypto.randomUUID();
-      localStorage.setItem("rejoinToken", token);
+      localStorage.setItem(key, token);
     }
     return token;
   }
@@ -71,7 +72,7 @@ class ControllerApp {
         this.id = res.id;
         this.name = res.name;
         if (res.rejoinToken) {
-          localStorage.setItem("rejoinToken", res.rejoinToken);
+          localStorage.setItem(`rejoin_token_${this.code}`, res.rejoinToken);
         }
         this.updatePlayerInfo(this.name, this.color);
 

@@ -23,6 +23,7 @@ const DISCONNECT_GRACE_PERIOD_MS = 45000;
 export class GameSession extends DurableObject {
   sessions = new Map<WebSocket, Session>();
   rejoinTokens = new Map<string, ControllerRecord>();
+  consoleToken: string | null = null;
   private nextPlayerNumber = 1;
 
   async fetch(request: Request): Promise<Response> {
@@ -44,16 +45,6 @@ export class GameSession extends DurableObject {
     server.accept();
 
     if (role === "console") {
-      for (const [ws, s] of this.sessions) {
-        if (s.role === "console") {
-          try {
-            ws.close(4000, "replaced");
-          } catch {
-            // Ignore if already closed
-          }
-          this.sessions.delete(ws);
-        }
-      }
       newWebSocketRpcSession(server, this.makeConsoleApi(server));
     } else {
       newWebSocketRpcSession(server, this.makeControllerApi(server));
@@ -90,7 +81,33 @@ export class GameSession extends DurableObject {
   private makeConsoleApi(ws: WebSocket): ConsoleApi {
     const self = this;
     return new (class extends RpcTarget implements ConsoleApi {
-      join(callbacks: ConsoleCallbacks) {
+      async join(callbacks: ConsoleCallbacks, consoleToken?: string) {
+        if (!self.consoleToken && self.ctx?.storage?.get) {
+          self.consoleToken = (await self.ctx.storage.get<string>("consoleToken")) ?? null;
+        }
+
+        if (self.consoleToken && consoleToken !== self.consoleToken) {
+          throw new Error("Invalid console token");
+        }
+
+        if (!self.consoleToken) {
+          self.consoleToken = consoleToken || crypto.randomUUID();
+          if (self.ctx?.storage?.put) {
+            await self.ctx.storage.put("consoleToken", self.consoleToken);
+          }
+        }
+
+        for (const [otherWs, s] of self.sessions) {
+          if (s.role === "console") {
+            try {
+              otherWs.close(4000, "replaced");
+            } catch {
+              // Ignore if already closed
+            }
+            self.sessions.delete(otherWs);
+          }
+        }
+
         const controllers = [...self.sessions.values()].filter(s => s.role === "controller");
         self.sessions.set(ws, {
           id: "console",
@@ -112,7 +129,8 @@ export class GameSession extends DurableObject {
         }
 
         return {
-          controllers: controllers.map(s => ({ id: s.id, name: s.name }))
+          controllers: controllers.map(s => ({ id: s.id, name: s.name })),
+          consoleToken: self.consoleToken
         };
       }
 

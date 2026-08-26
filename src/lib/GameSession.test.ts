@@ -71,6 +71,45 @@ describe("GameSession Durable Object", () => {
     expect(loaded).toEqual({ score: 100, seed: 12345 });
   });
 
+  it("persists, returns, and validates console token", async () => {
+    const storageMap = new Map<string, any>();
+    const ctx = {
+      storage: {
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const consoleCallbacks = {
+      dup: () => consoleCallbacks,
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onSignal: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs1 = createMockWebSocket();
+    const consoleApi1 = (session as any).makeConsoleApi(consoleWs1);
+    const joinRes1 = await consoleApi1.join(consoleCallbacks);
+
+    expect(joinRes1.consoleToken).toBeDefined();
+    expect(ctx.storage.put).toHaveBeenCalledWith("consoleToken", joinRes1.consoleToken);
+
+    // Rejoin with correct token
+    const consoleWs2 = createMockWebSocket();
+    const consoleApi2 = (session as any).makeConsoleApi(consoleWs2);
+    const joinRes2 = await consoleApi2.join(consoleCallbacks, joinRes1.consoleToken);
+
+    expect(joinRes2.consoleToken).toBe(joinRes1.consoleToken);
+
+    // Rejoin with invalid token should throw error
+    const consoleWs3 = createMockWebSocket();
+    const consoleApi3 = (session as any).makeConsoleApi(consoleWs3);
+    await expect(consoleApi3.join(consoleCallbacks, "invalid-token")).rejects.toThrow("Invalid console token");
+  });
+
   it("handles rejoin tokens and disconnect grace period alarm", async () => {
     const ctx = {
       storage: {
