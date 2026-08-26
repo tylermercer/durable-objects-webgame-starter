@@ -334,19 +334,23 @@ const isController = Boolean(code);
     color: #333;
   }
 
-  :global(.status-connected) {
+  :global(.status-connected),
+  :global(.status-live) {
     background: #2ecc40;
     color: white;
   }
 
   :global(.status-connecting),
-  :global(.status-negotiating) {
+  :global(.status-negotiating),
+  :global(.status-reconnecting),
+  :global(.status-grace-period) {
     background: #ff851b;
     color: white;
   }
 
   :global(.status-disconnected),
-  :global(.status-failed) {
+  :global(.status-failed),
+  :global(.status-gone) {
     background: #ff4136;
     color: white;
   }

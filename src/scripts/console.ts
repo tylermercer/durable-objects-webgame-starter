@@ -11,6 +11,12 @@ const PLAYER_COLORS = [
   "#B10DC9", "#FF851B", "#7FDBFF", "#F012BE"
 ];
 
+export type PlayerConnectionStatus =
+  | "live"          // signaling connected AND WebRTC data channel open
+  | "reconnecting"  // signaling connected, WebRTC renegotiating (post-restartIce)
+  | "grace-period"  // signaling dropped, within the DO's grace window
+  | "gone";         // grace period expired, player purged
+
 export interface ControllerState {
   id: string;
   name: string;
@@ -18,7 +24,22 @@ export interface ControllerState {
   isFirstPlayer: boolean;
   pc: PeerConnection | null;
   state: string;
+  status: PlayerConnectionStatus;
+  signalingConnected: boolean;
   lastTouch?: TouchMessage;
+}
+
+export function computePlayerStatus(
+  signalingConnected: boolean,
+  webrtcState: RTCPeerConnectionState | null
+): PlayerConnectionStatus {
+  if (!signalingConnected) {
+    return "grace-period";
+  }
+  if (webrtcState === "connected") {
+    return "live";
+  }
+  return "reconnecting";
 }
 
 class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
@@ -32,6 +53,14 @@ class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
 
   onControllerLeft(id: string) {
     this.app.removeController(id);
+  }
+
+  onControllerDisconnected(id: string) {
+    this.app.handleControllerDisconnected(id);
+  }
+
+  onControllerRejoined(id: string) {
+    this.app.handleControllerRejoined(id);
   }
 
   onSignal(from: string, signal: RTCSignal) {
@@ -49,6 +78,7 @@ class ConsoleApp {
   firstPlayerId: string | null = null;
   api: RpcStub<ConsoleApi> | null = null;
   reconnectTimer: number | null = null;
+  private reconnectAttempt = 0;
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: { tick?: (dt: number) => void; render?: (alpha: number) => void } | null = null;
@@ -215,6 +245,7 @@ class ConsoleApp {
       const callbacks = new ConsoleCallbacksHandler(this);
       const token = this.getConsoleToken();
       this.api.join(callbacks, token).then(res => {
+        this.reconnectAttempt = 0;
         if (res) {
           if (res.consoleToken) {
             localStorage.setItem(`console_token_${this.code}`, res.consoleToken);
@@ -240,10 +271,13 @@ class ConsoleApp {
 
   scheduleReconnect() {
     if (this.reconnectTimer) return;
+    const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
+    const jitter = Math.random() * base * 0.3;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
+      this.reconnectAttempt++;
       this.connectSignaling();
-    }, 3000);
+    }, base + jitter);
   }
 
   addController(id: string, name: string) {
@@ -259,12 +293,37 @@ class ConsoleApp {
       color,
       isFirstPlayer,
       pc: null,
-      state: "connecting"
+      state: "reconnecting",
+      status: "reconnecting",
+      signalingConnected: true
     };
 
     this.controllers.set(id, controller);
-    this.updateControllerUI();
+    this.updateControllerStatus(controller);
     this.updateDemoViewVisibility();
+  }
+
+  handleControllerDisconnected(id: string) {
+    const controller = this.controllers.get(id);
+    if (controller) {
+      controller.signalingConnected = false;
+      this.updateControllerStatus(controller);
+    }
+  }
+
+  handleControllerRejoined(id: string) {
+    const controller = this.controllers.get(id);
+    if (controller) {
+      controller.signalingConnected = true;
+      this.updateControllerStatus(controller);
+    }
+  }
+
+  updateControllerStatus(controller: ControllerState) {
+    const rtcState = controller.pc?.pc.connectionState ?? null;
+    controller.status = computePlayerStatus(controller.signalingConnected, rtcState);
+    controller.state = controller.status;
+    this.updateControllerUI();
   }
 
   removeController(id: string) {
@@ -290,7 +349,7 @@ class ConsoleApp {
           this.api?.sendSignal(from, sig);
         },
         onStateChange: state => {
-          controller!.state = state;
+          this.updateControllerStatus(controller!);
           if (state === "connected") {
             controller!.pc?.sendControl({
               type: "identity",
@@ -298,7 +357,6 @@ class ConsoleApp {
               color: controller!.color
             });
           }
-          this.updateControllerUI();
         },
         onInputMessage: msg => {
           controller!.lastTouch = msg;
@@ -351,8 +409,8 @@ class ConsoleApp {
       }
 
       const badge = document.createElement("span");
-      badge.className = `status-badge status-${controller.state}`;
-      badge.textContent = controller.state;
+      badge.className = `status-badge status-${controller.status}`;
+      badge.textContent = controller.status;
 
       row.appendChild(badge);
       listEl.appendChild(row);

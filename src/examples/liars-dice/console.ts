@@ -1,6 +1,7 @@
 import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../../lib/signaling-api";
+import type { PlayerConnectionStatus } from "../../scripts/console";
 import { createRng } from "../../utils/rng";
 import { isValidBid, resolveChallenge } from "./rules";
 import type {
@@ -20,6 +21,7 @@ export interface ControllerPeer {
   isFirstPlayer?: boolean;
   pc: PeerConnection | null;
   state: string;
+  status?: PlayerConnectionStatus;
   lastTouch?: TouchMessage;
 }
 
@@ -49,13 +51,13 @@ export function createGame(ctx: ConsoleContext) {
   // Helper to find the current first connected player ID
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
-      if (peer.isFirstPlayer && peer.state === "connected") {
+      if (peer.isFirstPlayer && (peer.status === "live" || peer.state === "connected")) {
         return peer.id;
       }
     }
     // Fallback: earliest connected peer in Map iteration order
     for (const peer of ctx.peers.values()) {
-      if (peer.state === "connected") return peer.id;
+      if (peer.status === "live" || peer.state === "connected") return peer.id;
     }
     return null;
   }
@@ -205,13 +207,14 @@ export function createGame(ctx: ConsoleContext) {
 
     const players: PlayerPublicInfo[] = Array.from(ctx.peers.values()).map(peer => {
       const diceCount = playerDiceCounts.get(peer.id) ?? 5;
+      const isConnected = peer.status ? (peer.status === "live") : (peer.state === "connected");
       return {
         id: peer.id,
         name: peer.name,
         color: peer.color,
         diceCount,
         isTurn: peer.id === turnPlayerId,
-        connected: peer.state === "connected"
+        connected: isConnected
       };
     });
 
@@ -348,7 +351,7 @@ export function createGame(ctx: ConsoleContext) {
     // Remove listeners for peers that no longer exist or whose connection state was reset
     for (const id of attachedListeners) {
       const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || peer.state !== "connected") {
+      if (!peer || !peer.pc || (peer.status ? peer.status !== "live" : peer.state !== "connected")) {
         attachedListeners.delete(id);
       }
     }

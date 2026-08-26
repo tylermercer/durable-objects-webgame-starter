@@ -24,10 +24,40 @@ export class GameSession extends DurableObject {
   sessions = new Map<WebSocket, Session>();
   rejoinTokens = new Map<string, ControllerRecord>();
   consoleToken: string | null = null;
+  gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
+  private hydrationPromise: Promise<void> | null = null;
+
+  private hydrateIfNeeded(): Promise<void> {
+    if (!this.hydrationPromise) {
+      this.hydrationPromise = this.doHydrate();
+    }
+    return this.hydrationPromise;
+  }
+
+  private async doHydrate() {
+    if (this.ctx?.storage?.get) {
+      const storedTokens = await this.ctx.storage.get<[string, ControllerRecord][]>("rejoinTokens");
+      if (storedTokens) this.rejoinTokens = new Map(storedTokens);
+      const nextNum = await this.ctx.storage.get<number>("nextPlayerNumber");
+      if (nextNum) this.nextPlayerNumber = nextNum;
+      const grace = await this.ctx.storage.get<number>("gracePeriodMs");
+      if (grace) this.gracePeriodMs = grace;
+    }
+  }
+
+  private async persistRejoinTokens() {
+    if (this.ctx?.storage?.put) {
+      await this.ctx.storage.put("rejoinTokens", [...this.rejoinTokens.entries()]);
+      await this.ctx.storage.put("nextPlayerNumber", this.nextPlayerNumber);
+      await this.ctx.storage.put("gracePeriodMs", this.gracePeriodMs);
+    }
+  }
 
   async fetch(request: Request): Promise<Response> {
+    await this.hydrateIfNeeded();
+
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected Upgrade: websocket", { status: 426 });
     }
@@ -85,23 +115,30 @@ export class GameSession extends DurableObject {
   }
 
   async alarm(): Promise<void> {
+    await this.hydrateIfNeeded();
     const now = Date.now();
     let earliestNextDisconnect: number | null = null;
+    let tokensChanged = false;
 
     for (const [token, record] of Array.from(this.rejoinTokens.entries())) {
       if (record.disconnectedAt !== null) {
         const elapsed = now - record.disconnectedAt;
-        if (elapsed >= DISCONNECT_GRACE_PERIOD_MS) {
+        if (elapsed >= this.gracePeriodMs) {
           this.rejoinTokens.delete(token);
+          tokensChanged = true;
           this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(record.id));
         } else {
-          const remaining = DISCONNECT_GRACE_PERIOD_MS - elapsed;
+          const remaining = this.gracePeriodMs - elapsed;
           const nextTime = now + remaining;
           if (earliestNextDisconnect === null || nextTime < earliestNextDisconnect) {
             earliestNextDisconnect = nextTime;
           }
         }
       }
+    }
+
+    if (tokensChanged) {
+      await this.persistRejoinTokens();
     }
 
     this.checkAndBroadcastFirstPlayer();
@@ -114,7 +151,7 @@ export class GameSession extends DurableObject {
   private makeConsoleApi(ws: WebSocket): ConsoleApi {
     const self = this;
     return new (class extends RpcTarget implements ConsoleApi {
-      async join(callbacks: ConsoleCallbacks, consoleToken?: string) {
+      async join(callbacks: ConsoleCallbacks, consoleToken?: string, gracePeriodMs?: number) {
         if (!self.consoleToken && self.ctx?.storage?.get) {
           self.consoleToken = (await self.ctx.storage.get<string>("consoleToken")) ?? null;
         }
@@ -127,6 +164,13 @@ export class GameSession extends DurableObject {
           self.consoleToken = consoleToken || crypto.randomUUID();
           if (self.ctx?.storage?.put) {
             await self.ctx.storage.put("consoleToken", self.consoleToken);
+          }
+        }
+
+        if (gracePeriodMs !== undefined && gracePeriodMs > 0) {
+          self.gracePeriodMs = gracePeriodMs;
+          if (self.ctx?.storage?.put) {
+            await self.ctx.storage.put("gracePeriodMs", self.gracePeriodMs);
           }
         }
 
@@ -193,7 +237,7 @@ export class GameSession extends DurableObject {
   private makeControllerApi(ws: WebSocket): ControllerApi {
     const self = this;
     return new (class extends RpcTarget implements ControllerApi {
-      join(callbacks: ControllerCallbacks, rejoinToken?: string) {
+      async join(callbacks: ControllerCallbacks, rejoinToken?: string) {
         let id: string;
         let name: string;
         let token: string;
@@ -217,6 +261,8 @@ export class GameSession extends DurableObject {
           });
         }
 
+        await self.persistRejoinTokens();
+
         const consoleConnected = [...self.sessions.values()].some(s => s.role === "console");
 
         self.sessions.set(ws, {
@@ -233,6 +279,14 @@ export class GameSession extends DurableObject {
         // Announce controller join to console if not a seamless rejoin while connected
         if (!isRejoin) {
           self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name));
+        } else {
+          self.forConsole(cb => {
+            try {
+              (cb as RpcStub<ConsoleCallbacks>).onControllerRejoined(id);
+            } catch {
+              // Ignore RPC failure
+            }
+          });
         }
 
         const firstPlayerId = self.getFirstPlayerId();
@@ -267,9 +321,17 @@ export class GameSession extends DurableObject {
       if (session.rejoinToken && this.rejoinTokens.has(session.rejoinToken)) {
         const record = this.rejoinTokens.get(session.rejoinToken)!;
         record.disconnectedAt = Date.now();
+        await this.persistRejoinTokens();
         if (this.ctx?.storage?.setAlarm) {
-          await this.ctx.storage.setAlarm(Date.now() + DISCONNECT_GRACE_PERIOD_MS);
+          await this.ctx.storage.setAlarm(Date.now() + this.gracePeriodMs);
         }
+        this.forConsole(cb => {
+          try {
+            (cb as RpcStub<ConsoleCallbacks>).onControllerDisconnected(session.id);
+          } catch {
+            // Ignore RPC failure
+          }
+        });
       } else {
         this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(session.id));
       }

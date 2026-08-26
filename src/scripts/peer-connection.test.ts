@@ -216,4 +216,39 @@ describe("peer-connection message formats and CoalescingSender", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith(JSON.stringify({ type: "gameState", state: {} }));
   });
+
+  it("handles ICE restart and startHeartbeat ping/pong RTT", async () => {
+    const origPC = globalThis.RTCPeerConnection;
+    try {
+      (globalThis as any).RTCPeerConnection = MockRTCPeerConnection;
+      const onSignal = vi.fn();
+
+      const pc = new PeerConnection(true, { onSignal });
+      await pc.restartIce();
+      expect(onSignal).toHaveBeenCalledWith({ sdp: expect.objectContaining({ type: "offer" }) });
+
+      const onRtt = vi.fn();
+      vi.useFakeTimers();
+      const stopHeartbeat = pc.startHeartbeat(1000, onRtt);
+
+      // Advance time to trigger heartbeat ping
+      const sendControlSpy = vi.spyOn(pc, "sendControl");
+      vi.advanceTimersByTime(1000);
+      expect(sendControlSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "ping" }));
+
+      const pingCall = sendControlSpy.mock.calls[0][0] as PingMessage;
+
+      // Simulate receiving pong message
+      const controlCallbacks = (pc as any).controlListeners;
+      for (const listener of controlCallbacks) {
+        listener({ type: "pong", t: pingCall.t });
+      }
+
+      expect(onRtt).toHaveBeenCalled();
+      stopHeartbeat();
+      vi.useRealTimers();
+    } finally {
+      (globalThis as any).RTCPeerConnection = origPC;
+    }
+  });
 });

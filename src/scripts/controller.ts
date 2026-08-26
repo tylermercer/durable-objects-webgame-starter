@@ -40,6 +40,7 @@ class ControllerApp {
   api: RpcStub<ControllerApi> | null = null;
   pc: PeerConnection | null = null;
   reconnectTimer: number | null = null;
+  private reconnectAttempt = 0;
   activeGame: unknown = null;
 
   constructor() {
@@ -75,6 +76,7 @@ class ControllerApp {
       const token = getOrCreateRejoinToken(this.code);
 
       this.api.join(callbacks, token).then(res => {
+        this.reconnectAttempt = 0;
         this.id = res.id;
         this.name = res.name;
         this.isFirstPlayer = res.isFirstPlayer;
@@ -101,10 +103,13 @@ class ControllerApp {
   scheduleReconnect() {
     if (this.reconnectTimer) return;
     this.updateStatus("Signaling broken. Reconnecting...");
+    const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
+    const jitter = Math.random() * base * 0.3;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
+      this.reconnectAttempt++;
       this.connectSignaling();
-    }, 3000);
+    }, base + jitter);
   }
 
   async initiateWebRTC() {

@@ -80,7 +80,7 @@ export function createGame(ctx: ControllerContext) {
 
     const isFirst = ctx.isFirstPlayer ? ctx.isFirstPlayer() : false;
     const firstPlayerName = latestSnapshot?.firstPlayerId
-      ? latestSnapshot.birds.find(b => b.id === latestSnapshot.firstPlayerId)?.name || "first player"
+      ? (latestSnapshot.birds.find(b => b.id === latestSnapshot?.firstPlayerId)?.name || "first player")
       : "first player";
 
     let buttonColor = "#0070f3"; // Blue default

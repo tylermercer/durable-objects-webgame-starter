@@ -86,6 +86,8 @@ describe("GameSession Durable Object", () => {
       dup: () => consoleCallbacks,
       onControllerJoined: vi.fn(),
       onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
@@ -132,6 +134,8 @@ describe("GameSession Durable Object", () => {
       dup: () => consoleCallbacks,
       onControllerJoined: vi.fn(),
       onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
@@ -144,7 +148,7 @@ describe("GameSession Durable Object", () => {
     await consoleApi.join(consoleCallbacks);
 
     const controllerApi1 = (session as any).makeControllerApi(controllerWs1);
-    const joinRes1 = controllerApi1.join(controllerCallbacks);
+    const joinRes1 = await controllerApi1.join(controllerCallbacks);
 
     expect(joinRes1.id).toBeDefined();
     expect(joinRes1.name).toBe("Player 1");
@@ -162,7 +166,7 @@ describe("GameSession Durable Object", () => {
     // Rejoin with same token
     const controllerWs2 = createMockWebSocket();
     const controllerApi2 = (session as any).makeControllerApi(controllerWs2);
-    const joinRes2 = controllerApi2.join(controllerCallbacks, joinRes1.rejoinToken);
+    const joinRes2 = await controllerApi2.join(controllerCallbacks, joinRes1.rejoinToken);
 
     expect(joinRes2.id).toBe(joinRes1.id);
     expect(joinRes2.name).toBe("Player 1");
@@ -196,6 +200,8 @@ describe("GameSession Durable Object", () => {
       dup: function() { return this; },
       onControllerJoined: vi.fn(),
       onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
@@ -209,7 +215,7 @@ describe("GameSession Durable Object", () => {
     const cb1 = makeControllerCb();
     const ws1 = createMockWebSocket();
     const api1 = (session as any).makeControllerApi(ws1);
-    const p1 = api1.join(cb1);
+    const p1 = await api1.join(cb1);
 
     expect(p1.isFirstPlayer).toBe(true);
     expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p1.id);
@@ -217,7 +223,7 @@ describe("GameSession Durable Object", () => {
     const cb2 = makeControllerCb();
     const ws2 = createMockWebSocket();
     const api2 = (session as any).makeControllerApi(ws2);
-    const p2 = api2.join(cb2);
+    const p2 = await api2.join(cb2);
 
     expect(p2.isFirstPlayer).toBe(false);
 
@@ -229,9 +235,51 @@ describe("GameSession Durable Object", () => {
     // Reconnect p1 -> p1 gets first player status back (earliest join order)
     const ws1_reconnect = createMockWebSocket();
     const api1_reconnect = (session as any).makeControllerApi(ws1_reconnect);
-    const p1_reconnect = api1_reconnect.join(cb1, p1.rejoinToken);
+    const p1_reconnect = await api1_reconnect.join(cb1, p1.rejoinToken);
 
     expect(p1_reconnect.isFirstPlayer).toBe(true);
     expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p1.id);
+  });
+
+  it("hydrates rejoin tokens and nextPlayerNumber from storage upon cold start", async () => {
+    const storageMap = new Map<string, any>();
+    storageMap.set("rejoinTokens", [
+      ["existing-token", { id: "p1-id", name: "Player 1", disconnectedAt: null }]
+    ]);
+    storageMap.set("nextPlayerNumber", 5);
+    storageMap.set("gracePeriodMs", 20000);
+
+    const ctx = {
+      storage: {
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+
+    const session = new GameSession(ctx as any, {} as any);
+    await (session as any).hydrateIfNeeded();
+
+    expect(session.rejoinTokens.get("existing-token")).toEqual({ id: "p1-id", name: "Player 1", disconnectedAt: null });
+    expect(session.gracePeriodMs).toBe(20000);
+
+    const controllerWs = createMockWebSocket();
+    const controllerApi = (session as any).makeControllerApi(controllerWs);
+
+    const cb = {
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const joinRes = await controllerApi.join(cb, "existing-token");
+    expect(joinRes.id).toBe("p1-id");
+    expect(joinRes.name).toBe("Player 1");
+
+    const newJoinRes = await controllerApi.join(cb);
+    expect(newJoinRes.name).toBe("Player 5");
   });
 });

@@ -5,6 +5,8 @@ export type RTCSignal = { sdp?: RTCSessionDescriptionInit } | { candidate?: RTCI
 export interface ConsoleCallbacks extends RpcTarget {
   onControllerJoined(id: string, name: string): void;
   onControllerLeft(id: string): void;
+  onControllerDisconnected(id: string): void;
+  onControllerRejoined(id: string): void;
   onSignal(from: string, signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
 }
@@ -20,7 +22,8 @@ export interface ControllerCallbacks extends RpcTarget {
 export interface ConsoleApi extends RpcTarget {
   join(
     callbacks: ConsoleCallbacks,
-    consoleToken?: string
+    consoleToken?: string,
+    gracePeriodMs?: number
   ):
     | { controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }
     | Promise<{ controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }>;
