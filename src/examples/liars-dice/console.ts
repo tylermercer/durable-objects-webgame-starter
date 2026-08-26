@@ -17,6 +17,7 @@ export interface ControllerPeer {
   id: string;
   name: string;
   color: string;
+  isFirstPlayer?: boolean;
   pc: PeerConnection | null;
   state: string;
   lastTouch?: TouchMessage;
@@ -44,6 +45,20 @@ export function createGame(ctx: ConsoleContext) {
   let lastRenderedHtml = "";
 
   const attachedListeners = new Set<string>();
+
+  // Helper to find the current first connected player ID
+  function getFirstPlayerId(): string | null {
+    for (const peer of ctx.peers.values()) {
+      if (peer.isFirstPlayer && peer.state === "connected") {
+        return peer.id;
+      }
+    }
+    // Fallback: earliest connected peer in Map iteration order
+    for (const peer of ctx.peers.values()) {
+      if (peer.state === "connected") return peer.id;
+    }
+    return null;
+  }
 
   // Ensure DOM container in #demo-view
   const demoView = document.getElementById("demo-view");
@@ -209,7 +224,8 @@ export function createGame(ctx: ConsoleContext) {
       totalDiceInPlay: totalDice,
       players,
       lastChallengeResult,
-      winner
+      winner,
+      firstPlayerId: getFirstPlayerId()
     };
   }
 
@@ -249,6 +265,15 @@ export function createGame(ctx: ConsoleContext) {
     const peer = ctx.peers.get(fromId);
     if (!peer) return;
 
+    const firstPlayerId = getFirstPlayerId();
+
+    if (msg.type === "requestStart") {
+      if (fromId === firstPlayerId && phase === "waiting" && getActivePlayerIds().length >= 2) {
+        startNextRound(true);
+      }
+      return;
+    }
+
     if (msg.type === "bid") {
       if (phase !== "bidding") return;
       if (turnOrder[turnIndex] !== fromId) return;
@@ -271,7 +296,7 @@ export function createGame(ctx: ConsoleContext) {
 
       executeChallenge(fromId, peer.name);
     } else if (msg.type === "nextRound") {
-      if (phase === "revealing" || phase === "waiting") {
+      if (fromId === firstPlayerId && (phase === "revealing" || phase === "waiting" || phase === "gameOver")) {
         startNextRound();
       }
     }
@@ -356,10 +381,6 @@ export function createGame(ctx: ConsoleContext) {
           if (!playerDiceCounts.has(id)) {
             playerDiceCounts.set(id, 5);
           }
-        }
-        const active = getActivePlayerIds();
-        if (active.length >= 2) {
-          // Ready to start game
         }
       } else if (phase === "bidding") {
         // Bidding phase - waiting for player input
@@ -475,6 +496,7 @@ export function createGame(ctx: ConsoleContext) {
           <div style="display:flex; justify-content:space-between; align-items:center; background:${isTurn ? '#3a3a4c' : '#272733'}; border-left:4px solid ${p.color}; padding:0.6rem 1rem; border-radius:6px;">
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <span style="font-weight:bold;">${p.name}</span>
+              ${p.id === state.firstPlayerId ? `<span style="font-size:0.75rem; background:#ffdc00; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold;">HOST</span>` : ""}
               ${isTurn ? `<span style="font-size:0.75rem; background:#7fdbff; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold;">TURN</span>` : ""}
               ${!p.connected ? `<span style="font-size:0.75rem; background:#ff4136; color:#fff; padding:2px 6px; border-radius:4px;">OFFLINE</span>` : ""}
             </div>

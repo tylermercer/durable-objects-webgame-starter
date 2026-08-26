@@ -76,6 +76,7 @@ export interface RoundStateSnapshot {
     width: number;
   }>;
   winner: { id: string; name: string } | null;
+  firstPlayerId?: string | null;
 }
 
 export interface RoundStateMessage {

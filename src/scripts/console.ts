@@ -15,6 +15,7 @@ export interface ControllerState {
   id: string;
   name: string;
   color: string;
+  isFirstPlayer: boolean;
   pc: PeerConnection | null;
   state: string;
   lastTouch?: TouchMessage;
@@ -36,11 +37,16 @@ class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
   onSignal(from: string, signal: RTCSignal) {
     this.app.handleSignal(from, signal);
   }
+
+  onFirstPlayerChanged(id: string | null) {
+    this.app.handleFirstPlayerChanged(id);
+  }
 }
 
 class ConsoleApp {
   code: string;
   controllers = new Map<string, ControllerState>();
+  firstPlayerId: string | null = null;
   api: RpcStub<ConsoleApi> | null = null;
   reconnectTimer: number | null = null;
   modal: HTMLDialogElement | null = null;
@@ -70,7 +76,10 @@ class ConsoleApp {
   async initGame() {
     try {
       const { createGame } = await loadConsoleGame();
-      this.activeGame = createGame({ session: this.api, peers: this.controllers });
+      this.activeGame = createGame({
+        session: this.api,
+        peers: this.controllers
+      });
       if (this.gameLoop) this.gameLoop.stop();
       this.gameLoop = createFixedTickLoop({
         tickRate: 30,
@@ -187,6 +196,14 @@ class ConsoleApp {
     return localStorage.getItem(`console_token_${this.code}`) || undefined;
   }
 
+  handleFirstPlayerChanged(firstPlayerId: string | null) {
+    this.firstPlayerId = firstPlayerId;
+    for (const controller of this.controllers.values()) {
+      controller.isFirstPlayer = (controller.id === firstPlayerId);
+    }
+    this.updateControllerUI();
+  }
+
   connectSignaling() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/signaling?code=${this.code}&role=console`;
@@ -201,6 +218,9 @@ class ConsoleApp {
         if (res) {
           if (res.consoleToken) {
             localStorage.setItem(`console_token_${this.code}`, res.consoleToken);
+          }
+          if (res.firstPlayerId !== undefined) {
+            this.firstPlayerId = res.firstPlayerId;
           }
           if (res.controllers) {
             for (const c of res.controllers) {
@@ -231,11 +251,13 @@ class ConsoleApp {
 
     const colorIndex = this.controllers.size % PLAYER_COLORS.length;
     const color = PLAYER_COLORS[colorIndex];
+    const isFirstPlayer = (id === this.firstPlayerId);
 
     const controller: ControllerState = {
       id,
       name,
       color,
+      isFirstPlayer,
       pc: null,
       state: "connecting"
     };
@@ -314,11 +336,24 @@ class ConsoleApp {
       nameEl.className = "u-weight-bold";
       nameEl.textContent = controller.name;
 
+      if (controller.isFirstPlayer) {
+        const hostBadge = document.createElement("span");
+        hostBadge.className = "status-badge";
+        hostBadge.style.backgroundColor = "#ffdc00";
+        hostBadge.style.color = "#000000";
+        hostBadge.style.fontWeight = "bold";
+        hostBadge.style.marginLeft = "4px";
+        hostBadge.textContent = "Host";
+        row.appendChild(nameEl);
+        row.appendChild(hostBadge);
+      } else {
+        row.appendChild(nameEl);
+      }
+
       const badge = document.createElement("span");
       badge.className = `status-badge status-${controller.state}`;
       badge.textContent = controller.state;
 
-      row.appendChild(nameEl);
       row.appendChild(badge);
       listEl.appendChild(row);
     }

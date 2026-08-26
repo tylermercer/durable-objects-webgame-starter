@@ -7,6 +7,7 @@ import type {
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
+  isFirstPlayer?: () => boolean;
 }
 
 export function createGame(ctx: ControllerContext) {
@@ -55,6 +56,13 @@ export function createGame(ctx: ControllerContext) {
     });
   }
 
+  function sendStartRequest() {
+    if (!ctx.peerConnection) return;
+    ctx.peerConnection.sendControl({
+      type: "requestStart"
+    } as unknown as LiarsDiceControlMessage);
+  }
+
   function sendBid() {
     if (!ctx.peerConnection || !gameState) return;
     const totalDice = gameState.totalDiceInPlay;
@@ -86,17 +94,25 @@ export function createGame(ctx: ControllerContext) {
       return;
     }
 
+    const isFirst = ctx.isFirstPlayer ? ctx.isFirstPlayer() : false;
+
     const isMyTurn = gameState.turnPlayerName === document.getElementById("player-name")?.textContent ||
       gameState.players.some(p => p.isTurn && p.connected);
 
     // Try matching player by name in header
     const currentName = document.getElementById("player-name")?.textContent || "";
-    const me = gameState.players.find(p => p.name === currentName);
+    const cleanCurrentName = currentName.replace(/\s*\(Host\)$/, "");
+    const me = gameState.players.find(p => p.name === cleanCurrentName || p.name === currentName);
     const isActuallyMyTurn = me ? me.isTurn : isMyTurn;
 
     const totalDice = gameState.totalDiceInPlay;
     const bidValid = isActuallyMyTurn && gameState.phase === "bidding" &&
       isValidBid(gameState.currentBid, { count: selectedCount, face: selectedFace }, totalDice);
+
+    const connectedPlayersCount = gameState.players.filter(p => p.connected).length;
+    const firstPlayerName = gameState.firstPlayerId
+      ? gameState.players.find(p => p.id === gameState.firstPlayerId)?.name || "host"
+      : "host";
 
     let html = `
       <div class="controller-liars-dice l-stack l-space-s" style="padding:1rem; max-width:400px; margin:0 auto; width:100%; box-sizing:border-box;">
@@ -113,7 +129,20 @@ export function createGame(ctx: ControllerContext) {
     `;
 
     if (gameState.phase === "waiting") {
-      html += `<div style="font-size:0.95rem; color:#aaa;">Waiting for game to start...</div>`;
+      if (isFirst) {
+        if (connectedPlayersCount >= 2) {
+          html += `
+            <div style="font-size:0.95rem; color:#2ecc40; font-weight:bold; margin-bottom:0.5rem;">You are the host! Ready to start game.</div>
+            <button id="btn-request-start" style="padding:0.75rem 1.5rem; font-size:1.1rem; font-weight:bold; background:#2ecc40; color:#fff; border:none; border-radius:8px; cursor:pointer;">
+              Start Game 🚀
+            </button>
+          `;
+        } else {
+          html += `<div style="font-size:0.95rem; color:#aaa;">Waiting for at least 2 players to connect...</div>`;
+        }
+      } else {
+        html += `<div style="font-size:0.95rem; color:#aaa;">Waiting for <strong>${firstPlayerName}</strong> to start…</div>`;
+      }
     } else if (gameState.phase === "bidding") {
       if (isActuallyMyTurn) {
         html += `
@@ -198,6 +227,13 @@ export function createGame(ctx: ControllerContext) {
 
     html += `</div>`;
     surface.innerHTML = html;
+
+    const reqStartBtn = document.getElementById("btn-request-start");
+    if (reqStartBtn) {
+      reqStartBtn.addEventListener("click", () => {
+        sendStartRequest();
+      });
+    }
 
     // Attach control listeners
     const minusBtn = document.getElementById("qty-minus");

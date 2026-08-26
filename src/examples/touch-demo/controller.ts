@@ -2,6 +2,7 @@ import type { PeerConnection, TouchMessage } from "../../scripts/peer-connection
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
+  isFirstPlayer?: () => boolean;
 }
 
 export function createGame(ctx: ControllerContext) {

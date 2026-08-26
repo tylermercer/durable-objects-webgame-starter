@@ -87,6 +87,7 @@ describe("GameSession Durable Object", () => {
       onControllerJoined: vi.fn(),
       onControllerLeft: vi.fn(),
       onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -123,6 +124,7 @@ describe("GameSession Durable Object", () => {
       onConsoleReady: vi.fn(),
       onConsoleGone: vi.fn(),
       onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -131,6 +133,7 @@ describe("GameSession Durable Object", () => {
       onControllerJoined: vi.fn(),
       onControllerLeft: vi.fn(),
       onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -138,7 +141,7 @@ describe("GameSession Durable Object", () => {
     const controllerWs1 = createMockWebSocket();
 
     const consoleApi = (session as any).makeConsoleApi(consoleWs);
-    consoleApi.join(consoleCallbacks);
+    await consoleApi.join(consoleCallbacks);
 
     const controllerApi1 = (session as any).makeControllerApi(controllerWs1);
     const joinRes1 = controllerApi1.join(controllerCallbacks);
@@ -146,10 +149,12 @@ describe("GameSession Durable Object", () => {
     expect(joinRes1.id).toBeDefined();
     expect(joinRes1.name).toBe("Player 1");
     expect(joinRes1.rejoinToken).toBeDefined();
+    expect(joinRes1.isFirstPlayer).toBe(true);
     expect(consoleCallbacks.onControllerJoined).toHaveBeenCalledWith(joinRes1.id, "Player 1");
+    expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenCalledWith(joinRes1.id);
 
     // Disconnect controller 1
-    (session as any).handleClose(controllerWs1);
+    await (session as any).handleClose(controllerWs1);
     expect(ctx.storage.setAlarm).toHaveBeenCalled();
     // onControllerLeft should NOT be called yet because token is in grace period
     expect(consoleCallbacks.onControllerLeft).not.toHaveBeenCalledWith(joinRes1.id);
@@ -161,9 +166,10 @@ describe("GameSession Durable Object", () => {
 
     expect(joinRes2.id).toBe(joinRes1.id);
     expect(joinRes2.name).toBe("Player 1");
+    expect(joinRes2.isFirstPlayer).toBe(true);
 
     // Re-disconnect and let alarm fire after grace period
-    (session as any).handleClose(controllerWs2);
+    await (session as any).handleClose(controllerWs2);
 
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 50000);
@@ -171,5 +177,61 @@ describe("GameSession Durable Object", () => {
     await session.alarm();
     expect(consoleCallbacks.onControllerLeft).toHaveBeenCalledWith(joinRes1.id);
     vi.useRealTimers();
+  });
+
+  it("tracks and broadcasts first connected player changes", async () => {
+    const ctx = { storage: { setAlarm: vi.fn(async () => {}) } };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const makeControllerCb = () => ({
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    });
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    const consoleJoinRes = await consoleApi.join(consoleCallbacks);
+    expect(consoleJoinRes.firstPlayerId).toBeNull();
+
+    const cb1 = makeControllerCb();
+    const ws1 = createMockWebSocket();
+    const api1 = (session as any).makeControllerApi(ws1);
+    const p1 = api1.join(cb1);
+
+    expect(p1.isFirstPlayer).toBe(true);
+    expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p1.id);
+
+    const cb2 = makeControllerCb();
+    const ws2 = createMockWebSocket();
+    const api2 = (session as any).makeControllerApi(ws2);
+    const p2 = api2.join(cb2);
+
+    expect(p2.isFirstPlayer).toBe(false);
+
+    // Disconnect p1 -> p2 becomes first player
+    await (session as any).handleClose(ws1);
+    expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p2.id);
+    expect(cb2.onFirstPlayerChanged).toHaveBeenLastCalledWith(p2.id);
+
+    // Reconnect p1 -> p1 gets first player status back (earliest join order)
+    const ws1_reconnect = createMockWebSocket();
+    const api1_reconnect = (session as any).makeControllerApi(ws1_reconnect);
+    const p1_reconnect = api1_reconnect.join(cb1, p1.rejoinToken);
+
+    expect(p1_reconnect.isFirstPlayer).toBe(true);
+    expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p1.id);
   });
 });

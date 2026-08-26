@@ -2,6 +2,12 @@ import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
 import { PeerConnection } from "./peer-connection";
 import { loadControllerGame } from "./gameSource";
+import { getOrCreateRejoinToken, persistRejoinToken } from "../utils/deviceIdentity";
+
+export interface ControllerContext {
+  peerConnection: PeerConnection | null;
+  isFirstPlayer: () => boolean;
+}
 
 class ControllerCallbacksHandler extends RpcTarget implements ControllerCallbacks {
   constructor(private app: ControllerApp) {
@@ -19,6 +25,10 @@ class ControllerCallbacksHandler extends RpcTarget implements ControllerCallback
   onSignal(signal: RTCSignal) {
     this.app.handleSignal(signal);
   }
+
+  onFirstPlayerChanged(id: string | null) {
+    this.app.handleFirstPlayerChanged(id);
+  }
 }
 
 class ControllerApp {
@@ -26,6 +36,7 @@ class ControllerApp {
   id: string = "";
   name: string = "";
   color: string = "";
+  isFirstPlayer: boolean = false;
   api: RpcStub<ControllerApi> | null = null;
   pc: PeerConnection | null = null;
   reconnectTimer: number | null = null;
@@ -41,14 +52,9 @@ class ControllerApp {
     this.connectSignaling();
   }
 
-  private getRejoinToken(): string {
-    const key = `rejoin_token_${this.code}`;
-    let token = localStorage.getItem(key);
-    if (!token) {
-      token = crypto.randomUUID();
-      localStorage.setItem(key, token);
-    }
-    return token;
+  handleFirstPlayerChanged(firstPlayerId: string | null) {
+    this.isFirstPlayer = (firstPlayerId === this.id);
+    this.updatePlayerInfo(this.name, this.color);
   }
 
   connectSignaling() {
@@ -66,13 +72,14 @@ class ControllerApp {
       this.api.onRpcBroken(() => this.scheduleReconnect());
 
       const callbacks = new ControllerCallbacksHandler(this);
-      const token = this.getRejoinToken();
+      const token = getOrCreateRejoinToken(this.code);
 
       this.api.join(callbacks, token).then(res => {
         this.id = res.id;
         this.name = res.name;
+        this.isFirstPlayer = res.isFirstPlayer;
         if (res.rejoinToken) {
-          localStorage.setItem(`rejoin_token_${this.code}`, res.rejoinToken);
+          persistRejoinToken(res.rejoinToken, this.code);
         }
         this.updatePlayerInfo(this.name, this.color);
 
@@ -130,7 +137,10 @@ class ControllerApp {
 
     try {
       const { createGame } = await loadControllerGame(new URL(window.location.href));
-      this.activeGame = createGame({ peerConnection: this.pc });
+      this.activeGame = createGame({
+        peerConnection: this.pc,
+        isFirstPlayer: () => this.isFirstPlayer
+      });
     } catch (err) {
       console.error("Failed to load controller game logic:", err);
     }
@@ -166,7 +176,9 @@ class ControllerApp {
 
   updatePlayerInfo(name: string, color: string) {
     const nameEl = document.getElementById("player-name");
-    if (nameEl) nameEl.textContent = name || "Controller";
+    if (nameEl) {
+      nameEl.textContent = `${name || "Controller"}${this.isFirstPlayer ? " (Host)" : ""}`;
+    }
 
     const headerEl = document.getElementById("controller-header");
     if (headerEl && color) {
