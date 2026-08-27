@@ -3,9 +3,6 @@ import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import { defineConfig } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
-import { generateRadixColorsSassFunctions } from "./lib/plugins/sass/radix-ui-colors/generateRadixColorsSassCustomFunction";
-import remarkEmdash from './lib/plugins/remark/emdash.js';
-import rawFonts from './lib/plugins/vite/rawFonts.js';
 
 // https://astro.build/config
 export default defineConfig({
@@ -15,10 +12,8 @@ export default defineConfig({
   integrations: [react()],
   markdown: {
     processor: unified(),
-    remarkPlugins: [remarkEmdash],
   },
   vite: {
-    plugins: [rawFonts(['.woff'])],
     ssr: {
       external: [
         'astro/container',
@@ -28,15 +23,6 @@ export default defineConfig({
         'sharp',
         'esbuild',
       ].flatMap(id => [id, `node:${id}`]),
-    },
-    css: {
-      preprocessorOptions: {
-        scss: {
-          functions: {
-            ...generateRadixColorsSassFunctions
-          }
-        }
-      }
     },
   },
 });
