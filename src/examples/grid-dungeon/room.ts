@@ -202,8 +202,11 @@ export function stepNpcWander(
         const goalIndex = Math.floor(rng() * walkableCells.length);
         const goalPos = walkableCells[goalIndex];
 
-        const path = grid.findPath(startPos, goalPos, (_pos, cell) =>
-          cell.walkable ? 1 : Infinity
+        const path = grid.findPath(
+          startPos,
+          goalPos,
+          (_pos, cell) => (cell.walkable ? 1 : Infinity),
+          { diagonals: true }
         );
 
         if (path && path.length > 1) {

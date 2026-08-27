@@ -136,5 +136,93 @@ describe("TileGrid", () => {
         { x: 2, y: 0 },
       ]);
     });
+
+    it("returns shorter/straighter path on open ground when diagonals: true", () => {
+      const grid = new TileGrid(5, 5, () => ({ walkable: true }));
+      const cost = (_pos: any, cell: any) => (cell.walkable ? 1 : Infinity);
+
+      const cardinalPath = grid.findPath({ x: 0, y: 0 }, { x: 3, y: 3 }, cost);
+      const diagonalPath = grid.findPath(
+        { x: 0, y: 0 },
+        { x: 3, y: 3 },
+        cost,
+        { diagonals: true }
+      );
+
+      expect(cardinalPath).toHaveLength(7); // 6 steps (3 right, 3 down)
+      expect(diagonalPath).toEqual([
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+        { x: 3, y: 3 },
+      ]);
+      expect(diagonalPath).toHaveLength(4); // 3 diagonal steps
+    });
+
+    it("prevents corner-cutting when an orthogonal neighbor is blocked", () => {
+      // 3x3 grid:
+      // S W .
+      // . G .
+      // . . .
+      // S at (0,0), W at (1,0) wall, G at (1,1).
+      // Diagonal step from (0,0) to (1,1) requires both (1,0) and (0,1) to be open.
+      const grid = new TileGrid(3, 3, () => ({ walkable: true }));
+      grid.set({ x: 1, y: 0 }, { walkable: false }); // Wall at (1,0)
+      const cost = (_pos: any, cell: any) => (cell.walkable ? 1 : Infinity);
+
+      const path = grid.findPath(
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        cost,
+        { diagonals: true }
+      );
+
+      // Should not cut corner (0,0)->(1,1). Instead go (0,0)->(0,1)->(1,1).
+      expect(path).toEqual([
+        { x: 0, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 },
+      ]);
+
+      // If both orthogonal neighbors are blocked, diagonal move is completely blocked
+      grid.set({ x: 0, y: 1 }, { walkable: false });
+      const pathBlocked = grid.findPath(
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        cost,
+        { diagonals: true }
+      );
+      expect(pathBlocked).toBeNull();
+    });
+
+    it("asserts no path with diagonals on steps diagonally across a blocked corner", () => {
+      // Complex room with multiple walls
+      const grid = new TileGrid(5, 5, () => ({ walkable: true }));
+      grid.set({ x: 2, y: 1 }, { walkable: false });
+      grid.set({ x: 1, y: 2 }, { walkable: false });
+      grid.set({ x: 3, y: 3 }, { walkable: false });
+
+      const cost = (_pos: any, cell: any) => (cell.walkable ? 1 : Infinity);
+      const path = grid.findPath(
+        { x: 0, y: 0 },
+        { x: 4, y: 4 },
+        cost,
+        { diagonals: true }
+      );
+
+      expect(path).not.toBeNull();
+      for (let i = 0; i < path!.length - 1; i++) {
+        const cur = path![i];
+        const next = path![i + 1];
+        const dx = next.x - cur.x;
+        const dy = next.y - cur.y;
+        if (dx !== 0 && dy !== 0) {
+          const cornerA = { x: cur.x + dx, y: cur.y };
+          const cornerB = { x: cur.x, y: cur.y + dy };
+          expect(grid.get(cornerA)?.walkable).toBe(true);
+          expect(grid.get(cornerB)?.walkable).toBe(true);
+        }
+      }
+    });
   });
 });

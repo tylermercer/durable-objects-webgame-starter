@@ -130,4 +130,41 @@ describe("Grid Dungeon room simulation", () => {
     }
     expect(npc.currentPath.length).toBeLessThan(initialPathLen);
   });
+
+  it("ensures NPC diagonal paths do not cut interior wall corners", () => {
+    const grid = createRoomGrid();
+    const rng = createRng(42);
+    const npc: NpcEntity = {
+      id: "npc-1",
+      kind: "npc",
+      name: "Goblin",
+      color: "#2ecc40",
+      x: 1.5,
+      y: 1.5,
+      currentPath: [],
+      wanderTimer: 0,
+    };
+
+    // Run multiple wander cycles to sample various generated paths
+    for (let cycle = 0; cycle < 50; cycle++) {
+      npc.wanderTimer = 0;
+      stepNpcWander(npc, grid, 0.1, rng);
+
+      if (npc.currentPath.length > 0) {
+        let cur = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
+        for (const step of npc.currentPath) {
+          const dx = step.x - cur.x;
+          const dy = step.y - cur.y;
+
+          if (dx !== 0 && dy !== 0) {
+            const cornerA = { x: cur.x + dx, y: cur.y };
+            const cornerB = { x: cur.x, y: cur.y + dy };
+            expect(grid.get(cornerA)?.walkable).toBe(true);
+            expect(grid.get(cornerB)?.walkable).toBe(true);
+          }
+          cur = step;
+        }
+      }
+    }
+  });
 });
