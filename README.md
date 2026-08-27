@@ -10,7 +10,50 @@ A starter template for browser-based multiplayer party games in the "Jackbox" mo
 - Once connected, the console and each controller talk directly over WebRTC data channels; the Durable Object is only involved in the initial handshake.
 - The console is the single authoritative game simulator; controllers just report player input and render local UI (buttons, joysticks).
 
-For the full design — Durable Object structure, the signaling protocol, WebRTC negotiation, data channel layout — see [`design-docs/2026-08-24-core-architecture.md`](./design-docs/2026-08-24-core-architecture.md). This README covers how to actually build a game on top of what's here.
+For the full design — Durable Object structure, the signaling protocol, WebRTC negotiation, data channel layout — see [`design-docs/2026-08-24-001-core-architecture.md`](./design-docs/2026-08-24-001-core-architecture.md). This README covers how to actually build a game on top of what's here.
+
+## System architecture
+
+```mermaid
+flowchart TB
+    subgraph Console["Console (Laptop / Desktop / TV)"]
+        CA["Console App Host<br/>(ConsoleApp)"]
+        CS["Authoritative Game Simulator<br/>(ConsoleGameInstance)"]
+        CA --- CS
+    end
+
+    subgraph Cloudflare["Cloudflare Workers Infrastructure"]
+        WE["Worker Entrypoint<br/>(/api/signaling)"]
+        subgraph DO["GameSession Durable Object<br/>(1 instance per room code)"]
+            RPC["Cap'n Web RPC Session<br/>(Console & Controller APIs)"]
+            ST["Durable Storage<br/>(Rejoin Tokens, Saved Game State)"]
+            RPC --- ST
+        end
+        WE --> DO
+    end
+
+    subgraph Controllers["Controller Devices (Player Phones)"]
+        subgraph C1["Controller 1"]
+            CT1["Controller App<br/>(ControllerApp)"]
+            UI1["Controller Game UI / Inputs"]
+            CT1 --- UI1
+        end
+        subgraph C2["Controller N"]
+            CT2["Controller App<br/>(ControllerApp)"]
+            UI2["Controller Game UI / Inputs"]
+            CT2 --- UI2
+        end
+    end
+
+    %% Signaling phase over WebSocket
+    CA <--"WebSocket / Cap'n Web RPC<br/>(role=console)"--> WE
+    CT1 <--"WebSocket / Cap'n Web RPC<br/>(role=controller)"--> WE
+    CT2 <--"WebSocket / Cap'n Web RPC<br/>(role=controller)"--> WE
+
+    %% Direct Peer-to-Peer WebRTC Data Channels
+    CA <=="WebRTC P2P Data Channels<br/>'input' (unreliable/unordered) & 'control' (reliable/ordered)"==> CT1
+    CA <=="WebRTC P2P Data Channels<br/>'input' (unreliable/unordered) & 'control' (reliable/ordered)"==> CT2
+```
 
 ## Getting started
 
@@ -107,7 +150,7 @@ For continuous-simulation games with complex visual effects (such as `flappy-roy
 
 ## Design docs
 
-`design-docs/` contains the planning docs for this template's architecture, written with Claude and implemented with Jules. Start with [`2026-08-24-core-architecture.md`](./design-docs/2026-08-24-core-architecture.md) for the console/controller/signaling model, and [`2026-08-24-framework-primitives.md`](./design-docs/2026-08-24-framework-primitives.md) for the game-building primitives described above. Add new docs here for any future large feature before implementing it.
+`design-docs/` contains the planning docs for this template's architecture, written with Claude and implemented with Jules. Start with [`2026-08-24-001-core-architecture.md`](./design-docs/2026-08-24-001-core-architecture.md) for the console/controller/signaling model, and [`2026-08-24-002-additional-primitives.md`](./design-docs/2026-08-24-002-additional-primitives.md) for the game-building primitives described above. Add new docs here for any future large feature before implementing it.
 
 ## Inherited from Astroflare
 
