@@ -241,6 +241,7 @@ export class ConsoleApp {
     window.addEventListener("example-changed", async () => {
       this.renderHeader();
       await this.initGame();
+      this.openModal();
     });
   }
 

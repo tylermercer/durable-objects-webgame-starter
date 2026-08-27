@@ -55,7 +55,8 @@ Transitioning from the initial example switcher state (State 1) to building your
 1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`, `liars-dice`, `flappy-royale`, and `grid-dungeon`), and try them via the switcher.
 2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
 3. Replace the contents of `src/contract/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
-4. Delete `src/examples/` and `src/components/DemoSwitcher.astro`.
+4. In `src/pages/index.astro`, replace `<ExampleSwitcher />` inside `#start-screen` with `<button id="new-game-btn" class="btn-new-game" type="button">New Game</button>` so players can click "New Game" on the start screen to open the room invite modal.
+5. Delete `src/examples/` and `src/components/ExampleSwitcher.astro`.
 
 ### Input: discrete events vs. continuous state
 

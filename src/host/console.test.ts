@@ -26,6 +26,8 @@ describe("ConsoleApp room code persistence", () => {
     vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
     vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
 
+    const listeners: Record<string, Function[]> = {};
+
     vi.stubGlobal("window", {
       location: {
         search: "",
@@ -69,6 +71,7 @@ describe("ConsoleApp room code persistence", () => {
 
 describe("ConsoleApp start screen and add-players button behavior", () => {
   let mockStorage: Record<string, string> = {};
+  let listeners: Record<string, Function[]> = {};
 
   function createMockElement(id: string) {
     const classList = new Set<string>();
@@ -87,6 +90,7 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
 
   beforeEach(() => {
     mockStorage = {};
+    listeners = {};
 
     vi.stubGlobal("localStorage", {
       getItem: vi.fn((key: string) => mockStorage[key] ?? null),
@@ -110,7 +114,15 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
       history: {
         replaceState: vi.fn()
       },
-      addEventListener: vi.fn(),
+      addEventListener: vi.fn((event: string, cb: Function) => {
+        listeners[event] = listeners[event] || [];
+        listeners[event].push(cb);
+      }),
+      dispatchEvent: vi.fn((event: any) => {
+        const cbs = listeners[event.type] || [];
+        for (const cb of cbs) cb(event);
+        return true;
+      }),
       setTimeout: vi.fn(),
       requestAnimationFrame,
       cancelAnimationFrame
@@ -138,6 +150,34 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
 
     expect(initGameSpy).not.toHaveBeenCalled();
     expect(elements["start-screen"].classList.contains("u-hidden")).toBe(false);
+  });
+
+  it("example-changed event renders header, initializes game, and opens modal", async () => {
+    const elements: Record<string, ReturnType<typeof createMockElement>> = {
+      "start-screen": createMockElement("start-screen"),
+      "add-players-btn": createMockElement("add-players-btn"),
+      "game-surface": createMockElement("game-surface")
+    };
+    elements["add-players-btn"].classList.add("u-hidden");
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => elements[id] ?? null,
+      createElement: () => createMockElement("div")
+    });
+
+    const app = new ConsoleApp();
+    const renderHeaderSpy = vi.spyOn(app, "renderHeader");
+    const initGameSpy = vi.spyOn(app, "initGame").mockResolvedValue();
+    const openModalSpy = vi.spyOn(app, "openModal").mockImplementation(() => {});
+
+    app.setupUIHandlers();
+
+    window.dispatchEvent(new CustomEvent("example-changed", { detail: { exampleId: "liars-dice" } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(renderHeaderSpy).toHaveBeenCalled();
+    expect(initGameSpy).toHaveBeenCalled();
+    expect(openModalSpy).toHaveBeenCalled();
   });
 
   it("initGame() hides start screen and unhides add-players-btn", async () => {
