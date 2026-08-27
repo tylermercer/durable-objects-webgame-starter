@@ -185,12 +185,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
-      if (peer.isFirstPlayer && peer.state === "connected") {
+      if (
+        peer.isFirstPlayer &&
+        (peer.status === "live" || peer.state === "connected" || peer.state === "live")
+      ) {
         return peer.id;
       }
     }
     for (const peer of ctx.peers.values()) {
-      if (peer.state === "connected") return peer.id;
+      if (peer.status === "live" || peer.state === "connected" || peer.state === "live") {
+        return peer.id;
+      }
     }
     return null;
   }
@@ -315,19 +320,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       if (peer.pc) {
         if (!attachedListeners.has(id)) {
           attachedListeners.add(id);
-          peer.pc.addControlListener((msg) => {
-            const fMsg = msg as unknown as FlappyControlMessage;
+          const handleMsg = (msg: unknown) => {
+            const fMsg = msg as FlappyControlMessage;
             if (fMsg.type === "flap") {
               handleFlapInput(id);
             }
-          });
-        }
-
-        if (currentState.phase === "waiting" && !currentState.birds[id]) {
-          const firstPlayerId = getFirstPlayerId();
-          if (id === firstPlayerId) {
-            startNewRound();
-          }
+          };
+          peer.pc.addControlListener(handleMsg);
+          peer.pc.addInputListener(handleMsg);
         }
       }
     }
