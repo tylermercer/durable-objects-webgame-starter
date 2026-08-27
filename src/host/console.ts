@@ -5,7 +5,7 @@ import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import { PeerConnection, type TouchMessage } from "../transport/peer-connection";
 import { loadConsoleGame, buildJoinUrl } from "../contract/gameSource";
-import type { ConsoleGameInstance } from "../contract/gameTypes";
+import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
@@ -18,7 +18,7 @@ export type PlayerConnectionStatus =
   | "grace-period"  // signaling dropped, within the DO's grace window
   | "gone";         // grace period expired, player purged
 
-export interface ControllerState {
+export interface ControllerState extends ControllerPeer {
   id: string;
   name: string;
   color: string;
@@ -88,6 +88,9 @@ export class ConsoleApp {
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
 
+  private resizeSubscribers = new Set<(size: ViewportSize) => void>();
+  private resizeObserver: ResizeObserver | null = null;
+
   constructor() {
     let code: string | null = null;
     try {
@@ -113,19 +116,62 @@ export class ConsoleApp {
   async init() {
     this.setupUIHandlers();
     this.renderHeader();
-    this.updateDemoViewVisibility();
-    await this.initGame();
+    const savedExample = typeof localStorage !== "undefined" ? localStorage.getItem("selected_example") : null;
+    if (savedExample) {
+      await this.initGame();
+    }
     this.connectSignaling();
+  }
+
+  private ensureResizeObserver() {
+    if (this.resizeObserver) return;
+    const viewportEl = document.getElementById("game-viewport");
+    if (!viewportEl) return;
+
+    let pending: ViewportSize | null = null;
+    this.resizeObserver = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentBoxSize?.[0];
+      if (!box) return;
+      pending = { width: box.inlineSize, height: box.blockSize };
+      requestAnimationFrame(() => {
+        if (!pending) return;
+        const size = pending;
+        pending = null;
+        for (const cb of this.resizeSubscribers) cb(size);
+      });
+    });
+    this.resizeObserver.observe(viewportEl);
   }
 
   async initGame() {
     try {
       this.activeGame?.destroy?.();
+      this.resizeSubscribers.clear();
+
+      const surface = document.getElementById("game-surface");
+      if (surface) {
+        surface.innerHTML = "";
+        surface.classList.remove("u-hidden");
+      }
+      document.getElementById("start-screen")?.classList.add("u-hidden");
+
+      this.ensureResizeObserver();
+      const rect = surface ? surface.getBoundingClientRect() : { width: 800, height: 600 };
+
       const { createGame } = await loadConsoleGame();
       this.activeGame = createGame({
         session: this.api,
-        peers: this.controllers
+        peers: this.controllers as Map<string, ControllerPeer>,
+        viewport: {
+          container: surface ?? document.createElement("div"),
+          initialSize: { width: rect.width, height: rect.height },
+          onResize: (cb) => {
+            this.resizeSubscribers.add(cb);
+            return () => this.resizeSubscribers.delete(cb);
+          },
+        },
       });
+
       if (this.gameLoop) this.gameLoop.stop();
       this.gameLoop = createFixedTickLoop({
         tickRate: 30,
@@ -213,32 +259,23 @@ export class ConsoleApp {
     }
   }
 
-  handleModalClosed() {
-    const startScreen = document.getElementById("start-screen");
-    if (startScreen) {
-      startScreen.classList.add("u-hidden");
-    }
-
+  async handleModalClosed() {
     const addPlayersBtn = document.getElementById("add-players-btn");
     if (addPlayersBtn) {
       addPlayersBtn.classList.remove("u-hidden");
     }
-  }
 
-  updateDemoViewVisibility() {
-    const demoView = document.getElementById("demo-view");
-    if (!demoView) return;
-
-    if (this.controllers.size > 0) {
-      demoView.classList.remove("u-hidden");
-    } else {
-      demoView.classList.add("u-hidden");
+    if (!this.activeGame) {
+      await this.initGame();
     }
   }
 
   renderHeader() {
     const roomCodeEl = document.getElementById("room-code");
     if (roomCodeEl) roomCodeEl.textContent = this.code;
+
+    const roomCodeInlineEl = document.getElementById("room-code-inline");
+    if (roomCodeInlineEl) roomCodeInlineEl.textContent = this.code;
 
     const joinUrl = buildJoinUrl(window.location.origin, this.code);
 
@@ -333,7 +370,6 @@ export class ConsoleApp {
 
     this.controllers.set(id, controller);
     this.updateControllerStatus(controller);
-    this.updateDemoViewVisibility();
   }
 
   handleControllerDisconnected(id: string) {
@@ -373,7 +409,6 @@ export class ConsoleApp {
       controller.pc?.close();
       this.controllers.delete(id);
       this.updateControllerUI();
-      this.updateDemoViewVisibility();
     }
   }
 

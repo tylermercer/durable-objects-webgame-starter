@@ -1,6 +1,6 @@
 ---
 import Layout from '@layouts/Base.astro';
-import DemoSwitcher from '@components/DemoSwitcher.astro';
+import ExampleSwitcher from '@components/ExampleSwitcher.astro';
 
 export const prerender = false;
 
@@ -43,29 +43,25 @@ const isController = Boolean(code);
       <script src="../host/controller.ts"></script>
     </main>
   ) : (
-    <main class="console-shell u-guttered-lg l-stack l-space-l">
-      <!-- Fixed Top-Right "Add Players" button (hidden until modal is closed at least once) -->
-      <button id="add-players-btn" class="add-players-btn u-hidden" type="button">
-        Add Players
-      </button>
+    <main class="console-shell">
+      <header id="console-topbar" class="console-topbar">
+        <span class="room-code-chip">Room <strong id="room-code-inline" class="room-code">----</strong></span>
+        <button id="add-players-btn" class="add-players-btn u-hidden" type="button">
+          Add Players
+        </button>
+      </header>
 
-      <!-- Desktop Console (wide viewport) -->
-      <div class="desktop-console">
-        <!-- Switcher UI & Initial centered "New Game" button -->
-        <DemoSwitcher />
-        <div id="start-screen" class="start-screen">
+      <div id="game-viewport" class="game-viewport">
+        <!-- Shown until a game has been chosen/loaded -->
+        <div id="start-screen" class="start-screen l-stack l-space-m">
           <button id="new-game-btn" class="btn-new-game" type="button">
             New Game
           </button>
+          <ExampleSwitcher />
         </div>
 
-        <!-- Touch-events demo view (hidden until 1st controller connects) -->
-        <div id="demo-view" class="demo-view u-hidden l-stack l-space-s">
-          <h2 class="u-step-2">Live Touch Visualization</h2>
-          <div class="canvas-container">
-            <canvas id="touch-canvas"></canvas>
-          </div>
-        </div>
+        <!-- Empty on load. Host creates/clears this; games own everything inside it. -->
+        <div id="game-surface" class="game-surface u-hidden"></div>
       </div>
 
       <!-- Mobile Console (narrow viewport) -->
@@ -141,38 +137,38 @@ const isController = Boolean(code);
     align-items: center;
   }
 
-  .canvas-container {
-    width: 100%;
-    max-width: 800px;
-    aspect-ratio: 4 / 3;
-    height: auto;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 8px;
+  .console-shell {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .console-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: 1rem;
+    block-size: 3.5rem;
+    border-bottom: 1px solid var(--gray-6, #ccc);
+  }
+
+  .room-code-chip {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .game-viewport {
+    flex: 1 1 auto;
+    min-height: 0;
     position: relative;
     overflow: hidden;
   }
 
-  #touch-canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-
-  .console-shell {
-    position: relative;
-    min-height: calc(100vh - 4rem);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .desktop-console {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+  .game-surface {
+    position: absolute;
+    inset: 0;
   }
 
   .mobile-console {
@@ -180,7 +176,8 @@ const isController = Boolean(code);
   }
 
   @media (max-width: 768px) {
-    .desktop-console {
+    .console-topbar,
+    .game-viewport {
       display: none !important;
     }
     .mobile-console {
@@ -189,6 +186,7 @@ const isController = Boolean(code);
       align-items: center;
       justify-content: center;
       width: 100%;
+      height: 100dvh;
       padding: 1rem;
     }
   }
@@ -199,8 +197,10 @@ const isController = Boolean(code);
 
   .start-screen {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
+    height: 100%;
     padding: 3rem 1rem;
   }
 
@@ -220,10 +220,6 @@ const isController = Boolean(code);
   }
 
   .add-players-btn {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 100;
     padding: 0.5rem 1rem;
     font-size: 0.9rem;
     font-weight: bold;
@@ -236,11 +232,6 @@ const isController = Boolean(code);
 
   .add-players-btn:hover {
     background-color: var(--gray-4, #ddd);
-  }
-
-  .demo-view {
-    width: 100%;
-    max-width: 900px;
   }
 
   /* Modal Styling */

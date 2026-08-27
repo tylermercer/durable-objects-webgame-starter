@@ -1,8 +1,4 @@
-import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
-import type { ConsoleGameInstance } from "@contract/gameTypes";
-import type { RpcStub } from "capnweb";
-import type { ConsoleApi } from "../../lib/signaling-api";
-import type { PlayerConnectionStatus } from "@host/console";
+import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import { createRng } from "../../utils/rng";
 import { createStore } from "@react/reactStore";
 import { isValidBid, resolveChallenge } from "./rules";
@@ -18,22 +14,6 @@ import type {
   PlayerPublicInfo,
   PublicGameState,
 } from "./types";
-
-export interface ControllerPeer {
-  id: string;
-  name: string;
-  color: string;
-  isFirstPlayer?: boolean;
-  pc: PeerConnection | null;
-  state: string;
-  status?: PlayerConnectionStatus;
-  lastTouch?: TouchMessage;
-}
-
-export interface ConsoleContext {
-  session: RpcStub<ConsoleApi> | null;
-  peers: Map<string, ControllerPeer>;
-}
 
 const REVEAL_DURATION = 6; // 6 seconds reveal display
 
@@ -107,47 +87,22 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   const store = createStore<PublicGameState>(getPublicGameState());
-  let root: Root | null = null;
 
-  // Ensure DOM container in #demo-view
-  const demoView = document.getElementById("demo-view");
-  let gameContainer = document.getElementById("liars-dice-console");
-
-  if (demoView) {
-    demoView.classList.remove("u-hidden");
-    const heading = demoView.querySelector("h2");
-    if (heading && heading.textContent?.includes("Live Touch Visualization")) {
-      heading.style.display = "none";
-    }
-    const canvasContainer = demoView.querySelector(".canvas-container");
-    if (canvasContainer) {
-      (canvasContainer as HTMLElement).style.display = "none";
-    }
-    if (!gameContainer) {
-      gameContainer = document.createElement("div");
-      gameContainer.id = "liars-dice-console";
-      gameContainer.className = "liars-dice-console l-stack l-space-m";
-      demoView.appendChild(gameContainer);
-    }
-  }
-
-  if (gameContainer) {
-    root = createRoot(gameContainer);
-    root.render(
-      React.createElement(LiarsDiceConsole, {
-        store,
-        ctx,
-        onStartRound: (keepRoundNumber) => startNextRound(keepRoundNumber),
-        onNewGame: () => {
-          playerDiceCounts.clear();
-          roundNumber = 0;
-          lastChallengeResult = null;
-          winner = null;
-          startNextRound(false);
-        },
-      })
-    );
-  }
+  const root: Root = createRoot(ctx.viewport.container);
+  root.render(
+    React.createElement(LiarsDiceConsole, {
+      store,
+      ctx,
+      onStartRound: (keepRoundNumber) => startNextRound(keepRoundNumber),
+      onNewGame: () => {
+        playerDiceCounts.clear();
+        roundNumber = 0;
+        lastChallengeResult = null;
+        winner = null;
+        startNextRound(false);
+      },
+    })
+  );
 
   // Load persisted state if available
   if (ctx.session) {
@@ -420,10 +375,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
 
     destroy: () => {
-      root?.unmount();
-      if (gameContainer) {
-        gameContainer.innerHTML = "";
-      }
+      root.unmount();
+      ctx.viewport.container.innerHTML = "";
     },
   };
 }

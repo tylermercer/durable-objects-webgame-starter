@@ -1,8 +1,5 @@
 import { Application, Container, Graphics, Text, TextStyle } from "pixi.js";
-import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
-import type { ConsoleGameInstance } from "@contract/gameTypes";
-import type { RpcStub } from "capnweb";
-import type { ConsoleApi } from "../../lib/signaling-api";
+import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import { createFixedTickLoop } from "../../utils/gameLoop";
 import {
   createInitialRoundState,
@@ -20,21 +17,6 @@ import type {
   RoundStateSnapshot,
 } from "./types";
 
-export interface ControllerPeer {
-  id: string;
-  name: string;
-  color: string;
-  isFirstPlayer?: boolean;
-  pc: PeerConnection | null;
-  state: string;
-  lastTouch?: TouchMessage;
-}
-
-export interface ConsoleContext {
-  session: RpcStub<ConsoleApi> | null;
-  peers: Map<string, ControllerPeer>;
-}
-
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
@@ -49,36 +31,12 @@ interface BirdDisplayObject {
 }
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
-  // Make sure canvas container is visible in demo view
-  const demoView = document.getElementById("demo-view");
-  if (demoView) {
-    demoView.classList.remove("u-hidden");
-    const heading = demoView.querySelector("h2");
-    if (heading && heading.textContent === "Live Touch Visualization") {
-      heading.textContent = "Flappy Royale";
-    }
-    const canvasContainer = demoView.querySelector(".canvas-container");
-    if (canvasContainer) {
-      (canvasContainer as HTMLElement).style.display = "block";
-    }
-  }
-
-  // Hide existing static touch canvas if present to avoid dual canvas rendering
-  const touchCanvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
-  const originalTouchCanvasDisplay = touchCanvas ? touchCanvas.style.display : "";
-  if (touchCanvas) {
-    touchCanvas.style.display = "none";
-  }
-
   // Create dedicated canvas element for Pixi WebGL context
   const canvas = document.createElement("canvas");
   canvas.style.display = "block";
   canvas.style.width = "100%";
   canvas.style.height = "100%";
-  const canvasContainer = document.querySelector(".canvas-container");
-  if (canvasContainer) {
-    canvasContainer.appendChild(canvas);
-  }
+  ctx.viewport.container.appendChild(canvas);
 
   let app: Application | null = null;
   let ready = false;
@@ -150,13 +108,22 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     world.scale.set(scaleX, scaleY);
   }
 
+  function handleResize(size: { width: number; height: number }) {
+    if (app && size.width > 0 && size.height > 0) {
+      app.renderer.resize(size.width, size.height);
+      applyWorldScale();
+    }
+  }
+
   const appInstance = new Application();
   const init = appInstance
     .init({
       canvas,
-      resizeTo: canvas.parentElement ?? undefined,
+      resizeTo: undefined,
       autoStart: false,
       backgroundAlpha: 0,
+      width: ctx.viewport.initialSize.width || 800,
+      height: ctx.viewport.initialSize.height || 600,
     })
     .then(() => {
       app = appInstance;
@@ -188,10 +155,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         .stroke({ width: 2, color: 0x538021 });
 
       applyWorldScale();
-      app.renderer.on("resize", applyWorldScale);
-
       ready = true;
     });
+
+  const unsubscribeResize = ctx.viewport.onResize((size) => {
+    handleResize(size);
+  });
 
   let roundSeed = Math.floor(Math.random() * 2147483647);
   let currentState: RoundState = {
@@ -642,10 +611,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     destroy: () => {
       loop.stop();
+      unsubscribeResize();
       canvas.removeEventListener("click", handleCanvasClick);
-      if (touchCanvas) {
-        touchCanvas.style.display = originalTouchCanvasDisplay;
-      }
       init.then(() => {
         app?.destroy(true, { children: true, texture: true });
         canvas.remove();

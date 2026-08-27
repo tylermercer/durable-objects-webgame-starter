@@ -1,45 +1,28 @@
-import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
-import type { ConsoleGameInstance } from "@contract/gameTypes";
-import type { RpcStub } from "capnweb";
-import type { ConsoleApi } from "../../lib/signaling-api";
-
-export interface ControllerPeer {
-  id: string;
-  name: string;
-  color: string;
-  isFirstPlayer?: boolean;
-  pc: PeerConnection | null;
-  state: string;
-  lastTouch?: TouchMessage;
-}
-
-export interface ConsoleContext {
-  session: RpcStub<ConsoleApi> | null;
-  peers: Map<string, ControllerPeer>;
-}
+import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
-  const canvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
-  const ctx2d = canvas?.getContext("2d") || null;
+  const canvas = document.createElement("canvas");
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  ctx.viewport.container.appendChild(canvas);
 
-  function resizeCanvas() {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
+  const ctx2d = canvas.getContext("2d");
+
+  function resizeCanvas(size: { width: number; height: number }) {
+    if (size.width > 0 && size.height > 0) {
+      canvas.width = size.width * window.devicePixelRatio;
+      canvas.height = size.height * window.devicePixelRatio;
     }
   }
 
-  if (typeof window !== "undefined" && canvas) {
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-  }
+  resizeCanvas(ctx.viewport.initialSize);
+  const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
   return {
     tick: (_dt: number) => {},
     render: (_alpha: number) => {
-      if (!ctx2d || !canvas) return;
+      if (!ctx2d) return;
       ctx2d.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const controller of ctx.peers.values()) {
@@ -73,9 +56,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
     },
     destroy: () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("resize", resizeCanvas);
-      }
+      unsubscribeResize();
+      canvas.remove();
     }
   };
 }
