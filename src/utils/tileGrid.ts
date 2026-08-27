@@ -59,14 +59,22 @@ export class TileGrid<T> {
   findPath(
     start: GridPos,
     goal: GridPos,
-    cost: (pos: GridPos, cell: T) => number
+    cost: (pos: GridPos, cell: T) => number,
+    options?: { diagonals?: boolean }
   ): GridPos[] | null {
     if (!this.inBounds(start) || !this.inBounds(goal)) return null;
 
+    const diagonals = options?.diagonals ?? false;
+
     const key = (p: GridPos) => `${p.x},${p.y}`;
     const goalKey = key(goal);
-    const heuristic = (a: GridPos, b: GridPos) =>
-      Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    const heuristic = diagonals
+      ? (a: GridPos, b: GridPos) => {
+          const dx = Math.abs(a.x - b.x);
+          const dy = Math.abs(a.y - b.y);
+          return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+        }
+      : (a: GridPos, b: GridPos) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
     const gScore = new Map<string, number>([[key(start), 0]]);
     const parent = new Map<string, string>();
@@ -83,7 +91,7 @@ export class TileGrid<T> {
       open.delete(curKey);
       closed.add(curKey);
 
-      for (const n of this.neighbors(cur.pos, false)) {
+      for (const n of this.neighbors(cur.pos, diagonals)) {
         const nKey = key(n);
         if (closed.has(nKey)) continue;
         const cell = this.get(n);
@@ -91,7 +99,24 @@ export class TileGrid<T> {
         const cellCost = cost(n, cell);
         if (!Number.isFinite(cellCost)) continue;
 
-        const g = gScore.get(curKey)! + cellCost;
+        const dx = n.x - cur.pos.x;
+        const dy = n.y - cur.pos.y;
+        const isDiagonal = dx !== 0 && dy !== 0;
+
+        if (isDiagonal) {
+          // Disallow cutting through the corner where two orthogonal
+          // neighbors meet — both must be open, not just the diagonal cell.
+          const cornerA = { x: cur.pos.x + dx, y: cur.pos.y };
+          const cornerB = { x: cur.pos.x, y: cur.pos.y + dy };
+          const cellA = this.get(cornerA);
+          const cellB = this.get(cornerB);
+          const openA = cellA !== undefined && Number.isFinite(cost(cornerA, cellA));
+          const openB = cellB !== undefined && Number.isFinite(cost(cornerB, cellB));
+          if (!openA || !openB) continue;
+        }
+
+        const stepCost = cellCost * (isDiagonal ? Math.SQRT2 : 1);
+        const g = gScore.get(curKey)! + stepCost;
         if (g < (gScore.get(nKey) ?? Infinity)) {
           parent.set(nKey, curKey);
           gScore.set(nKey, g);
