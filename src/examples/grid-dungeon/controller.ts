@@ -15,7 +15,7 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
   const maxRadius = 60;
 
   // Render controller UI container
-  const appContainer = document.getElementById("controller-app");
+  const appContainer = document.getElementById("touch-surface");
   const container = document.createElement("div");
   container.className = "grid-dungeon-controller";
   container.style.cssText = `
