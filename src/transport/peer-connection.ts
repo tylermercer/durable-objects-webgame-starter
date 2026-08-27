@@ -56,6 +56,10 @@ export type ControlMessage =
   | PongMessage
   | UnknownControlMessage;
 
+export type UnknownInputMessage = { type: string } & Record<string, unknown>;
+
+export type InputMessage = TouchMessage | UnknownInputMessage;
+
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
   onStateChange?: (state: RTCPeerConnectionState) => void;
@@ -83,6 +87,7 @@ export class PeerConnection {
   pendingIceCandidates: RTCIceCandidateInit[] = [];
   private coalescingControlSender: CoalescingSender;
   private controlListeners: Array<(msg: ControlMessage) => void> = [];
+  private inputListeners: Array<(msg: InputMessage) => void> = [];
 
   constructor(
     public isInitiator: boolean,
@@ -139,6 +144,13 @@ export class PeerConnection {
     };
   }
 
+  addInputListener(listener: (msg: InputMessage) => void) {
+    this.inputListeners.push(listener);
+    return () => {
+      this.inputListeners = this.inputListeners.filter(l => l !== listener);
+    };
+  }
+
   private setupChannel(channel: RTCDataChannel) {
     channel.onopen = () => {
       if (channel.label === "control") {
@@ -149,8 +161,13 @@ export class PeerConnection {
     channel.onmessage = event => {
       try {
         const data = JSON.parse(event.data);
-        if (channel.label === "input" && data.type === "touch") {
-          this.callbacks.onInputMessage?.(data as TouchMessage);
+        if (channel.label === "input") {
+          if (data.type === "touch") {
+            this.callbacks.onInputMessage?.(data as TouchMessage);
+          }
+          for (const listener of [...this.inputListeners]) {
+            listener(data as InputMessage);
+          }
         } else if (channel.label === "control") {
           if (data.type === "ping") {
             this.sendControl({ type: "pong", t: data.t });

@@ -137,7 +137,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
       if (peer.pc && !attachedListeners.has(id)) {
         attachedListeners.add(id);
-        peer.pc.addControlListener((msg) => {
+        peer.pc.addInputListener((msg) => {
           if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
             joystickInputs.set(
               id,
