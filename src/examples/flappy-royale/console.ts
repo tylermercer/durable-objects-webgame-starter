@@ -112,6 +112,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     if (app && size.width > 0 && size.height > 0) {
       app.renderer.resize(size.width, size.height);
       applyWorldScale();
+      if (ready) {
+        syncPipes(1);
+        syncBirds(1);
+        syncUI();
+        app.render();
+      }
     }
   }
 
@@ -179,12 +185,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
-      if (peer.isFirstPlayer && peer.state === "connected") {
+      if (
+        peer.isFirstPlayer &&
+        (peer.status === "live" || peer.state === "connected" || peer.state === "live")
+      ) {
         return peer.id;
       }
     }
     for (const peer of ctx.peers.values()) {
-      if (peer.state === "connected") return peer.id;
+      if (peer.status === "live" || peer.state === "connected" || peer.state === "live") {
+        return peer.id;
+      }
     }
     return null;
   }
@@ -309,19 +320,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       if (peer.pc) {
         if (!attachedListeners.has(id)) {
           attachedListeners.add(id);
-          peer.pc.addControlListener((msg) => {
-            const fMsg = msg as unknown as FlappyControlMessage;
+          const handleMsg = (msg: unknown) => {
+            const fMsg = msg as FlappyControlMessage;
             if (fMsg.type === "flap") {
               handleFlapInput(id);
             }
-          });
-        }
-
-        if (currentState.phase === "waiting" && !currentState.birds[id]) {
-          const firstPlayerId = getFirstPlayerId();
-          if (id === firstPlayerId) {
-            startNewRound();
-          }
+          };
+          peer.pc.addControlListener(handleMsg);
+          peer.pc.addInputListener(handleMsg);
         }
       }
     }
@@ -369,13 +375,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
   });
 
-  const handleCanvasClick = () => {
-    if (currentState.phase === "waiting" || currentState.phase === "roundOver") {
-      startNewRound();
-    }
-  };
-
-  canvas.addEventListener("click", handleCanvasClick);
 
   function syncPipes(alpha: number) {
     const pipeInterpolatedDx = (alpha * (1 / 60)) * PIPE_SPEED;
@@ -540,7 +539,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       titleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 - 40);
       titleText.visible = true;
 
-      subtitleText.text = "First player tap screen or click here to start round!";
+      subtitleText.text = "First player tap screen to start round!";
       subtitleText.style.fill = 0xffffff;
       subtitleText.style.fontSize = 18;
       subtitleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 10);
@@ -574,7 +573,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       subtitleText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 - 10);
       subtitleText.visible = true;
 
-      infoText.text = "First player tap screen or click here to Play Again!";
+      infoText.text = "First player tap screen to Play Again!";
       infoText.style.fill = 0x2ecc40;
       infoText.style.fontSize = 20;
       infoText.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50);
@@ -612,7 +611,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     destroy: () => {
       loop.stop();
       unsubscribeResize();
-      canvas.removeEventListener("click", handleCanvasClick);
       init.then(() => {
         app?.destroy(true, { children: true, texture: true });
         canvas.remove();

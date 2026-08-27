@@ -153,16 +153,24 @@ export function createGame(ctx: ControllerContext) {
       </div>
     `;
 
-    const flapBtn = document.getElementById("flap-btn");
-    if (flapBtn) {
-      flapBtn.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        handleFlap();
-      });
-    }
+  }
+
+  const onPointerDown = (e: PointerEvent) => {
+    e.preventDefault();
+    handleFlap();
+  };
+
+  if (surface) {
+    surface.addEventListener("pointerdown", onPointerDown);
   }
 
   render();
 
-  return {};
+  return {
+    destroy: () => {
+      if (surface) {
+        surface.removeEventListener("pointerdown", onPointerDown);
+      }
+    },
+  };
 }
