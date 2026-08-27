@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { createStore } from "@react/reactStore";
 import type { PublicGameState } from "./types";
-import type { ConsoleContext } from "./console";
+import type { ConsoleContext } from "@contract/gameTypes";
 
 const diceIcons = ["🎲", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
@@ -27,6 +27,8 @@ export function LiarsDiceConsole({
         padding: "1.5rem",
         borderRadius: "12px",
         boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+        inlineSize: "min(720px, 100%)",
+        marginInline: "auto",
       }}
     >
       <div

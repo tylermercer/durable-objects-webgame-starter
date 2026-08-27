@@ -1,0 +1,64 @@
+---
+import { EXAMPLES } from '@examples/registry';
+---
+
+<div class="example-switcher" role="list">
+  {Object.entries(EXAMPLES).map(([id, example]) => (
+    <button type="button" class="example-btn" data-example-id={id} role="listitem">
+      {example.label}
+    </button>
+  ))}
+</div>
+
+<script>
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".example-btn");
+  const saved = localStorage.getItem("selected_example");
+
+  function markSelected(id: string) {
+    for (const btn of buttons) {
+      btn.setAttribute("aria-pressed", String(btn.dataset.exampleId === id));
+    }
+  }
+  if (saved) markSelected(saved);
+
+  for (const btn of buttons) {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.exampleId!;
+      localStorage.setItem("selected_example", id);
+      markSelected(id);
+      window.dispatchEvent(new CustomEvent("example-changed", { detail: { exampleId: id } }));
+    });
+  }
+</script>
+
+<style>
+  .example-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .example-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--gray-6, #ccc);
+    background-color: var(--gray-1, #fff);
+    color: var(--gray-12, #000);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .example-btn:hover {
+    background-color: var(--gray-3, #eee);
+  }
+
+  .example-btn[aria-pressed="true"] {
+    background-color: var(--primary-9, #0070f3);
+    color: var(--gray-contrast, #ffffff);
+    border-color: var(--primary-10, #0051a2);
+  }
+</style>

@@ -1,8 +1,5 @@
-import type { PeerConnection } from "@transport/peer-connection";
-import type { ConsoleGameInstance } from "@contract/gameTypes";
-import type { RpcStub } from "capnweb";
+import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import type { PlayerConnectionStatus } from "@host/console";
-import type { ConsoleApi } from "../../lib/signaling-api";
 import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
@@ -19,56 +16,28 @@ import {
 } from "./room";
 import type { DungeonEntity, JoystickState, NpcEntity, PlayerEntity, RoomStateSnapshot } from "./types";
 
-export interface ControllerPeer {
-  id: string;
-  name: string;
-  color: string;
-  isFirstPlayer?: boolean;
-  pc: PeerConnection | null;
-  state: string;
-  status?: PlayerConnectionStatus;
-}
-
-export interface ConsoleContext {
-  session: RpcStub<ConsoleApi> | null;
-  peers: Map<string, ControllerPeer>;
-}
-
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
-  // Reveal demo view canvas container
-  const demoView = document.getElementById("demo-view");
-  if (demoView) {
-    demoView.classList.remove("u-hidden");
-    const heading = demoView.querySelector("h2");
-    if (heading && heading.textContent === "Live Touch Visualization") {
-      heading.textContent = "Grid Dungeon";
-    }
-    const canvasContainer = demoView.querySelector(".canvas-container");
-    if (canvasContainer) {
-      (canvasContainer as HTMLElement).style.display = "block";
-    }
-  }
-
-  // Hide static touch canvas if present
-  const touchCanvas = document.getElementById("touch-canvas") as HTMLCanvasElement | null;
-  const originalTouchCanvasDisplay = touchCanvas ? touchCanvas.style.display : "";
-  if (touchCanvas) {
-    touchCanvas.style.display = "none";
-  }
-
   // Create dedicated canvas
   const canvas = document.createElement("canvas");
-  canvas.width = 800;
-  canvas.height = 600;
   canvas.style.display = "block";
   canvas.style.width = "100%";
   canvas.style.height = "100%";
-  const canvasContainer = document.querySelector(".canvas-container");
-  if (canvasContainer) {
-    canvasContainer.appendChild(canvas);
-  }
+  ctx.viewport.container.appendChild(canvas);
 
   const canvasCtx = canvas.getContext("2d");
+
+  let currentViewportSize = { width: ctx.viewport.initialSize.width, height: ctx.viewport.initialSize.height };
+
+  function resizeCanvas(size: { width: number; height: number }) {
+    currentViewportSize = size;
+    if (size.width > 0 && size.height > 0) {
+      canvas.width = size.width * window.devicePixelRatio;
+      canvas.height = size.height * window.devicePixelRatio;
+    }
+  }
+
+  resizeCanvas(ctx.viewport.initialSize);
+  const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
   const grid = createRoomGrid();
   let registry = createInitialEntities();
@@ -77,11 +46,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
   const camera = new Camera({
-    viewportWidth: 800,
-    viewportHeight: 600,
+    viewportWidth: ROOM_WIDTH * TILE_SIZE,
+    viewportHeight: ROOM_HEIGHT * TILE_SIZE,
     worldWidth: ROOM_WIDTH * TILE_SIZE,
     worldHeight: ROOM_HEIGHT * TILE_SIZE,
-    smoothing: 0.1, // Smooth camera easing toward targets
+    smoothing: 0.1,
   });
 
   // Load saved state if available
@@ -131,9 +100,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function syncPeers() {
     const activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus; state?: string }> = [];
     for (const [id, peer] of ctx.peers) {
-      const status = peer.status ?? peer.state;
+      const status = (peer.status ?? peer.state) as PlayerConnectionStatus | string;
       if (status === "live" || status === "reconnecting" || status === "connected") {
-        activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status, state: peer.state });
+        activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status as PlayerConnectionStatus, state: peer.state });
       }
       if (peer.pc && !attachedListeners.has(id)) {
         attachedListeners.add(id);
@@ -172,10 +141,25 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function draw() {
     if (!canvasCtx) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    const viewWidth = currentViewportSize.width * dpr;
+    const viewHeight = currentViewportSize.height * dpr;
+
     canvasCtx.fillStyle = "#111116";
     canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+    if (viewWidth <= 0 || viewHeight <= 0) return;
+
+    const worldW = ROOM_WIDTH * TILE_SIZE;
+    const worldH = ROOM_HEIGHT * TILE_SIZE;
+
+    const scale = Math.min(viewWidth / worldW, viewHeight / worldH);
+    const offsetX = (viewWidth - worldW * scale) / 2;
+    const offsetY = (viewHeight - worldH * scale) / 2;
+
     canvasCtx.save();
+    canvasCtx.translate(offsetX, offsetY);
+    canvasCtx.scale(scale, scale);
     canvasCtx.translate(-camera.x, -camera.y);
 
     // Render floor & wall tiles
@@ -266,6 +250,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     canvasCtx.restore();
 
     // Render HUD overlay (connected players count)
+    const hudScale = Math.max(1, dpr);
+    canvasCtx.save();
+    canvasCtx.scale(hudScale, hudScale);
     canvasCtx.fillStyle = "#000000";
     canvasCtx.globalAlpha = 0.5;
     canvasCtx.fillRect(10, 10, 220, 36);
@@ -274,6 +261,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     canvasCtx.font = "bold 14px sans-serif";
     canvasCtx.textAlign = "left";
     canvasCtx.fillText(`Players: ${players.length}`, 20, 33);
+    canvasCtx.restore();
   }
 
   return {
@@ -283,9 +271,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
     destroy: () => {
       loop.stop();
-      if (touchCanvas) {
-        touchCanvas.style.display = originalTouchCanvasDisplay;
-      }
+      unsubscribeResize();
       canvas.remove();
     },
   };
