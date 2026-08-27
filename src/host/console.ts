@@ -116,10 +116,6 @@ export class ConsoleApp {
   async init() {
     this.setupUIHandlers();
     this.renderHeader();
-    const savedExample = typeof localStorage !== "undefined" ? localStorage.getItem("selected_example") : null;
-    if (savedExample) {
-      await this.initGame();
-    }
     this.connectSignaling();
   }
 
@@ -154,6 +150,7 @@ export class ConsoleApp {
         surface.classList.remove("u-hidden");
       }
       document.getElementById("start-screen")?.classList.add("u-hidden");
+      document.getElementById("add-players-btn")?.classList.remove("u-hidden");
 
       this.ensureResizeObserver();
       const rect = surface ? surface.getBoundingClientRect() : { width: 800, height: 600 };
@@ -244,6 +241,7 @@ export class ConsoleApp {
     window.addEventListener("example-changed", async () => {
       this.renderHeader();
       await this.initGame();
+      this.openModal();
     });
   }
 
