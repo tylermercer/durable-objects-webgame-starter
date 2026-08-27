@@ -114,6 +114,7 @@ const isController = Boolean(code);
           </div>
 
           <div class="modal-actions">
+            <button id="copy-link-btn" class="btn-copy-link" type="button">Copy Link</button>
             <button id="modal-close-btn" class="btn-done" type="button">Done</button>
           </div>
         </div>
@@ -262,6 +263,23 @@ const isController = Boolean(code);
   .modal-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .btn-copy-link {
+    padding: 0.5rem 1.25rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: var(--gray-3, #eee);
+    color: var(--gray-12, #111);
+    border: 1px solid var(--gray-6, #ccc);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .btn-copy-link:hover {
+    background-color: var(--gray-4, #ddd);
   }
 
   .btn-done {

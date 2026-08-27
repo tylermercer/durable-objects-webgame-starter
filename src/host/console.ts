@@ -3,9 +3,9 @@ import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
-import { PeerConnection, type TouchMessage } from "@transport/peer-connection";
-import { loadConsoleGame, buildJoinUrl } from "@contract/gameSource";
-import type { ConsoleGameInstance } from "@contract/gameTypes";
+import { PeerConnection, type TouchMessage } from "../transport/peer-connection";
+import { loadConsoleGame, buildJoinUrl } from "../contract/gameSource";
+import type { ConsoleGameInstance } from "../contract/gameTypes";
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
@@ -77,7 +77,7 @@ class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
   }
 }
 
-class ConsoleApp {
+export class ConsoleApp {
   code: string;
   controllers = new Map<string, ControllerState>();
   firstPlayerId: string | null = null;
@@ -89,15 +89,25 @@ class ConsoleApp {
   activeGame: ConsoleGameInstance | null = null;
 
   constructor() {
-    const urlParams = new URLSearchParams(window.location.search);
-    let codeParam = urlParams.get("code");
-    if (!codeParam) {
-      codeParam = generateRoomCode();
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set("code", codeParam);
-      window.history.replaceState({}, "", newUrl.toString());
+    let code: string | null = null;
+    try {
+      if (typeof localStorage !== "undefined") {
+        code = localStorage.getItem("console_room_code");
+      }
+    } catch {
+      // storage disabled / private browsing
     }
-    this.code = codeParam.toUpperCase();
+    if (!code) {
+      code = generateRoomCode();
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("console_room_code", code);
+        }
+      } catch {
+        // storage disabled / private browsing
+      }
+    }
+    this.code = code.toUpperCase();
   }
 
   async init() {
@@ -143,6 +153,23 @@ class ConsoleApp {
     const modalCloseBtn = document.getElementById("modal-close-btn");
     if (modalCloseBtn) {
       modalCloseBtn.addEventListener("click", () => this.closeModal());
+    }
+
+    const copyLinkBtn = document.getElementById("copy-link-btn");
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener("click", async () => {
+        const joinUrl = buildJoinUrl(window.location.origin, this.code);
+        try {
+          await navigator.clipboard.writeText(joinUrl);
+          const originalText = copyLinkBtn.textContent;
+          copyLinkBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyLinkBtn.textContent = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error("Failed to copy join link:", err);
+        }
+      });
     }
 
     if (this.modal) {
