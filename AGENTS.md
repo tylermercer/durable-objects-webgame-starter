@@ -2,13 +2,19 @@
 
 ## tsconfig.json Import Aliases
 
-The `tsconfig.json` file defines import aliases for cleaner and more maintainable import paths. When working with imports, prefer using these aliases:
+The `tsconfig.json` file defines import aliases for cleaner and more maintainable import paths. **Always prefer using these path aliases everywhere** across the codebase instead of relative paths (`../` or `../../`):
 
 - `@styles/*`: maps to `src/styles/*`
 - `@components/*`: maps to `src/components/*`
 - `@assets/*`: maps to `src/assets/*`
 - `@layouts/*`: maps to `src/layouts/*`
 - `@utils/*`: maps to `src/utils/*`
+- `@examples/*`: maps to `src/examples/*`
+- `@logic/*`: maps to `src/logic/*`
+- `@host/*`: maps to `src/host/*`
+- `@transport/*`: maps to `src/transport/*`
+- `@contract/*`: maps to `src/contract/*`
+- `@react/*`: maps to `src/react/*`
 
 ## Astro Configuration (astro.config.mjs)
 
