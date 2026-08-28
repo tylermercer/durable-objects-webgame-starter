@@ -1,5 +1,7 @@
-import { TileGrid, type GridPos } from "../../utils/tileGrid";
-import { EntityRegistry } from "../../utils/entityRegistry";
+import { TileGrid, type GridPos } from "@utils/tileGrid";
+import { EntityRegistry } from "@utils/entityRegistry";
+import { moveCircleAgainstGrid, steerToward } from "@utils/circleMovement";
+import { simplifyPath } from "@utils/pathSmoothing";
 import type { PlayerConnectionStatus } from "@host/console";
 import type { DungeonEntity, GridCell, JoystickState, NpcEntity, PlayerEntity } from "./types";
 
@@ -114,47 +116,16 @@ export function movePlayer(
 
   const playerRadius = 0.35; // Player bounding circle in tile units
 
-  // Try X movement
-  const targetX = player.x + dx;
-  const minTileX = Math.floor(targetX - playerRadius);
-  const maxTileX = Math.floor(targetX + playerRadius);
-  const minTileY = Math.floor(player.y - playerRadius);
-  const maxTileY = Math.floor(player.y + playerRadius);
-
-  let xOk = true;
-  for (let tx = minTileX; tx <= maxTileX; tx++) {
-    for (let ty = minTileY; ty <= maxTileY; ty++) {
-      if (!isWalkablePos(grid, tx, ty)) {
-        xOk = false;
-        break;
-      }
-    }
-    if (!xOk) break;
-  }
-  if (xOk) {
-    player.x = targetX;
-  }
-
-  // Try Y movement
-  const targetY = player.y + dy;
-  const curMinTileX = Math.floor(player.x - playerRadius);
-  const curMaxTileX = Math.floor(player.x + playerRadius);
-  const newMinTileY = Math.floor(targetY - playerRadius);
-  const newMaxTileY = Math.floor(targetY + playerRadius);
-
-  let yOk = true;
-  for (let tx = curMinTileX; tx <= curMaxTileX; tx++) {
-    for (let ty = newMinTileY; ty <= newMaxTileY; ty++) {
-      if (!isWalkablePos(grid, tx, ty)) {
-        yOk = false;
-        break;
-      }
-    }
-    if (!yOk) break;
-  }
-  if (yOk) {
-    player.y = targetY;
-  }
+  const result = moveCircleAgainstGrid(
+    player,
+    playerRadius,
+    dx,
+    dy,
+    grid,
+    (_pos, cell) => cell.walkable
+  );
+  player.x = result.x;
+  player.y = result.y;
 }
 
 export function stepNpcWander(
@@ -217,6 +188,68 @@ export function stepNpcWander(
   }
 }
 
+export function stepNpcWanderFree(
+  npc: NpcEntity,
+  grid: TileGrid<GridCell>,
+  dt: number,
+  rng: () => number
+): void {
+  const npcRadius = 0.35;
+  const cost = (_pos: GridPos, cell: GridCell) => (cell.walkable ? 1 : Infinity);
+
+  if (npc.currentPath.length > 0) {
+    const targetCell = npc.currentPath[0];
+    const targetPos = { x: targetCell.x + 0.5, y: targetCell.y + 0.5 };
+
+    const { dx, dy } = steerToward(npc, targetPos, NPC_SPEED, dt, 0.05);
+
+    if (dx === 0 && dy === 0) {
+      // Arrived at current waypoint
+      npc.currentPath.shift();
+    } else {
+      const result = moveCircleAgainstGrid(
+        npc,
+        npcRadius,
+        dx,
+        dy,
+        grid,
+        (_pos, cell) => cell.walkable
+      );
+      npc.x = result.x;
+      npc.y = result.y;
+    }
+  } else {
+    npc.wanderTimer -= dt;
+    if (npc.wanderTimer <= 0) {
+      npc.wanderTimer = 2.0 + rng() * 3.0; // Reset wander timer to 2-5 seconds
+
+      const startPos: GridPos = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
+
+      // Pick a random walkable goal cell
+      const walkableCells: GridPos[] = [];
+      for (let y = 0; y < grid.height; y++) {
+        for (let x = 0; x < grid.width; x++) {
+          if (grid.get({ x, y })?.walkable) {
+            walkableCells.push({ x, y });
+          }
+        }
+      }
+
+      if (walkableCells.length > 0) {
+        const goalIndex = Math.floor(rng() * walkableCells.length);
+        const goalPos = walkableCells[goalIndex];
+
+        const path = grid.findPath(startPos, goalPos, cost, { diagonals: true });
+
+        if (path && path.length > 1) {
+          const simplified = simplifyPath(grid, path, cost);
+          npc.currentPath = simplified.slice(1);
+        }
+      }
+    }
+  }
+}
+
 export function stepRoom(
   grid: TileGrid<GridCell>,
   registry: EntityRegistry<DungeonEntity>,
@@ -232,6 +265,10 @@ export function stepRoom(
 
   const npcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
   for (const npc of npcs) {
-    stepNpcWander(npc, grid, dt, rng);
+    if (npc.id === "npc-skeleton") {
+      stepNpcWanderFree(npc, grid, dt, rng);
+    } else {
+      stepNpcWander(npc, grid, dt, rng);
+    }
   }
 }
