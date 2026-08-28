@@ -235,7 +235,7 @@ export class ConsoleApp {
         e.preventDefault();
         const code = joinInput.value.trim().toUpperCase();
         if (code) {
-          window.location.href = `/?code=${encodeURIComponent(code)}`;
+          window.location.href = buildJoinUrl(window.location.origin, encodeURIComponent(code));
         }
       });
     }

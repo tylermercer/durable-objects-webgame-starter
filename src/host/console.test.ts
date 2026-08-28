@@ -181,6 +181,45 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     expect(openModalSpy).toHaveBeenCalled();
   });
 
+  it("join-game-form submit preserves pathname using buildJoinUrl", () => {
+    let submitHandler: ((e: any) => void) | null = null;
+    const mockForm = {
+      addEventListener: vi.fn((event: string, cb: (e: any) => void) => {
+        if (event === "submit") submitHandler = cb;
+      })
+    };
+    const mockInput = { value: "2a3b4" };
+
+    const elements: Record<string, any> = {
+      "join-game-form": mockForm,
+      "join-code-input": mockInput
+    };
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => elements[id] ?? null,
+      createElement: () => createMockElement("div")
+    });
+
+    vi.stubGlobal("window", {
+      location: {
+        origin: "http://localhost:4321",
+        pathname: "/play/liars-dice",
+        search: "",
+        href: "http://localhost:4321/play/liars-dice"
+      }
+    });
+
+    const app = new ConsoleApp();
+    app.setupUIHandlers();
+
+    expect(submitHandler).not.toBeNull();
+    const mockEvent = { preventDefault: vi.fn() };
+    submitHandler!(mockEvent);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(window.location.href).toBe("http://localhost:4321/play/liars-dice?code=2A3B4");
+  });
+
   it("initGame() hides start screen and unhides add-players-btn", async () => {
     const elements: Record<string, ReturnType<typeof createMockElement>> = {
       "start-screen": createMockElement("start-screen"),
