@@ -14,9 +14,10 @@ async function main() {
     return;
   }
 
-  console.log("\x1b[34m[1/4]\x1b[0m Removing example route and demo games...");
+  console.log("\x1b[34m[1/4]\x1b[0m Removing example route, demo games, and eject CI workflow...");
   rmSync("./src/pages/play", { recursive: true, force: true });
   rmSync("./src/examples", { recursive: true, force: true });
+  rmSync("./.github/workflows/test-eject.yml", { force: true });
 
   console.log("\x1b[34m[2/4]\x1b[0m Rewriting src/pages/index.astro...");
   writeFileSync(
@@ -36,8 +37,13 @@ async function main() {
   await $`pnpm astro check`;
   await $`pnpm build`;
 
-  console.log("\n\x1b[32m[Success]\x1b[0m Ejected. src/logic/console.ts and");
-  console.log("src/logic/controller.ts are your game now — build away.\n");
+  console.log("\x1b[34m[5/5]\x1b[0m Cleaning up ejection script...");
+  rmSync("./scripts/eject.ts", { force: true });
+
+  console.log("\n\x1b[32m[Success]\x1b[0m Ejected into a single-game project.");
+  console.log("Next steps:");
+  console.log("  1. Commit your ejection changes: git commit -am 'eject from example starter'");
+  console.log("  2. Implement your game in src/logic/console.ts and src/logic/controller.ts — build away!\n");
 }
 
 main().catch((err) => {
