@@ -4,11 +4,11 @@ const getStorageKey = (roomCode?: string) =>
 export function getOrCreateRejoinToken(roomCode?: string): string {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof localStorage !== "undefined") {
-      let token = localStorage.getItem(key);
+    if (typeof sessionStorage !== "undefined") {
+      let token = sessionStorage.getItem(key);
       if (!token) {
         token = crypto.randomUUID();
-        localStorage.setItem(key, token);
+        sessionStorage.setItem(key, token);
       }
       return token;
     }
@@ -24,8 +24,8 @@ export function getOrCreateRejoinToken(roomCode?: string): string {
 export function persistRejoinToken(token: string, roomCode?: string): void {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(key, token);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(key, token);
       return;
     }
   } catch {
@@ -40,7 +40,7 @@ const NAME_KEY = "playerName";
 
 export function getSavedName(): string {
   try {
-    return localStorage.getItem(NAME_KEY) ?? "";
+    return sessionStorage.getItem(NAME_KEY) ?? "";
   } catch {
     return "";
   }
@@ -48,7 +48,7 @@ export function getSavedName(): string {
 
 export function saveName(name: string): void {
   try {
-    localStorage.setItem(NAME_KEY, name);
+    sessionStorage.setItem(NAME_KEY, name);
   } catch {
     // best-effort; a fresh prompt next time is an acceptable fallback
   }

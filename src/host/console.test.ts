@@ -7,7 +7,7 @@ describe("ConsoleApp room code persistence", () => {
   beforeEach(() => {
     mockStorage = {};
 
-    vi.stubGlobal("localStorage", {
+    vi.stubGlobal("sessionStorage", {
       getItem: vi.fn((key: string) => mockStorage[key] ?? null),
       setItem: vi.fn((key: string, val: string) => {
         mockStorage[key] = val;
@@ -40,23 +40,23 @@ describe("ConsoleApp room code persistence", () => {
     });
   });
 
-  it("generates a new room code and persists it in localStorage if none exists", () => {
-    expect(localStorage.getItem("console_room_code")).toBeNull();
+  it("generates a new room code and persists it in sessionStorage if none exists", () => {
+    expect(sessionStorage.getItem("console_room_code")).toBeNull();
 
     const app = new ConsoleApp();
 
     expect(app.code).toBeDefined();
     expect(app.code.length).toBeGreaterThan(0);
-    expect(localStorage.getItem("console_room_code")).toBe(app.code);
+    expect(sessionStorage.getItem("console_room_code")).toBe(app.code);
   });
 
-  it("reuses the existing room code from localStorage on subsequent instantiation (refresh)", () => {
-    localStorage.setItem("console_room_code", "ROOM123");
+  it("reuses the existing room code from sessionStorage on subsequent instantiation (refresh)", () => {
+    sessionStorage.setItem("console_room_code", "ROOM123");
 
     const app = new ConsoleApp();
 
     expect(app.code).toBe("ROOM123");
-    expect(localStorage.getItem("console_room_code")).toBe("ROOM123");
+    expect(sessionStorage.getItem("console_room_code")).toBe("ROOM123");
   });
 
   it("does not mutate window.location or call history.replaceState with code query param", () => {
@@ -92,7 +92,7 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     mockStorage = {};
     listeners = {};
 
-    vi.stubGlobal("localStorage", {
+    vi.stubGlobal("sessionStorage", {
       getItem: vi.fn((key: string) => mockStorage[key] ?? null),
       setItem: vi.fn((key: string, val: string) => {
         mockStorage[key] = val;
@@ -129,7 +129,7 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     });
   });
 
-  it("init() does not auto-start game even if selected_example exists in localStorage", async () => {
+  it("init() does not auto-start game even if selected_example exists in sessionStorage", async () => {
     const elements: Record<string, ReturnType<typeof createMockElement>> = {
       "start-screen": createMockElement("start-screen"),
       "add-players-btn": createMockElement("add-players-btn")
@@ -141,7 +141,7 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
       createElement: () => createMockElement("div")
     });
 
-    localStorage.setItem("selected_example", "flappy-royale");
+    sessionStorage.setItem("selected_example", "flappy-royale");
     const app = new ConsoleApp();
     const initGameSpy = vi.spyOn(app, "initGame");
     vi.spyOn(app, "connectSignaling").mockImplementation(() => {});

@@ -96,8 +96,8 @@ export class ConsoleApp {
   constructor() {
     let code: string | null = null;
     try {
-      if (typeof localStorage !== "undefined") {
-        code = localStorage.getItem("console_room_code");
+      if (typeof sessionStorage !== "undefined") {
+        code = sessionStorage.getItem("console_room_code");
       }
     } catch {
       // storage disabled / private browsing
@@ -105,8 +105,8 @@ export class ConsoleApp {
     if (!code) {
       code = generateRoomCode();
       try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("console_room_code", code);
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem("console_room_code", code);
         }
       } catch {
         // storage disabled / private browsing
@@ -288,7 +288,7 @@ export class ConsoleApp {
   }
 
   private getConsoleToken(): string | undefined {
-    return localStorage.getItem(`console_token_${this.code}`) || undefined;
+    return sessionStorage.getItem(`console_token_${this.code}`) || undefined;
   }
 
   handleFirstPlayerChanged(firstPlayerId: string | null) {
@@ -313,7 +313,7 @@ export class ConsoleApp {
         this.reconnectAttempt = 0;
         if (res) {
           if (res.consoleToken) {
-            localStorage.setItem(`console_token_${this.code}`, res.consoleToken);
+            sessionStorage.setItem(`console_token_${this.code}`, res.consoleToken);
           }
           if (res.firstPlayerId !== undefined) {
             this.firstPlayerId = res.firstPlayerId;
