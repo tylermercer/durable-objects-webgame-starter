@@ -114,6 +114,26 @@ Under the hood, ejection performs the following steps:
 - **Discrete events** (taps, swipes, gestures) — use the existing `input` channel event pattern directly (`{type:'touch', phase, x, y}` or your own event shape).
 - **Continuous input** (joystick position, held buttons) — use `InputStateSync` (`src/utils/InputStateSync.ts`), which sends a full state snapshot at a fixed rate rather than an event log. This matches the `input` channel's unreliable delivery: a dropped snapshot just means one stale frame, corrected by the next one.
 
+### Haptic Feedback on Controllers
+
+Controllers can include tactile vibration on touch interactions using [web-haptics](https://github.com/lochie/web-haptics):
+
+```ts
+import { WebHaptics } from "web-haptics";
+
+const haptics = new WebHaptics();
+
+// Trigger a short haptic vibration on initial pointer down / touch start only
+function onPointerDown() {
+  haptics.trigger("light");
+}
+
+// Clean up when destroying the controller instance
+function destroy() {
+  haptics.destroy();
+}
+```
+
 ### Simulation: fixed-tick loop
 
 Game logic shouldn't run at display refresh rate. `createFixedTickLoop` (`src/utils/gameLoop.ts`) decouples a fixed-Hz simulation step from rendering:

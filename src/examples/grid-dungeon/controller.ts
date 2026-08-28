@@ -2,6 +2,7 @@ import type { PeerConnection } from "@transport/peer-connection";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { InputStateSync } from "../../utils/InputStateSync";
 import type { JoystickState, DungeonControlMessage } from "./types";
+import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
@@ -9,6 +10,7 @@ export interface ControllerContext {
 }
 
 export function createGame(ctx: ControllerContext): ControllerGameInstance {
+  const haptics = new WebHaptics();
   let joystickVector: JoystickState = { x: 0, y: 0 };
   let activePointerId: number | null = null;
   let baseCenter = { x: 0, y: 0 };
@@ -116,6 +118,7 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
     if (activePointerId !== null) return;
     activePointerId = e.pointerId;
     joystickBase.setPointerCapture(e.pointerId);
+    haptics.trigger("light");
 
     const rect = joystickBase.getBoundingClientRect();
     baseCenter = {
@@ -146,6 +149,7 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
 
   return {
     destroy: () => {
+      haptics.destroy();
       inputSync.stop();
       unsubscribeControl?.();
       joystickBase.removeEventListener("pointerdown", onPointerDown);
