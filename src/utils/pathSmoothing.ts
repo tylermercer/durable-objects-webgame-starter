@@ -48,19 +48,94 @@ export function* walkSupercoverLine(a: GridPos, b: GridPos): Generator<GridPos> 
   }
 }
 
+function hasClearance<T>(
+  grid: TileGrid<T>,
+  a: GridPos,
+  b: GridPos,
+  cost: (pos: GridPos, cell: T) => number,
+  radius: number
+): boolean {
+  const ax = a.x + 0.5;
+  const ay = a.y + 0.5;
+  const bx = b.x + 0.5;
+  const by = b.y + 0.5;
+
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+
+  if (len === 0) {
+    return checkPointClearance(grid, ax, ay, cost, radius);
+  }
+
+  const stepSize = Math.min(0.1, radius / 2);
+  const steps = Math.ceil(len / stepSize);
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = ax + t * dx;
+    const py = ay + t * dy;
+
+    if (!checkPointClearance(grid, px, py, cost, radius)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function checkPointClearance<T>(
+  grid: TileGrid<T>,
+  px: number,
+  py: number,
+  cost: (pos: GridPos, cell: T) => number,
+  radius: number
+): boolean {
+  const minGx = Math.floor(px - radius);
+  const maxGx = Math.ceil(px + radius);
+  const minGy = Math.floor(py - radius);
+  const maxGy = Math.ceil(py + radius);
+
+  const radiusSq = radius * radius;
+
+  for (let gy = minGy; gy <= maxGy; gy++) {
+    for (let gx = minGx; gx <= maxGx; gx++) {
+      const pos = { x: gx, y: gy };
+      const value = grid.get(pos);
+      const isBlocked = value === undefined || !Number.isFinite(cost(pos, value));
+
+      if (isBlocked) {
+        const clampX = Math.max(gx, Math.min(gx + 1, px));
+        const clampY = Math.max(gy, Math.min(gy + 1, py));
+        const distSq = (px - clampX) ** 2 + (py - clampY) ** 2;
+
+        if (distSq < radiusSq) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 /** Grid-space line-of-sight: true if every cell the segment between `a`
  *  and `b` passes through is open per `cost`. Exported for reuse/testing. */
 export function hasLineOfSight<T>(
   grid: TileGrid<T>,
   a: GridPos,
   b: GridPos,
-  cost: (pos: GridPos, cell: T) => number
+  cost: (pos: GridPos, cell: T) => number,
+  radius = 0
 ): boolean {
   for (const cell of walkSupercoverLine(a, b)) {
     const value = grid.get(cell);
     if (value === undefined || !Number.isFinite(cost(cell, value))) {
       return false;
     }
+  }
+  if (radius > 0 && !hasClearance(grid, a, b, cost, radius)) {
+    return false;
   }
   return true;
 }
@@ -76,15 +151,17 @@ export function hasLineOfSight<T>(
 export function simplifyPath<T>(
   grid: TileGrid<T>,
   path: GridPos[],
-  cost: (pos: GridPos, cell: T) => number
+  cost: (pos: GridPos, cell: T) => number,
+  options?: { radius?: number }
 ): GridPos[] {
   if (path.length <= 2) return path;
 
+  const radius = options?.radius ?? 0;
   const result: GridPos[] = [path[0]];
   let anchor = 0;
 
   for (let probe = 2; probe < path.length; probe++) {
-    if (!hasLineOfSight(grid, path[anchor], path[probe], cost)) {
+    if (!hasLineOfSight(grid, path[anchor], path[probe], cost, radius)) {
       // Farthest-reachable point from anchor was probe - 1; keep it and
       // restart the scan from there.
       result.push(path[probe - 1]);

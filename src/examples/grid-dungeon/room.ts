@@ -195,6 +195,7 @@ export function stepNpcWanderFree(
   rng: () => number
 ): void {
   const npcRadius = 0.35;
+  const CLEARANCE_MARGIN = 0.05;
   const cost = (_pos: GridPos, cell: GridCell) => (cell.walkable ? 1 : Infinity);
 
   if (npc.currentPath.length > 0) {
@@ -242,7 +243,9 @@ export function stepNpcWanderFree(
         const path = grid.findPath(startPos, goalPos, cost, { diagonals: true });
 
         if (path && path.length > 1) {
-          const simplified = simplifyPath(grid, path, cost);
+          const simplified = simplifyPath(grid, path, cost, {
+            radius: npcRadius + CLEARANCE_MARGIN,
+          });
           npc.currentPath = simplified.slice(1);
         }
       }
