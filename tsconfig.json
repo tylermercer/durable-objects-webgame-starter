@@ -12,6 +12,7 @@
       "@layouts/*": ["src/layouts/*"],
       "@utils/*": ["src/utils/*"],
       "@examples/*": ["src/examples/*"],
+      "@examples": ["src/examples/index"],
       "@logic/*": ["src/logic/*"],
       "@host/*": ["src/host/*"],
       "@transport/*": ["src/transport/*"],
