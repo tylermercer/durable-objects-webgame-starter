@@ -8,6 +8,7 @@ import { unified } from '@astrojs/markdown-remark';
 export default defineConfig({
   site: 'https://durable-objects-webgame-starter.tmercer.workers.dev',
   session: false,
+  output: 'server',
   adapter: cloudflare(),
   integrations: [react()],
   markdown: {

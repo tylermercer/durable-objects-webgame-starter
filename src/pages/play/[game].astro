@@ -3,6 +3,8 @@ import Layout from '@layouts/Base.astro';
 import GameShell from '@components/GameShell.astro';
 import { EXAMPLES, type ExampleId } from '@examples/registry';
 
+export const prerender = true;
+
 export function getStaticPaths() {
   return Object.keys(EXAMPLES).map((game) => ({ params: { game } }));
 }
