@@ -1,0 +1,13 @@
+---
+/**
+ * Single-game index template (State 2)
+ * Used by scripts/eject.ts when converting from multi-example mode to single-game mode.
+ */
+import Layout from '@layouts/Base.astro';
+import GameShell from '@components/GameShell.astro';
+
+export const prerender = true;
+---
+<Layout>
+  <GameShell />
+</Layout>

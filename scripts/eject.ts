@@ -21,8 +21,9 @@ async function main() {
   console.log("\x1b[34m[2/4]\x1b[0m Rewriting src/pages/index.astro...");
   writeFileSync(
     "./src/pages/index.astro",
-    `---\nimport Layout from '@layouts/Base.astro';\nimport GameShell from '@components/GameShell.astro';\n\nexport const prerender = true;\n---\n<Layout>\n  <GameShell />\n</Layout>\n`
+    readFileSync("./src/pages/_index.astro", "utf-8")
   );
+  rmSync("./src/pages/_index.astro", { force: true });
 
   console.log("\x1b[34m[3/4]\x1b[0m Switching gameSource.ts to src/logic/...");
   writeFileSync(
