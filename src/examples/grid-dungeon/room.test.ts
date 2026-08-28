@@ -5,12 +5,13 @@ import {
   syncPlayers,
   movePlayer,
   stepNpcWander,
+  stepNpcWanderFree,
   ROOM_WIDTH,
   ROOM_HEIGHT,
 } from "./room";
-import { EntityRegistry } from "../../utils/entityRegistry";
+import { EntityRegistry } from "@utils/entityRegistry";
 import type { DungeonEntity, NpcEntity, PlayerEntity } from "./types";
-import { createRng } from "../../utils/rng";
+import { createRng } from "@utils/rng";
 
 describe("Grid Dungeon room simulation", () => {
   it("creates room grid with outer wall boundary and expected size", () => {
@@ -129,6 +130,30 @@ describe("Grid Dungeon room simulation", () => {
       stepNpcWander(npc, grid, 0.1, rng);
     }
     expect(npc.currentPath.length).toBeLessThan(initialPathLen);
+  });
+
+  it("handles NPC free wander pathfinding and steering (Option B)", () => {
+    const grid = createRoomGrid();
+    const rng = createRng(12345);
+    const npc: NpcEntity = {
+      id: "npc-skeleton",
+      kind: "npc",
+      name: "Skeleton",
+      color: "#b10dc9",
+      x: 1.5,
+      y: 1.5,
+      currentPath: [],
+      wanderTimer: 0,
+    };
+
+    stepNpcWanderFree(npc, grid, 0.1, rng);
+    expect(npc.currentPath.length).toBeGreaterThan(0);
+
+    const initialPos = { x: npc.x, y: npc.y };
+    for (let i = 0; i < 20; i++) {
+      stepNpcWanderFree(npc, grid, 0.1, rng);
+    }
+    expect(npc.x !== initialPos.x || npc.y !== initialPos.y).toBe(true);
   });
 
   it("ensures NPC diagonal paths do not cut interior wall corners", () => {

@@ -104,7 +104,7 @@ bun ./scripts/eject.ts
 This automates removing example routes, replacing `src/pages/index.astro` with the single-game `GameShell`, updating `src/contract/gameSource.ts` to point to `src/logic/`, and verifying the build with `pnpm astro check` and `pnpm build`.
 
 Under the hood, ejection performs the following steps:
-1. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`).
+1. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`, `TileGrid.findPath`, `simplifyPath`, `steerToward`).
 2. Delete `src/pages/play/` and `src/examples/`.
 3. Replace `src/pages/index.astro` with `<Layout><GameShell /></Layout>`.
 4. Replace `src/contract/gameSource.ts` with the State 2 logic (`src/contract/gameSource.state2.ts`).
@@ -147,6 +147,13 @@ The `control` channel is reliable and ordered — good for state you can't affor
 ### Deterministic randomness
 
 `createRng(seed)` (`src/utils/rng.ts`) is a seedable PRNG with the same `() => number` contract as `Math.random`. Use it anywhere your game needs reproducible randomness — procedural generation, shuffles, loot rolls — especially if that randomness needs to survive a console refresh from the same seed (used in `src/examples/liars-dice/console.ts` to reproduce dice rolls across console reloads).
+
+### Pathfinding & entity movement: stepwise vs. smoothed steering
+
+`TileGrid.findPath` (`src/utils/tileGrid.ts`) provides A* pathfinding over 2D grids (with optional diagonal movement). Games can walk entities along paths using either of two first-class movement modes demonstrated in `src/examples/grid-dungeon/room.ts`:
+
+- **Stepwise waypoint movement (Option A)**: `stepNpcWander` walks a raw A* waypoint list tile-center to tile-center in 4 or 8 directions.
+- **Smoothed freely-angled steering (Option B)**: `simplifyPath` (`src/utils/pathSmoothing.ts`) greedily drops unnecessary waypoints via supercover line-of-sight checks, while `steerToward` and `moveCircleAgainstGrid` (`src/utils/circleMovement.ts`) steer entities in continuous any-angle motion while sliding around grid obstacles.
 
 ### Persisting game state
 
