@@ -1,31 +1,13 @@
 import { EXAMPLES, DEFAULT_EXAMPLE, type ExampleId } from "./registry";
 
 export function getSelectedExampleId(): ExampleId {
-  if (typeof window === "undefined") return DEFAULT_EXAMPLE;
+  if (typeof document === "undefined") return DEFAULT_EXAMPLE;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const gameParam = urlParams.get("game");
-  if (gameParam && gameParam in EXAMPLES) {
-    return gameParam as ExampleId;
-  }
-
-  const selectEl = document.getElementById("demo-switcher-select") as HTMLSelectElement | null;
-  if (selectEl && selectEl.value in EXAMPLES) {
-    return selectEl.value as ExampleId;
-  }
-
-  const stored = localStorage.getItem("selected_example");
-  if (stored && stored in EXAMPLES) {
-    return stored as ExampleId;
-  }
-
-  return DEFAULT_EXAMPLE;
+  const id = document.querySelector("[data-game]")?.getAttribute("data-game");
+  return id && id in EXAMPLES ? (id as ExampleId) : DEFAULT_EXAMPLE;
 }
 
 export function exampleIdFromJoinUrl(url: URL): ExampleId | undefined {
-  const gameParam = url.searchParams.get("game");
-  if (gameParam && gameParam in EXAMPLES) {
-    return gameParam as ExampleId;
-  }
-  return undefined;
+  const [, prefix, id] = url.pathname.split("/");
+  return prefix === "play" && id in EXAMPLES ? (id as ExampleId) : undefined;
 }

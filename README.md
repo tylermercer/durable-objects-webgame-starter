@@ -93,13 +93,21 @@ The switcher is the default experience out of the box with no setup needed.
 
 ## Building your own game
 
-Transitioning from the initial example switcher state (State 1) to building your own game (State 2) is a simple 4-step checklist:
+Transitioning from the initial example switcher state (State 1) to building your own game (State 2) is simple.
 
-1. Look through `src/examples/` for a reference implementation close to what you're building (currently: `touch-demo`, `liars-dice`, `flappy-royale`, and `grid-dungeon`), and try them via the switcher.
-2. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`) — copying from the example you liked as a starting point is expected and fine.
-3. Replace the contents of `src/contract/gameSource.ts` with the two-line state-2 version shown in the comment block at the top of `gameSource.ts`.
-4. In `src/pages/index.astro`, uncomment the `<button id="new-game-btn" ...>` inside `#start-screen` so players can click "New Game" on the start screen to open the room invite modal.
-5. Delete `src/examples/`.
+Run the ejection script when you're ready to convert the project into a single game:
+
+```bash
+bun ./scripts/eject.ts
+```
+
+This automates removing example routes, replacing `src/pages/index.astro` with the single-game `GameShell`, updating `src/contract/gameSource.ts` to point to `src/logic/`, and verifying the build with `pnpm astro check` and `pnpm build`.
+
+Under the hood, ejection performs the following steps:
+1. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`).
+2. Delete `src/pages/play/` and `src/examples/`.
+3. Replace `src/pages/index.astro` with `<Layout><GameShell /></Layout>`.
+4. Replace `src/contract/gameSource.ts` with the State 2 logic (`src/contract/gameSource.state2.ts`).
 
 ### Input: discrete events vs. continuous state
 

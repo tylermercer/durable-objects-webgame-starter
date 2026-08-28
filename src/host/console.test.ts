@@ -152,13 +152,18 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     expect(elements["start-screen"].classList.contains("u-hidden")).toBe(false);
   });
 
-  it("example-changed event renders header, initializes game, and opens modal", async () => {
-    const elements: Record<string, ReturnType<typeof createMockElement>> = {
+  it("new-game-btn opens modal", async () => {
+    let newGameHandler: (() => void) | null = null;
+    const elements: Record<string, any> = {
       "start-screen": createMockElement("start-screen"),
       "add-players-btn": createMockElement("add-players-btn"),
-      "game-surface": createMockElement("game-surface")
+      "new-game-btn": {
+        ...createMockElement("new-game-btn"),
+        addEventListener: vi.fn((event: string, cb: () => void) => {
+          if (event === "click") newGameHandler = cb;
+        })
+      }
     };
-    elements["add-players-btn"].classList.add("u-hidden");
 
     vi.stubGlobal("document", {
       getElementById: (id: string) => elements[id] ?? null,
@@ -166,17 +171,13 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     });
 
     const app = new ConsoleApp();
-    const renderHeaderSpy = vi.spyOn(app, "renderHeader");
-    const initGameSpy = vi.spyOn(app, "initGame").mockResolvedValue();
     const openModalSpy = vi.spyOn(app, "openModal").mockImplementation(() => {});
 
     app.setupUIHandlers();
 
-    window.dispatchEvent(new CustomEvent("example-changed", { detail: { exampleId: "liars-dice" } }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(newGameHandler).not.toBeNull();
+    newGameHandler!();
 
-    expect(renderHeaderSpy).toHaveBeenCalled();
-    expect(initGameSpy).toHaveBeenCalled();
     expect(openModalSpy).toHaveBeenCalled();
   });
 

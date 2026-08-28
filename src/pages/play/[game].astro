@@ -1,0 +1,15 @@
+---
+import Layout from '@layouts/Base.astro';
+import GameShell from '@components/GameShell.astro';
+import { EXAMPLES, type ExampleId } from '@examples/registry';
+
+export function getStaticPaths() {
+  return Object.keys(EXAMPLES).map((game) => ({ params: { game } }));
+}
+
+const { game } = Astro.params as { game: ExampleId };
+---
+
+<Layout>
+  <GameShell game={game} />
+</Layout>

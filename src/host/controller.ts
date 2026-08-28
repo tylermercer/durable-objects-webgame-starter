@@ -4,6 +4,7 @@ import { PeerConnection } from "@transport/peer-connection";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
+import { isController } from "../utils/isController";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
@@ -236,7 +237,7 @@ class ControllerApp {
   }
 }
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && isController()) {
   window.addEventListener("DOMContentLoaded", () => {
     const app = new ControllerApp();
     app.init();

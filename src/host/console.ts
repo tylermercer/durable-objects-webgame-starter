@@ -4,7 +4,9 @@ import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-a
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import { PeerConnection, type TouchMessage } from "../transport/peer-connection";
-import { loadConsoleGame, buildJoinUrl } from "../contract/gameSource";
+import { loadConsoleGame } from "../contract/gameSource";
+import { buildJoinUrl } from "../utils/buildJoinUrl";
+import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
 
 const PLAYER_COLORS = [
@@ -238,11 +240,6 @@ export class ConsoleApp {
       });
     }
 
-    window.addEventListener("example-changed", async () => {
-      this.renderHeader();
-      await this.initGame();
-      this.openModal();
-    });
   }
 
   openModal() {
@@ -492,7 +489,7 @@ export class ConsoleApp {
   }
 }
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && !isController()) {
   window.addEventListener("DOMContentLoaded", () => {
     const app = new ConsoleApp();
     app.init();
