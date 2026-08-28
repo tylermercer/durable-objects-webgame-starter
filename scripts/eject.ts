@@ -34,8 +34,14 @@ async function main() {
   rmSync("./src/contract/gameSource.state2.ts");
 
   console.log("\x1b[34m[4/4]\x1b[0m Verifying build...");
-  await $`pnpm astro check`;
-  await $`pnpm build`;
+  try {
+    await $`pnpm astro check`;
+    await $`pnpm build`;
+  } catch (err) {
+    console.error("\n\x1b[31m[Error]\x1b[0m Ejection verification failed during astro check or build.");
+    console.error("Please inspect your game logic in src/logic/console.ts and src/logic/controller.ts.");
+    throw err;
+  }
 
   console.log("\x1b[34m[5/5]\x1b[0m Cleaning up ejection script...");
   rmSync("./scripts/eject.ts", { force: true });
