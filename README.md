@@ -134,8 +134,6 @@ function destroy() {
 }
 ```
 
-Make sure to only trigger vibrations on initial touch down (e.g. `pointerdown` phase), avoiding vibrations during drag or hold events (`pointermove`).
-
 ### Simulation: fixed-tick loop
 
 Game logic shouldn't run at display refresh rate. `createFixedTickLoop` (`src/utils/gameLoop.ts`) decouples a fixed-Hz simulation step from rendering:
