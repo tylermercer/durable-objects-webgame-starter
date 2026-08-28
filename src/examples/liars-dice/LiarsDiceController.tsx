@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import type { ControllerContext } from "./controller";
 import { usePeerControlMessage } from "@react/reactBridge";
 import { isValidBid } from "./rules";
@@ -6,11 +6,19 @@ import type {
   LiarsDiceControlMessage,
   PublicGameState,
 } from "./types";
+import { WebHaptics } from "web-haptics";
 
 const diceIcons = ["🎲", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
+  const haptics = useMemo(() => new WebHaptics(), []);
   const [myDice, setMyDice] = useState<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      haptics.destroy();
+    };
+  }, [haptics]);
   const [gameState, setGameState] = useState<PublicGameState | null>(null);
   const [selectedCount, setSelectedCount] = useState<number>(1);
   const [selectedFace, setSelectedFace] = useState<number>(2);
@@ -79,6 +87,7 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
 
   const sendStartRequest = () => {
     if (!ctx.peerConnection) return;
+    haptics.trigger("light");
     ctx.peerConnection.sendControl({
       type: "requestStart",
     } as unknown as LiarsDiceControlMessage);
@@ -93,6 +102,7 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
         totalDice
       )
     ) {
+      haptics.trigger("light");
       ctx.peerConnection.sendControl({
         type: "bid",
         count: selectedCount,
@@ -103,6 +113,7 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
 
   const sendChallenge = () => {
     if (!ctx.peerConnection || !gameState || !gameState.currentBid) return;
+    haptics.trigger("light");
     ctx.peerConnection.sendControl({
       type: "challenge",
     } as unknown as LiarsDiceControlMessage);
@@ -329,9 +340,10 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <button
                 id="qty-minus"
-                onClick={() =>
-                  setSelectedCount((c) => Math.max(1, c - 1))
-                }
+                onClick={() => {
+                  haptics.trigger("light");
+                  setSelectedCount((c) => Math.max(1, c - 1));
+                }}
                 style={{
                   width: "36px",
                   height: "36px",
@@ -358,9 +370,10 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
               </span>
               <button
                 id="qty-plus"
-                onClick={() =>
-                  setSelectedCount((c) => Math.min(totalDice, c + 1))
-                }
+                onClick={() => {
+                  haptics.trigger("light");
+                  setSelectedCount((c) => Math.min(totalDice, c + 1));
+                }}
                 style={{
                   width: "36px",
                   height: "36px",
@@ -403,7 +416,10 @@ export function LiarsDiceController({ ctx }: { ctx: ControllerContext }) {
                     key={f}
                     className="face-btn"
                     data-face={f}
-                    onClick={() => setSelectedFace(f)}
+                    onClick={() => {
+                      haptics.trigger("light");
+                      setSelectedFace(f);
+                    }}
                     style={{
                       padding: "6px 0",
                       fontSize: "1.3rem",

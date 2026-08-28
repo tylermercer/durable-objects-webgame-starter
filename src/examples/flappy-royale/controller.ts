@@ -1,5 +1,6 @@
 import type { PeerConnection } from "@transport/peer-connection";
 import type { FlappyControlMessage, RoundStateSnapshot } from "./types";
+import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
@@ -7,6 +8,7 @@ export interface ControllerContext {
 }
 
 export function createGame(ctx: ControllerContext) {
+  const haptics = new WebHaptics();
   let myPlace: number | null = null;
   let isDead = false;
   let latestSnapshot: RoundStateSnapshot | null = null;
@@ -29,6 +31,8 @@ export function createGame(ctx: ControllerContext) {
     if ((phase === "waiting" || phase === "roundOver") && !isFirst) {
       return;
     }
+
+    haptics.trigger("light");
 
     // Send discrete flap message on both input (unreliable fast) and control (fallback)
     ctx.peerConnection.sendInput({ type: "flap" });
@@ -168,6 +172,7 @@ export function createGame(ctx: ControllerContext) {
 
   return {
     destroy: () => {
+      haptics.destroy();
       if (surface) {
         surface.removeEventListener("pointerdown", onPointerDown);
       }

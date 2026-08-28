@@ -1,5 +1,6 @@
 import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
 import type { ControllerGameInstance } from "@contract/gameTypes";
+import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
   peerConnection: PeerConnection | null;
@@ -7,6 +8,7 @@ export interface ControllerContext {
 }
 
 export function createGame(ctx: ControllerContext): ControllerGameInstance {
+  const haptics = new WebHaptics();
   let pendingTouch: TouchMessage | null = null;
   let rafPending = false;
   let rafId: number | null = null;
@@ -36,6 +38,10 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
   function handlePointer(phase: "start" | "move" | "end" | "cancel", e: PointerEvent) {
     if (!surface) return;
     e.preventDefault();
+
+    if (phase === "start") {
+      haptics.trigger("light");
+    }
     const rect = surface.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
@@ -61,6 +67,7 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
 
   return {
     destroy: () => {
+      haptics.destroy();
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
