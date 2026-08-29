@@ -4,8 +4,8 @@ import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-a
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import { PeerConnection } from "../transport/peer-connection";
-import { RelayConnection } from "../transport/relay-connection";
 import type { GameTransport, TouchMessage, TransportMode } from "../transport/transport";
+import { ConnectionOrchestrator } from "../transport/connectionOrchestrator";
 import { loadConsoleGame } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
@@ -29,12 +29,11 @@ export interface ControllerState extends ControllerPeer {
   color: string;
   isFirstPlayer: boolean;
   pc: GameTransport | null;
+  orchestrator?: ConnectionOrchestrator | null;
   state: string;
   status: PlayerConnectionStatus;
   signalingConnected: boolean;
   lastTouch?: TouchMessage;
-  negotiationTimer?: number | null;
-  disconnectTimer?: number | null;
 }
 
 export function getForcedTransport(): "relay" | "rtc" | null {
@@ -370,6 +369,46 @@ export class ConsoleApp {
     }, base + jitter);
   }
 
+  private getOrCreateOrchestrator(controller: ControllerState): ConnectionOrchestrator {
+    if (!controller.orchestrator) {
+      controller.orchestrator = new ConnectionOrchestrator(
+        {
+          isInitiator: false,
+          getApi: () => this.api,
+          peerId: controller.id,
+        },
+        {
+          onSignal: (sig) => this.api?.sendSignal(controller.id, sig),
+          onTransportChange: (transport) => {
+            controller.pc = transport;
+            this.updateControllerStatus(controller);
+            if (transport.mode === "relay") {
+              transport.sendControl({
+                type: "identity",
+                name: controller.name,
+                color: controller.color,
+              });
+            }
+          },
+          onStateChange: (state) => {
+            this.updateControllerStatus(controller);
+            if (state === "connected") {
+              controller.pc?.sendControl({
+                type: "identity",
+                name: controller.name,
+                color: controller.color,
+              });
+            }
+          },
+          onInputMessage: (msg) => {
+            controller.lastTouch = msg;
+          },
+        }
+      );
+    }
+    return controller.orchestrator;
+  }
+
   addController(id: string, name: string) {
     if (this.controllers.has(id)) return;
 
@@ -383,6 +422,7 @@ export class ConsoleApp {
       color,
       isFirstPlayer,
       pc: null,
+      orchestrator: null,
       state: "reconnecting",
       status: "reconnecting",
       signalingConnected: true
@@ -391,7 +431,7 @@ export class ConsoleApp {
     this.controllers.set(id, controller);
 
     if (getForcedTransport() === "relay") {
-      this.promoteToRelay(controller);
+      this.getOrCreateOrchestrator(controller);
     } else {
       this.updateControllerStatus(controller);
     }
@@ -434,42 +474,12 @@ export class ConsoleApp {
   removeController(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
-      if (controller.negotiationTimer) clearTimeout(controller.negotiationTimer);
-      if (controller.disconnectTimer) clearTimeout(controller.disconnectTimer);
-      controller.pc?.close();
+      controller.orchestrator?.close();
+      controller.orchestrator = null;
+      controller.pc = null;
       this.controllers.delete(id);
       this.updateControllerUI();
     }
-  }
-
-  promoteToRelay(controller: ControllerState) {
-    if (controller.negotiationTimer) {
-      clearTimeout(controller.negotiationTimer);
-      controller.negotiationTimer = null;
-    }
-    if (controller.disconnectTimer) {
-      clearTimeout(controller.disconnectTimer);
-      controller.disconnectTimer = null;
-    }
-
-    if (controller.pc) {
-      controller.pc.close();
-    }
-
-    const relay = new RelayConnection(this.api, controller.id, {
-      onInputMessage: msg => {
-        controller.lastTouch = msg;
-      }
-    });
-
-    controller.pc = relay;
-    this.updateControllerStatus(controller);
-
-    relay.sendControl({
-      type: "identity",
-      name: controller.name,
-      color: controller.color
-    });
   }
 
   handleRelayInput(from: string, payload: unknown) {
@@ -479,13 +489,8 @@ export class ConsoleApp {
       controller = this.controllers.get(from)!;
     }
 
-    if (controller.pc?.mode !== "relay") {
-      this.promoteToRelay(controller);
-    }
-
-    if (controller.pc instanceof RelayConnection) {
-      controller.pc.handleRelayInput(payload);
-    }
+    const orchestrator = this.getOrCreateOrchestrator(controller);
+    orchestrator.handleRelayInput(payload);
   }
 
   handleRelayControl(from: string, payload: unknown) {
@@ -495,13 +500,8 @@ export class ConsoleApp {
       controller = this.controllers.get(from)!;
     }
 
-    if (controller.pc?.mode !== "relay") {
-      this.promoteToRelay(controller);
-    }
-
-    if (controller.pc instanceof RelayConnection) {
-      controller.pc.handleRelayControl(payload);
-    }
+    const orchestrator = this.getOrCreateOrchestrator(controller);
+    orchestrator.handleRelayControl(payload);
   }
 
   handleSignal(from: string, signal: RTCSignal) {
@@ -511,82 +511,10 @@ export class ConsoleApp {
       controller = this.controllers.get(from)!;
     }
 
-    const forced = getForcedTransport();
-
-    if (forced === "relay") {
-      if (controller.pc?.mode !== "relay") {
-        this.promoteToRelay(controller);
-      }
-      return;
-    }
-
-    if (!controller.pc || controller.pc.mode === "relay") {
-      if (controller.pc?.mode === "relay") {
-        // Already promoted to relay, ignore WebRTC signaling unless forced
-        return;
-      }
-
-      const pc = new PeerConnection(false, {
-        onSignal: sig => {
-          this.api?.sendSignal(from, sig);
-        },
-        onStateChange: state => {
-          if (state === "connected") {
-            if (controller!.negotiationTimer) {
-              clearTimeout(controller!.negotiationTimer);
-              controller!.negotiationTimer = null;
-            }
-            if (controller!.disconnectTimer) {
-              clearTimeout(controller!.disconnectTimer);
-              controller!.disconnectTimer = null;
-            }
-            this.updateControllerStatus(controller!);
-            controller!.pc?.sendControl({
-              type: "identity",
-              name: controller!.name,
-              color: controller!.color
-            });
-          } else if (state === "disconnected") {
-            this.updateControllerStatus(controller!);
-            if (forced !== "rtc" && !controller!.disconnectTimer) {
-              controller!.disconnectTimer = window.setTimeout(() => {
-                controller!.disconnectTimer = null;
-                if (controller!.pc?.mode === "p2p" && (controller!.pc as PeerConnection).pc.connectionState !== "connected") {
-                  this.promoteToRelay(controller!);
-                }
-              }, 4000);
-            }
-          } else if (state === "failed") {
-            this.updateControllerStatus(controller!);
-            if (forced !== "rtc") {
-              this.promoteToRelay(controller!);
-            }
-          } else {
-            this.updateControllerStatus(controller!);
-          }
-        },
-        onInputMessage: msg => {
-          controller!.lastTouch = msg;
-        }
-      });
-
-      controller.pc = pc;
-
-      if (forced !== "rtc" && !controller.negotiationTimer) {
-        controller.negotiationTimer = window.setTimeout(() => {
-          controller.negotiationTimer = null;
-          if (controller.pc?.mode === "p2p" && (controller.pc as PeerConnection).pc.connectionState !== "connected") {
-            this.promoteToRelay(controller);
-          }
-        }, 8000);
-      }
-    }
-
-    if (controller.pc instanceof PeerConnection) {
-      controller.pc.handleSignal(signal).catch(err => {
-        console.error(`Error handling signal from ${from}:`, err);
-      });
-    }
+    const orchestrator = this.getOrCreateOrchestrator(controller);
+    orchestrator.handleSignal(signal).catch(err => {
+      console.error(`Error handling signal from ${from}:`, err);
+    });
   }
 
   updateControllerUI() {

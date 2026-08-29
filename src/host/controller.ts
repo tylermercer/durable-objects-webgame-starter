@@ -1,13 +1,11 @@
 import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
-import { PeerConnection } from "@transport/peer-connection";
-import { RelayConnection } from "@transport/relay-connection";
+import { ConnectionOrchestrator } from "@transport/connectionOrchestrator";
 import type { GameTransport, IdentityMessage } from "@transport/transport";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 import { isController } from "../utils/isController";
-import { getForcedTransport } from "./console";
 
 export interface ControllerContext {
   peerConnection: GameTransport | null;
@@ -52,12 +50,12 @@ class ControllerApp {
   isFirstPlayer: boolean = false;
   api: RpcStub<ControllerApi> | null = null;
   pc: GameTransport | null = null;
+  orchestrator: ConnectionOrchestrator | null = null;
   reconnectTimer: number | null = null;
-  negotiationTimer: number | null = null;
-  disconnectTimer: number | null = null;
   private reconnectAttempt = 0;
   activeGame: ControllerGameInstance | null = null;
   chosenName: string = "";
+  private loadGameToken = 0;
 
   constructor() {
     const params = new URLSearchParams(window.location.search);
@@ -164,42 +162,19 @@ class ControllerApp {
     }, base + jitter);
   }
 
-  async promoteToRelay() {
-    if (this.negotiationTimer) {
-      clearTimeout(this.negotiationTimer);
-      this.negotiationTimer = null;
-    }
-    if (this.disconnectTimer) {
-      clearTimeout(this.disconnectTimer);
-      this.disconnectTimer = null;
-    }
-
+  private async loadGame() {
+    const token = ++this.loadGameToken;
     this.activeGame?.destroy?.();
     this.activeGame = null;
 
-    if (this.pc) {
-      this.pc.close();
-    }
-
-    const relay = new RelayConnection(this.api, undefined, {
-      onControlMessage: msg => {
-        if (msg.type === "identity") {
-          const identityMsg = msg as IdentityMessage;
-          this.name = identityMsg.name;
-          this.color = identityMsg.color;
-          this.updatePlayerInfo(this.name, this.color);
-        }
-      }
-    });
-
-    this.pc = relay;
-    this.updateStatus("Connected to Console (Relay)");
+    if (!this.pc) return;
 
     try {
       const { createGame } = await loadControllerGame(new URL(window.location.href));
+      if (token !== this.loadGameToken || !this.pc) return;
       this.activeGame = createGame({
         peerConnection: this.pc,
-        isFirstPlayer: () => this.isFirstPlayer
+        isFirstPlayer: () => this.isFirstPlayer,
       });
     } catch (err) {
       console.error("Failed to load controller game logic:", err);
@@ -207,137 +182,83 @@ class ControllerApp {
   }
 
   async initiateWebRTC() {
-    const forced = getForcedTransport();
+    this.orchestrator?.close();
 
-    if (forced === "relay") {
-      await this.promoteToRelay();
-      return;
-    }
-
-    this.activeGame?.destroy?.();
-    this.activeGame = null;
-
-    if (this.pc) {
-      this.pc.close();
-    }
-
-    this.updateStatus(`Negotiating WebRTC with console...`);
-
-    const pc = new PeerConnection(true, {
-      onSignal: signal => {
-        this.api?.sendSignal(signal);
+    this.orchestrator = new ConnectionOrchestrator(
+      {
+        isInitiator: true,
+        getApi: () => this.api,
       },
-      onStateChange: state => {
-        if (state === "connected") {
-          if (this.negotiationTimer) {
-            clearTimeout(this.negotiationTimer);
-            this.negotiationTimer = null;
+      {
+        onSignal: (signal) => {
+          this.api?.sendSignal(signal);
+        },
+        onTransportChange: (transport) => {
+          this.pc = transport;
+          if (transport.mode === "relay") {
+            this.updateStatus("Connected to Console (Relay)");
+          } else {
+            this.updateStatus("Negotiating WebRTC with console...");
           }
-          if (this.disconnectTimer) {
-            clearTimeout(this.disconnectTimer);
-            this.disconnectTimer = null;
+          this.loadGame();
+        },
+        onStateChange: (state) => {
+          if (state === "connected") {
+            this.updateStatus("Connected to Console!");
+          } else {
+            this.updateStatus(`Connection state: ${state}`);
           }
-          this.updateStatus(`Connected to Console!`);
-        } else if (state === "disconnected") {
-          this.updateStatus(`Connection state: ${state}`);
-          if (forced !== "rtc" && !this.disconnectTimer) {
-            this.disconnectTimer = window.setTimeout(() => {
-              this.disconnectTimer = null;
-              if (this.pc?.mode === "p2p" && (this.pc as PeerConnection).pc.connectionState !== "connected") {
-                this.promoteToRelay();
-              }
-            }, 4000);
+        },
+        onControlMessage: (msg) => {
+          if (msg.type === "identity") {
+            const identityMsg = msg as IdentityMessage;
+            this.name = identityMsg.name;
+            this.color = identityMsg.color;
+            this.updatePlayerInfo(this.name, this.color);
           }
-        } else if (state === "failed") {
-          this.updateStatus(`Connection state: ${state}`);
-          if (forced !== "rtc") {
-            this.promoteToRelay();
-          }
-        } else {
-          this.updateStatus(`Connection state: ${state}`);
-        }
-      },
-      onControlMessage: msg => {
-        if (msg.type === "identity") {
-          const identityMsg = msg as IdentityMessage;
-          this.name = identityMsg.name;
-          this.color = identityMsg.color;
-          this.updatePlayerInfo(this.name, this.color);
-        }
+        },
       }
-    });
+    );
 
-    this.pc = pc;
-
-    if (forced !== "rtc" && !this.negotiationTimer) {
-      this.negotiationTimer = window.setTimeout(() => {
-        this.negotiationTimer = null;
-        if (this.pc?.mode === "p2p" && (this.pc as PeerConnection).pc.connectionState !== "connected") {
-          this.promoteToRelay();
-        }
-      }, 8000);
-    }
-
-    try {
-      const { createGame } = await loadControllerGame(new URL(window.location.href));
-      this.activeGame = createGame({
-        peerConnection: this.pc,
-        isFirstPlayer: () => this.isFirstPlayer
-      });
-    } catch (err) {
-      console.error("Failed to load controller game logic:", err);
-    }
-
-    try {
-      const offer = await pc.createOffer();
-      this.api?.sendSignal({ sdp: offer });
-    } catch (err) {
-      console.error("Failed to create offer:", err);
+    if (this.orchestrator.transport.mode === "p2p") {
+      try {
+        const offer = await this.orchestrator.createOffer();
+        this.api?.sendSignal({ sdp: offer });
+      } catch (err) {
+        console.error("Failed to create offer:", err);
+      }
     }
   }
 
   handleConsoleGone() {
-    if (this.negotiationTimer) {
-      clearTimeout(this.negotiationTimer);
-      this.negotiationTimer = null;
-    }
-    if (this.disconnectTimer) {
-      clearTimeout(this.disconnectTimer);
-      this.disconnectTimer = null;
-    }
+    this.orchestrator?.close();
+    this.orchestrator = null;
     this.activeGame?.destroy?.();
     this.activeGame = null;
-    if (this.pc) {
-      this.pc.close();
-      this.pc = null;
-    }
-    this.updateStatus(`Console disconnected. Waiting for console...`);
+    this.pc = null;
+    this.updateStatus("Console disconnected. Waiting for console...");
   }
 
   handleSignal(signal: RTCSignal) {
-    if (this.pc && this.pc instanceof PeerConnection) {
-      this.pc.handleSignal(signal).catch(err => {
+    if (this.orchestrator) {
+      this.orchestrator.handleSignal(signal).catch((err) => {
         console.error("Error handling signal from console:", err);
       });
     }
   }
 
   handleRelayInput(payload: unknown) {
-    if (this.pc?.mode !== "relay") {
-      this.promoteToRelay();
+    if (!this.orchestrator) {
+      this.initiateWebRTC();
     }
-    if (this.pc instanceof RelayConnection) {
-      this.pc.handleRelayInput(payload);
-    }
+    this.orchestrator?.handleRelayInput(payload);
   }
 
   handleRelayControl(payload: unknown) {
-    if (this.pc?.mode !== "relay") {
-      this.promoteToRelay();
+    if (!this.orchestrator) {
+      this.initiateWebRTC();
     }
-    if (this.pc instanceof RelayConnection) {
-      this.pc.handleRelayControl(payload);
-    }
+    this.orchestrator?.handleRelayControl(payload);
   }
 
   updateStatus(text: string) {
