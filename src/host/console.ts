@@ -440,9 +440,6 @@ export class ConsoleApp {
     const controller = this.controllers.get(id);
     if (controller) {
       controller.signalingConnected = false;
-      controller.orchestrator?.close();
-      controller.orchestrator = null;
-      controller.pc = null;
       this.updateControllerStatus(controller);
     }
   }
@@ -459,9 +456,6 @@ export class ConsoleApp {
     const controller = this.controllers.get(id);
     if (controller) {
       controller.signalingConnected = true;
-      controller.orchestrator?.close();
-      controller.orchestrator = null;
-      controller.pc = null;
       this.updateControllerStatus(controller);
     }
   }
