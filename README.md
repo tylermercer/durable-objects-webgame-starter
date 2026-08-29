@@ -152,13 +152,14 @@ This replaces the demo's `startAnimationLoop`, which just redraws every frame.
 
 By default, a controller refresh looks like a brand-new player joining — fine for the stateless demo, not fine for a game with per-player HP/position/inventory. `join()` on the signaling API accepts an optional `rejoinToken` (generate one with `crypto.randomUUID()`, persist it in `sessionStorage`); the DO reuses the player's existing `id`/`name` if the token matches a recent session, and holds their slot open for a grace period after a disconnect instead of immediately dropping them. Use this for any game where a player's state needs to survive a dropped connection or locked phone (see `src/examples/liars-dice/` for a complete example).
 
-### TURN Relay Configuration (Optional)
+### Connection fallback
 
-WebRTC STUN server is used by default for P2P connection establishment. In environments with restrictive NATs or firewalls (e.g., venue Wi-Fi), a TURN relay server is recommended. The template supports optional TURN server configuration via environment variables:
+WebRTC connections between a console and controller are established using public STUN candidate discovery (`stun:stun.l.google.com:19302`). If a direct peer-to-peer connection cannot be established or maintained (such as on restrictive NATs or firewalls), the template automatically falls back to Durable Object message relaying:
 
-- `PUBLIC_TURN_URLS`: Comma-separated list of TURN server URLs (e.g., `turn:turn.example.com:3478`).
-- `PUBLIC_TURN_USERNAME`: TURN server username.
-- `PUBLIC_TURN_CREDENTIAL`: TURN server password/credential.
+- **Triggers**: Fallback to DO-relay occurs on initial WebRTC negotiation timeout (~8 seconds) or post-connection degradation (`disconnected`/`failed` connection states past a ~4 second grace timer).
+- **Zero Configuration**: Fallback reuses the existing signaling WebSocket / Cap'n Web RPC session connected to the `GameSession` Durable Object. No external TURN server or extra deployment configuration is needed.
+- **Transparent to Game Logic**: Both `PeerConnection` (P2P) and `RelayConnection` (DO relay) implement the shared `GameTransport` interface. Console and controller logic in `src/logic/` do not need to branch on transport mode.
+- **Channel Semantics**: Under DO relay, delivery becomes reliable and ordered for both `input` and `control` messages without requiring any game-logic changes.
 
 ### Sending frequently-changing state reliably
 

@@ -31,16 +31,7 @@ export interface PeerConnectionCallbacks {
 }
 
 const ICE_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    ...(import.meta.env.PUBLIC_TURN_URLS
-      ? [{
-          urls: import.meta.env.PUBLIC_TURN_URLS.split(","),
-          username: import.meta.env.PUBLIC_TURN_USERNAME,
-          credential: import.meta.env.PUBLIC_TURN_CREDENTIAL,
-        }]
-      : [])
-  ]
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
 export class PeerConnection implements GameTransport {
