@@ -24,6 +24,11 @@ export const EXAMPLES = {
     console: () => import("@examples/uno/console"),
     controller: () => import("@examples/uno/controller"),
   },
+  "othello": {
+    label: "Othello",
+    console: () => import("@examples/othello/console"),
+    controller: () => import("@examples/othello/controller"),
+  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;

@@ -1,7 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { TileGrid } from "./tileGrid";
+import { TileGrid, DIRECTIONS_8 } from "./tileGrid";
 
 describe("TileGrid", () => {
+  it("serializes and deserializes via toJSON and fromJSON", () => {
+    const grid = new TileGrid<"black" | "white" | null>(3, 3, (pos) => (pos.x === pos.y ? "black" : null));
+    grid.set({ x: 0, y: 1 }, "white");
+
+    const json = grid.toJSON();
+    expect(json.width).toBe(3);
+    expect(json.height).toBe(3);
+    expect(json.cells).toHaveLength(9);
+
+    const restored = TileGrid.fromJSON(json);
+    expect(restored.width).toBe(3);
+    expect(restored.height).toBe(3);
+    expect(restored.get({ x: 0, y: 0 })).toBe("black");
+    expect(restored.get({ x: 0, y: 1 })).toBe("white");
+    expect(restored.get({ x: 1, y: 0 })).toBeNull();
+  });
+
+  it("casts rays outward excluding start pos and truncating at grid edges", () => {
+    const grid = new TileGrid(4, 4, (pos) => `${pos.x},${pos.y}`);
+
+    // Ray right (1, 0) from (1, 1)
+    const rightRay = Array.from(grid.ray({ x: 1, y: 1 }, 1, 0));
+    expect(rightRay).toEqual([
+      { pos: { x: 2, y: 1 }, value: "2,1" },
+      { pos: { x: 3, y: 1 }, value: "3,1" },
+    ]);
+
+    // Ray diagonal (-1, -1) from (2, 2)
+    const diagRay = Array.from(grid.ray({ x: 2, y: 2 }, -1, -1));
+    expect(diagRay).toEqual([
+      { pos: { x: 1, y: 1 }, value: "1,1" },
+      { pos: { x: 0, y: 0 }, value: "0,0" },
+    ]);
+
+    // Ray from edge going out of bounds immediately
+    const edgeRay = Array.from(grid.ray({ x: 0, y: 0 }, -1, 0));
+    expect(edgeRay).toEqual([]);
+
+    // Check that ray works in all DIRECTIONS_8 from center (2,2) on 5x5 grid
+    const grid5 = new TileGrid(5, 5, () => 1);
+    for (const [dx, dy] of DIRECTIONS_8) {
+      const rayResult = Array.from(grid5.ray({ x: 2, y: 2 }, dx, dy));
+      expect(rayResult.length).toBeGreaterThanOrEqual(2);
+      expect(rayResult[0].pos).toEqual({ x: 2 + dx, y: 2 + dy });
+    }
+  });
+
   it("initializes grid cells using fill function", () => {
     const grid = new TileGrid(3, 2, (pos) => `${pos.x},${pos.y}`);
     expect(grid.width).toBe(3);
