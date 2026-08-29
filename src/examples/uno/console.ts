@@ -1,4 +1,5 @@
 import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
+import type { GameTransport } from "@transport/transport";
 import { createRng } from "@utils/rng";
 import { Deck } from "@utils/deck";
 import { TurnOrder } from "@utils/turnOrder";
@@ -27,7 +28,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let roundSeed = Math.floor(Math.random() * 2147483647);
   let winner: { id: string; name: string } | null = null;
 
-  const attachedListeners = new Set<string>();
+  const attachedListeners = new Map<string, GameTransport>();
   const knownPlayerIds = new Set<string>();
 
   function getFirstPlayerId(): string | null {
@@ -124,6 +125,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function handleControlMessage(fromId: string, msg: UnoControlMessage) {
     const peer = ctx.peers.get(fromId);
     if (!peer) return;
+
+    if (msg.type === "requestSync") {
+      const hand = hands.get(fromId);
+      if (hand) sendHand(peer, hand);
+      peer.pc?.sendControlCoalesced("gameState", { type: "gameState", state: getPublicUnoState() });
+      return;
+    }
 
     const firstPlayerId = getFirstPlayerId();
 
@@ -283,17 +291,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeersAndListeners() {
-    for (const id of attachedListeners) {
+    for (const [id, pc] of Array.from(attachedListeners.entries())) {
       const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || !isConnected(peer)) {
+      if (!peer || !peer.pc || peer.pc !== pc || !isConnected(peer)) {
         attachedListeners.delete(id);
       }
     }
 
     for (const [id, peer] of ctx.peers) {
       const isLive = isConnected(peer);
-      if (peer.pc && isLive && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
+      if (peer.pc && isLive && attachedListeners.get(id) !== peer.pc) {
+        attachedListeners.set(id, peer.pc);
         peer.pc.addControlListener(msg => {
           handleControlMessage(id, msg as unknown as UnoControlMessage);
         });

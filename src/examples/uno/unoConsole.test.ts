@@ -138,4 +138,123 @@ describe("UnoConsole integration", () => {
 
     instance.destroy?.();
   });
+
+  it("handles requestSync control message to re-send hand and state", () => {
+    const p1Transport = createMockTransport();
+    const peers = new Map<string, ControllerPeer>([
+      [
+        "peer-1",
+        {
+          id: "peer-1",
+          name: "Alice",
+          color: "#ff0000",
+          isFirstPlayer: true,
+          status: "live-relay",
+          state: "connected",
+          pc: p1Transport,
+        },
+      ],
+      [
+        "peer-2",
+        {
+          id: "peer-2",
+          name: "Bob",
+          color: "#00ff00",
+          isFirstPlayer: false,
+          status: "live-relay",
+          state: "connected",
+          pc: createMockTransport(),
+        },
+      ],
+    ]);
+
+    const ctx: ConsoleContext = {
+      viewport: {
+        container: {} as any,
+        initialSize: { width: 800, height: 600 },
+        onResize: () => () => {},
+      },
+      peers,
+      session: null,
+    };
+
+    const instance = createGame(ctx);
+    instance.tick?.(0.016);
+
+    // Start game
+    p1Transport.controlListeners[0]({ type: "requestStart" });
+
+    p1Transport.sentControlMsgs.length = 0; // Clear sent history
+
+    // Send requestSync
+    p1Transport.controlListeners[0]({ type: "requestSync" });
+
+    const handMsg = p1Transport.sentControlMsgs.find(m => (m as any).type === "yourHand");
+    const stateMsg = p1Transport.sentControlMsgs.find(m => (m as any).type === "gameState");
+
+    expect(handMsg).toBeDefined();
+    expect(stateMsg).toBeDefined();
+
+    instance.destroy?.();
+  });
+
+  it("re-attaches listeners and sends hand/state when transport is replaced on reconnect", () => {
+    const initialP1Transport = createMockTransport();
+    const peer1: ControllerPeer = {
+      id: "peer-1",
+      name: "Alice",
+      color: "#ff0000",
+      isFirstPlayer: true,
+      status: "live-relay",
+      state: "connected",
+      pc: initialP1Transport,
+    };
+
+    const peers = new Map<string, ControllerPeer>([
+      ["peer-1", peer1],
+      [
+        "peer-2",
+        {
+          id: "peer-2",
+          name: "Bob",
+          color: "#00ff00",
+          isFirstPlayer: false,
+          status: "live-relay",
+          state: "connected",
+          pc: createMockTransport(),
+        },
+      ],
+    ]);
+
+    const ctx: ConsoleContext = {
+      viewport: {
+        container: {} as any,
+        initialSize: { width: 800, height: 600 },
+        onResize: () => () => {},
+      },
+      peers,
+      session: null,
+    };
+
+    const instance = createGame(ctx);
+    instance.tick?.(0.016);
+
+    initialP1Transport.controlListeners[0]({ type: "requestStart" });
+
+    // Simulate peer 1 reconnecting with a new transport instance
+    const newP1Transport = createMockTransport();
+    peer1.pc = newP1Transport;
+
+    instance.tick?.(0.016);
+
+    expect(newP1Transport.controlListeners.length).toBe(1);
+
+    const reconnectedHandMsg = newP1Transport.sentControlMsgs.find(m => (m as any).type === "yourHand");
+    const reconnectedStateMsg = newP1Transport.sentControlMsgs.find(m => (m as any).type === "gameState");
+
+    expect(reconnectedHandMsg).toBeDefined();
+    expect(reconnectedStateMsg).toBeDefined();
+
+    instance.destroy?.();
+  });
 });
