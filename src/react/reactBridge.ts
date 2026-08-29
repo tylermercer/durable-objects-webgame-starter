@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import type { PeerConnection, ControlMessage } from "@transport/peer-connection";
+import type { GameTransport, ControlMessage } from "@transport/transport";
 
 export function usePeerControlMessage(
-  pc: PeerConnection | null,
+  pc: GameTransport | null,
   handler: (msg: ControlMessage) => void
 ) {
   useEffect(() => {

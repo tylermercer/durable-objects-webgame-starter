@@ -1,11 +1,11 @@
-import type { PeerConnection } from "@transport/peer-connection";
+import type { GameTransport } from "@transport/transport";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { InputStateSync } from "../../utils/InputStateSync";
 import type { JoystickState, DungeonControlMessage } from "./types";
 import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
-  peerConnection: PeerConnection | null;
+  peerConnection: GameTransport | null;
   isFirstPlayer?: () => boolean;
 }
 
@@ -81,9 +81,9 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
     }
   });
 
-  // Streaming joystick state at 20Hz over WebRTC input channel
+  // Streaming joystick state at 20Hz over input channel/transport
   const inputSync = new InputStateSync(
-    () => ctx.peerConnection?.inputChannel ?? null,
+    () => ctx.peerConnection,
     () => joystickVector,
     20
   );

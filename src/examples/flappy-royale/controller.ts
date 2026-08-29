@@ -1,9 +1,9 @@
-import type { PeerConnection } from "@transport/peer-connection";
+import type { GameTransport } from "@transport/transport";
 import type { FlappyControlMessage, RoundStateSnapshot } from "./types";
 import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
-  peerConnection: PeerConnection | null;
+  peerConnection: GameTransport | null;
   isFirstPlayer?: () => boolean;
 }
 

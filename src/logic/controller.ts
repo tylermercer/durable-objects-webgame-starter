@@ -1,7 +1,7 @@
-import type { PeerConnection } from "@transport/peer-connection";
+import type { GameTransport } from "@transport/transport";
 
 export interface ControllerContext {
-  peerConnection: PeerConnection | null;
+  peerConnection: GameTransport | null;
 }
 
 export function createGame(_ctx: ControllerContext) {

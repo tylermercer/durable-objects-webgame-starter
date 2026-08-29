@@ -3,7 +3,9 @@ import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
-import { PeerConnection, type TouchMessage } from "../transport/peer-connection";
+import { PeerConnection } from "../transport/peer-connection";
+import { RelayConnection } from "../transport/relay-connection";
+import type { GameTransport, TouchMessage, TransportMode } from "../transport/transport";
 import { loadConsoleGame } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
@@ -16,7 +18,8 @@ const PLAYER_COLORS = [
 
 export type PlayerConnectionStatus =
   | "live"          // signaling connected AND WebRTC data channel open
-  | "reconnecting"  // signaling connected, WebRTC renegotiating (post-restartIce)
+  | "live-relay"    // signaling connected AND using DO relay transport
+  | "reconnecting"  // signaling connected, WebRTC renegotiating
   | "grace-period"  // signaling dropped, within the DO's grace window
   | "gone";         // grace period expired, player purged
 
@@ -25,19 +28,33 @@ export interface ControllerState extends ControllerPeer {
   name: string;
   color: string;
   isFirstPlayer: boolean;
-  pc: PeerConnection | null;
+  pc: GameTransport | null;
   state: string;
   status: PlayerConnectionStatus;
   signalingConnected: boolean;
   lastTouch?: TouchMessage;
+  negotiationTimer?: number | null;
+  disconnectTimer?: number | null;
+}
+
+export function getForcedTransport(): "relay" | "rtc" | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const val = params.get("force_transport")?.toLowerCase();
+  if (val === "relay" || val === "rtc") return val;
+  return null;
 }
 
 export function computePlayerStatus(
   signalingConnected: boolean,
-  webrtcState: RTCPeerConnectionState | null
+  webrtcState: RTCPeerConnectionState | null,
+  transportMode?: TransportMode
 ): PlayerConnectionStatus {
   if (!signalingConnected) {
     return "grace-period";
+  }
+  if (transportMode === "relay") {
+    return "live-relay";
   }
   if (webrtcState === "connected") {
     return "live";
@@ -76,6 +93,14 @@ class ConsoleCallbacksHandler extends RpcTarget implements ConsoleCallbacks {
 
   onControllerRenamed(id: string, name: string) {
     this.app.handleControllerRenamed(id, name);
+  }
+
+  onRelayInput(from: string, payload: unknown) {
+    this.app.handleRelayInput(from, payload);
+  }
+
+  onRelayControl(from: string, payload: unknown) {
+    this.app.handleRelayControl(from, payload);
   }
 }
 
@@ -364,7 +389,12 @@ export class ConsoleApp {
     };
 
     this.controllers.set(id, controller);
-    this.updateControllerStatus(controller);
+
+    if (getForcedTransport() === "relay") {
+      this.promoteToRelay(controller);
+    } else {
+      this.updateControllerStatus(controller);
+    }
   }
 
   handleControllerDisconnected(id: string) {
@@ -392,8 +422,11 @@ export class ConsoleApp {
   }
 
   updateControllerStatus(controller: ControllerState) {
-    const rtcState = controller.pc?.pc.connectionState ?? null;
-    controller.status = computePlayerStatus(controller.signalingConnected, rtcState);
+    let rtcState: RTCPeerConnectionState | null = null;
+    if (controller.pc && controller.pc instanceof PeerConnection) {
+      rtcState = controller.pc.pc.connectionState;
+    }
+    controller.status = computePlayerStatus(controller.signalingConnected, rtcState, controller.pc?.mode);
     controller.state = controller.status;
     this.updateControllerUI();
   }
@@ -401,9 +434,73 @@ export class ConsoleApp {
   removeController(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
+      if (controller.negotiationTimer) clearTimeout(controller.negotiationTimer);
+      if (controller.disconnectTimer) clearTimeout(controller.disconnectTimer);
       controller.pc?.close();
       this.controllers.delete(id);
       this.updateControllerUI();
+    }
+  }
+
+  promoteToRelay(controller: ControllerState) {
+    if (controller.negotiationTimer) {
+      clearTimeout(controller.negotiationTimer);
+      controller.negotiationTimer = null;
+    }
+    if (controller.disconnectTimer) {
+      clearTimeout(controller.disconnectTimer);
+      controller.disconnectTimer = null;
+    }
+
+    if (controller.pc) {
+      controller.pc.close();
+    }
+
+    const relay = new RelayConnection(this.api, controller.id, {
+      onInputMessage: msg => {
+        controller.lastTouch = msg;
+      }
+    });
+
+    controller.pc = relay;
+    this.updateControllerStatus(controller);
+
+    relay.sendControl({
+      type: "identity",
+      name: controller.name,
+      color: controller.color
+    });
+  }
+
+  handleRelayInput(from: string, payload: unknown) {
+    let controller = this.controllers.get(from);
+    if (!controller) {
+      this.addController(from, `Player ${this.controllers.size + 1}`);
+      controller = this.controllers.get(from)!;
+    }
+
+    if (controller.pc?.mode !== "relay") {
+      this.promoteToRelay(controller);
+    }
+
+    if (controller.pc instanceof RelayConnection) {
+      controller.pc.handleRelayInput(payload);
+    }
+  }
+
+  handleRelayControl(from: string, payload: unknown) {
+    let controller = this.controllers.get(from);
+    if (!controller) {
+      this.addController(from, `Player ${this.controllers.size + 1}`);
+      controller = this.controllers.get(from)!;
+    }
+
+    if (controller.pc?.mode !== "relay") {
+      this.promoteToRelay(controller);
+    }
+
+    if (controller.pc instanceof RelayConnection) {
+      controller.pc.handleRelayControl(payload);
     }
   }
 
@@ -414,30 +511,82 @@ export class ConsoleApp {
       controller = this.controllers.get(from)!;
     }
 
-    if (!controller.pc) {
-      controller.pc = new PeerConnection(false, {
+    const forced = getForcedTransport();
+
+    if (forced === "relay") {
+      if (controller.pc?.mode !== "relay") {
+        this.promoteToRelay(controller);
+      }
+      return;
+    }
+
+    if (!controller.pc || controller.pc.mode === "relay") {
+      if (controller.pc?.mode === "relay") {
+        // Already promoted to relay, ignore WebRTC signaling unless forced
+        return;
+      }
+
+      const pc = new PeerConnection(false, {
         onSignal: sig => {
           this.api?.sendSignal(from, sig);
         },
         onStateChange: state => {
-          this.updateControllerStatus(controller!);
           if (state === "connected") {
+            if (controller!.negotiationTimer) {
+              clearTimeout(controller!.negotiationTimer);
+              controller!.negotiationTimer = null;
+            }
+            if (controller!.disconnectTimer) {
+              clearTimeout(controller!.disconnectTimer);
+              controller!.disconnectTimer = null;
+            }
+            this.updateControllerStatus(controller!);
             controller!.pc?.sendControl({
               type: "identity",
               name: controller!.name,
               color: controller!.color
             });
+          } else if (state === "disconnected") {
+            this.updateControllerStatus(controller!);
+            if (forced !== "rtc" && !controller!.disconnectTimer) {
+              controller!.disconnectTimer = window.setTimeout(() => {
+                controller!.disconnectTimer = null;
+                if (controller!.pc?.mode === "p2p" && (controller!.pc as PeerConnection).pc.connectionState !== "connected") {
+                  this.promoteToRelay(controller!);
+                }
+              }, 4000);
+            }
+          } else if (state === "failed") {
+            this.updateControllerStatus(controller!);
+            if (forced !== "rtc") {
+              this.promoteToRelay(controller!);
+            }
+          } else {
+            this.updateControllerStatus(controller!);
           }
         },
         onInputMessage: msg => {
           controller!.lastTouch = msg;
         }
       });
+
+      controller.pc = pc;
+
+      if (forced !== "rtc" && !controller.negotiationTimer) {
+        controller.negotiationTimer = window.setTimeout(() => {
+          controller.negotiationTimer = null;
+          if (controller.pc?.mode === "p2p" && (controller.pc as PeerConnection).pc.connectionState !== "connected") {
+            this.promoteToRelay(controller);
+          }
+        }, 8000);
+      }
     }
 
-    controller.pc.handleSignal(signal).catch(err => {
-      console.error(`Error handling signal from ${from}:`, err);
-    });
+    if (controller.pc instanceof PeerConnection) {
+      controller.pc.handleSignal(signal).catch(err => {
+        console.error(`Error handling signal from ${from}:`, err);
+      });
+    }
   }
 
   updateControllerUI() {
@@ -481,7 +630,7 @@ export class ConsoleApp {
 
       const badge = document.createElement("span");
       badge.className = `status-badge status-${controller.status}`;
-      badge.textContent = controller.status;
+      badge.textContent = controller.status === "live-relay" ? "relay" : controller.status;
 
       row.appendChild(badge);
       listEl.appendChild(row);

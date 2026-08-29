@@ -1,6 +1,6 @@
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../lib/signaling-api";
-import type { PeerConnection, TouchMessage } from "../transport/peer-connection";
+import type { GameTransport, TouchMessage } from "@transport/transport";
 
 export interface ViewportSize {
   width: number;
@@ -29,7 +29,7 @@ export interface ControllerPeer {
   name: string;
   color: string;
   isFirstPlayer?: boolean;
-  pc: PeerConnection | null;
+  pc: GameTransport | null;
   state: string;
   status?: string;
   lastTouch?: TouchMessage;

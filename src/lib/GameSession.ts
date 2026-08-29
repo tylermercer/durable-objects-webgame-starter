@@ -20,6 +20,7 @@ type ControllerRecord = {
 };
 
 const DISCONNECT_GRACE_PERIOD_MS = 45000;
+const MAX_CONTROL_QUEUE_SIZE = 25;
 
 export class GameSession extends DurableObject {
   sessions = new Map<WebSocket, Session>();
@@ -29,6 +30,7 @@ export class GameSession extends DurableObject {
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
   private hydrationPromise: Promise<void> | null = null;
+  private controlQueues = new Map<string, unknown[]>();
 
   private hydrateIfNeeded(): Promise<void> {
     if (!this.hydrationPromise) {
@@ -126,6 +128,7 @@ export class GameSession extends DurableObject {
         const elapsed = now - record.disconnectedAt;
         if (elapsed >= this.gracePeriodMs) {
           this.rejoinTokens.delete(token);
+          this.controlQueues.delete(record.id);
           tokensChanged = true;
           this.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(record.id));
         } else {
@@ -208,6 +211,19 @@ export class GameSession extends DurableObject {
 
         self.currentFirstPlayerId = self.getFirstPlayerId();
 
+        // Flush any queued control messages for console
+        const consoleQueue = self.controlQueues.get("console");
+        if (consoleQueue && consoleQueue.length > 0) {
+          for (const item of consoleQueue as Array<{ from: string; payload: unknown }>) {
+            try {
+              (callbacks as unknown as RpcStub<ConsoleCallbacks>).onRelayControl(item.from, item.payload);
+            } catch {
+              // Ignore RPC failure
+            }
+          }
+          self.controlQueues.delete("console");
+        }
+
         return {
           controllers: controllers.map(s => ({ id: s.id, name: s.name })),
           firstPlayerId: self.currentFirstPlayerId,
@@ -217,6 +233,30 @@ export class GameSession extends DurableObject {
 
       sendSignal(to: string, signal: RTCSignal) {
         self.sendToId(to, cb => (cb as RpcStub<ControllerCallbacks>).onSignal(signal));
+      }
+
+      relayInput(to: string, payload: unknown) {
+        self.sendToId(to, cb => (cb as RpcStub<ControllerCallbacks>).onRelayInput(payload));
+      }
+
+      relayControl(to: string, payload: unknown) {
+        let delivered = false;
+        self.sendToId(to, cb => {
+          delivered = true;
+          (cb as RpcStub<ControllerCallbacks>).onRelayControl(payload);
+        });
+
+        if (!delivered) {
+          let queue = self.controlQueues.get(to);
+          if (!queue) {
+            queue = [];
+            self.controlQueues.set(to, queue);
+          }
+          queue.push(payload);
+          if (queue.length > MAX_CONTROL_QUEUE_SIZE) {
+            queue.shift();
+          }
+        }
       }
 
       async saveGameState(state: unknown): Promise<void> {
@@ -304,6 +344,19 @@ export class GameSession extends DurableObject {
 
         self.checkAndBroadcastFirstPlayer();
 
+        // Flush any queued control messages for this controller ID
+        const controllerQueue = self.controlQueues.get(id);
+        if (controllerQueue && controllerQueue.length > 0) {
+          for (const payload of controllerQueue) {
+            try {
+              (callbacks as unknown as RpcStub<ControllerCallbacks>).onRelayControl(payload);
+            } catch {
+              // Ignore RPC failure
+            }
+          }
+          self.controlQueues.delete(id);
+        }
+
         return { id, name: name_, consoleConnected, rejoinToken: token, isFirstPlayer };
       }
 
@@ -312,6 +365,37 @@ export class GameSession extends DurableObject {
         if (!session) return;
         const from = session.id;
         self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onSignal(from, signal));
+      }
+
+      relayInput(payload: unknown) {
+        const session = self.sessions.get(ws);
+        if (!session) return;
+        const from = session.id;
+        self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onRelayInput(from, payload));
+      }
+
+      relayControl(payload: unknown) {
+        const session = self.sessions.get(ws);
+        if (!session) return;
+        const from = session.id;
+        let delivered = false;
+
+        self.forConsole(cb => {
+          delivered = true;
+          (cb as RpcStub<ConsoleCallbacks>).onRelayControl(from, payload);
+        });
+
+        if (!delivered) {
+          let queue = self.controlQueues.get("console") as Array<{ from: string; payload: unknown }> | undefined;
+          if (!queue) {
+            queue = [];
+            self.controlQueues.set("console", queue as unknown as unknown[]);
+          }
+          queue.push({ from, payload });
+          if (queue.length > MAX_CONTROL_QUEUE_SIZE) {
+            queue.shift();
+          }
+        }
       }
     })();
   }

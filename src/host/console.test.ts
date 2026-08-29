@@ -1,5 +1,31 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { ConsoleApp } from "./console";
+import { ConsoleApp, getForcedTransport, computePlayerStatus } from "./console";
+
+describe("getForcedTransport and computePlayerStatus", () => {
+  it("parses force_transport query parameter correctly", () => {
+    vi.stubGlobal("window", {
+      location: { search: "?force_transport=relay" }
+    });
+    expect(getForcedTransport()).toBe("relay");
+
+    vi.stubGlobal("window", {
+      location: { search: "?force_transport=RTC" }
+    });
+    expect(getForcedTransport()).toBe("rtc");
+
+    vi.stubGlobal("window", {
+      location: { search: "?other=1" }
+    });
+    expect(getForcedTransport()).toBeNull();
+  });
+
+  it("computes player connection status distinguishing live and live-relay", () => {
+    expect(computePlayerStatus(false, "connected")).toBe("grace-period");
+    expect(computePlayerStatus(true, null, "relay")).toBe("live-relay");
+    expect(computePlayerStatus(true, "connected", "p2p")).toBe("live");
+    expect(computePlayerStatus(true, "connecting", "p2p")).toBe("reconnecting");
+  });
+});
 
 describe("ConsoleApp room code persistence", () => {
   let mockStorage: Record<string, string> = {};
@@ -25,8 +51,6 @@ describe("ConsoleApp room code persistence", () => {
 
     vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
     vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
-
-    const listeners: Record<string, Function[]> = {};
 
     vi.stubGlobal("window", {
       location: {
