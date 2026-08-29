@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
-import { PeerConnection, type TouchMessage } from "../transport/peer-connection";
+import { fetchIceServers, PeerConnection, type TouchMessage } from "../transport/peer-connection";
 import { loadConsoleGame } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
@@ -89,6 +89,7 @@ export class ConsoleApp {
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
+  private iceServersPromise: Promise<RTCIceServer[]> | null = null;
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -119,6 +120,14 @@ export class ConsoleApp {
     this.setupUIHandlers();
     this.renderHeader();
     this.connectSignaling();
+    this.getIceServers();
+  }
+
+  private getIceServers(): Promise<RTCIceServer[]> {
+    if (!this.iceServersPromise) {
+      this.iceServersPromise = fetchIceServers(this.code);
+    }
+    return this.iceServersPromise;
   }
 
   private ensureResizeObserver() {
@@ -407,7 +416,7 @@ export class ConsoleApp {
     }
   }
 
-  handleSignal(from: string, signal: RTCSignal) {
+  async handleSignal(from: string, signal: RTCSignal) {
     let controller = this.controllers.get(from);
     if (!controller) {
       this.addController(from, `Player ${this.controllers.size + 1}`);
@@ -415,24 +424,29 @@ export class ConsoleApp {
     }
 
     if (!controller.pc) {
-      controller.pc = new PeerConnection(false, {
-        onSignal: sig => {
-          this.api?.sendSignal(from, sig);
-        },
-        onStateChange: state => {
-          this.updateControllerStatus(controller!);
-          if (state === "connected") {
-            controller!.pc?.sendControl({
-              type: "identity",
-              name: controller!.name,
-              color: controller!.color
-            });
+      const iceServers = await this.getIceServers();
+      controller.pc = new PeerConnection(
+        false,
+        {
+          onSignal: sig => {
+            this.api?.sendSignal(from, sig);
+          },
+          onStateChange: state => {
+            this.updateControllerStatus(controller!);
+            if (state === "connected") {
+              controller!.pc?.sendControl({
+                type: "identity",
+                name: controller!.name,
+                color: controller!.color
+              });
+            }
+          },
+          onInputMessage: msg => {
+            controller!.lastTouch = msg;
           }
         },
-        onInputMessage: msg => {
-          controller!.lastTouch = msg;
-        }
-      });
+        iceServers
+      );
     }
 
     controller.pc.handleSignal(signal).catch(err => {

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { RpcTarget, newWebSocketRpcSession, type RpcStub } from "capnweb";
 import type { ConsoleApi, ConsoleCallbacks, ControllerApi, ControllerCallbacks, RTCSignal } from "./signaling-api";
 import { sanitizeName } from "../utils/deviceIdentity";
+import { mintMeteredCredentials } from "./turn-credentials";
 
 type Role = "console" | "controller";
 
@@ -26,6 +27,7 @@ export class GameSession extends DurableObject {
   rejoinTokens = new Map<string, ControllerRecord>();
   consoleToken: string | null = null;
   gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
+  private cachedTurnCredentials: { iceServers: RTCIceServer[]; expiresAt: number } | null = null;
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
   private hydrationPromise: Promise<void> | null = null;
@@ -59,11 +61,15 @@ export class GameSession extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     await this.hydrateIfNeeded();
 
+    const url = new URL(request.url);
+    if (url.pathname === "/api/turn-credentials") {
+      return this.getTurnCredentials();
+    }
+
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected Upgrade: websocket", { status: 426 });
     }
 
-    const url = new URL(request.url);
     const role = url.searchParams.get("role") as Role;
 
     if (role !== "console" && role !== "controller") {
@@ -382,6 +388,33 @@ export class GameSession extends DurableObject {
         }
       }
     }
+  }
+
+  private async getTurnCredentials(): Promise<Response> {
+    const now = Date.now();
+
+    if (!this.cachedTurnCredentials && this.ctx?.storage?.get) {
+      this.cachedTurnCredentials =
+        (await this.ctx.storage.get<{ iceServers: RTCIceServer[]; expiresAt: number }>("turnCredentials")) ?? null;
+    }
+
+    if (this.cachedTurnCredentials && this.cachedTurnCredentials.expiresAt > now + 60_000) {
+      return Response.json({ iceServers: this.cachedTurnCredentials.iceServers });
+    }
+
+    const minted = await mintMeteredCredentials(this.env ?? {});
+    if (!minted) {
+      return Response.json({ iceServers: [] });
+    }
+
+    this.cachedTurnCredentials = {
+      iceServers: minted.iceServers,
+      expiresAt: now + minted.expiryInSeconds * 1000
+    };
+    if (this.ctx?.storage?.put) {
+      await this.ctx.storage.put("turnCredentials", this.cachedTurnCredentials);
+    }
+    return Response.json({ iceServers: minted.iceServers });
   }
 
   private nextPlayerName(): string {

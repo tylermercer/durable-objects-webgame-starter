@@ -1,6 +1,6 @@
 import { newWebSocketRpcSession, RpcTarget, type RpcStub } from "capnweb";
 import type { ControllerApi, ControllerCallbacks, RTCSignal } from "../lib/signaling-api";
-import { PeerConnection } from "@transport/peer-connection";
+import { fetchIceServers, PeerConnection } from "@transport/peer-connection";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
@@ -161,26 +161,31 @@ class ControllerApp {
 
     this.updateStatus(`Negotiating WebRTC with console...`);
 
-    this.pc = new PeerConnection(true, {
-      onSignal: signal => {
-        this.api?.sendSignal(signal);
-      },
-      onStateChange: state => {
-        if (state === "connected") {
-          this.updateStatus(`Connected to Console!`);
-        } else {
-          this.updateStatus(`Connection state: ${state}`);
+    const iceServers = await fetchIceServers(this.code);
+    this.pc = new PeerConnection(
+      true,
+      {
+        onSignal: signal => {
+          this.api?.sendSignal(signal);
+        },
+        onStateChange: state => {
+          if (state === "connected") {
+            this.updateStatus(`Connected to Console!`);
+          } else {
+            this.updateStatus(`Connection state: ${state}`);
+          }
+        },
+        onControlMessage: msg => {
+          if (msg.type === "identity") {
+            const identityMsg = msg as { type: "identity"; name: string; color: string };
+            this.name = identityMsg.name;
+            this.color = identityMsg.color;
+            this.updatePlayerInfo(this.name, this.color);
+          }
         }
       },
-      onControlMessage: msg => {
-        if (msg.type === "identity") {
-          const identityMsg = msg as { type: "identity"; name: string; color: string };
-          this.name = identityMsg.name;
-          this.color = identityMsg.color;
-          this.updatePlayerInfo(this.name, this.color);
-        }
-      }
-    });
+      iceServers
+    );
 
     try {
       const { createGame } = await loadControllerGame(new URL(window.location.href));

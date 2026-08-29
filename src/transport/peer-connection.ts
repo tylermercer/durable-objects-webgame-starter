@@ -67,18 +67,17 @@ export interface PeerConnectionCallbacks {
   onControlMessage?: (msg: ControlMessage) => void;
 }
 
-const ICE_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    ...(import.meta.env.PUBLIC_TURN_URLS
-      ? [{
-          urls: import.meta.env.PUBLIC_TURN_URLS.split(","),
-          username: import.meta.env.PUBLIC_TURN_USERNAME,
-          credential: import.meta.env.PUBLIC_TURN_CREDENTIAL,
-        }]
-      : [])
-  ]
-};
+export async function fetchIceServers(roomCode: string): Promise<RTCIceServer[]> {
+  const stun: RTCIceServer = { urls: "stun:stun.l.google.com:19302" };
+  try {
+    const resp = await fetch(`/api/turn-credentials?code=${roomCode}`);
+    if (!resp.ok) return [stun];
+    const { iceServers } = (await resp.json()) as { iceServers: RTCIceServer[] };
+    return [stun, ...(iceServers ?? [])];
+  } catch {
+    return [stun];
+  }
+}
 
 export class PeerConnection {
   pc: RTCPeerConnection;
@@ -91,9 +90,10 @@ export class PeerConnection {
 
   constructor(
     public isInitiator: boolean,
-    private callbacks: PeerConnectionCallbacks
+    private callbacks: PeerConnectionCallbacks,
+    iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }]
   ) {
-    this.pc = new RTCPeerConnection(ICE_CONFIG);
+    this.pc = new RTCPeerConnection({ iceServers });
     this.coalescingControlSender = new CoalescingSender(() => this.controlChannel);
 
     this.pc.onicecandidate = event => {

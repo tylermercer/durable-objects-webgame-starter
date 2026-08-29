@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PeerConnection, CoalescingSender, type ControlMessage, type IdentityMessage, type PingMessage, type PongMessage, type TouchMessage } from "./peer-connection";
+import { fetchIceServers, PeerConnection, CoalescingSender, type ControlMessage, type IdentityMessage, type PingMessage, type PongMessage, type TouchMessage } from "./peer-connection";
 
 class MockRTCSessionDescription {
   type: string;
@@ -63,6 +63,41 @@ class MockRTCPeerConnection {
 
   close() {}
 }
+
+describe("fetchIceServers", () => {
+  it("fetches ice servers from endpoint and prepends default STUN server", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        iceServers: [{ urls: ["turn:relay.example.com:3478"], username: "u", credential: "c" }]
+      }), { status: 200 });
+    }) as any;
+
+    try {
+      const servers = await fetchIceServers("TEST1");
+      expect(servers).toEqual([
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: ["turn:relay.example.com:3478"], username: "u", credential: "c" }
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("falls back to STUN server only on fetch error", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("Network error");
+    }) as any;
+
+    try {
+      const servers = await fetchIceServers("TEST1");
+      expect(servers).toEqual([{ urls: "stun:stun.l.google.com:19302" }]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
 
 describe("peer-connection message formats and CoalescingSender", () => {
   it("serializes and deserializes touch messages correctly", () => {

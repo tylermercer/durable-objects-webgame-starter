@@ -96,6 +96,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          METERED_APP_DOMAIN: ${{ vars.METERED_APP_DOMAIN }}
+          METERED_SECRET_KEY: ${{ secrets.METERED_SECRET_KEY }}
 
       - name: Deploy to Cloudflare (pull request)
         id: deploy-pr
@@ -104,6 +106,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          METERED_APP_DOMAIN: ${{ vars.METERED_APP_DOMAIN }}
+          METERED_SECRET_KEY: ${{ secrets.METERED_SECRET_KEY }}
 
       - name: Add preview URL to pull request
         if: github.event_name == 'pull_request' && steps.build_site.outputs.result == 'built'

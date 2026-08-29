@@ -88,10 +88,32 @@ async function main() {
 
   if (!cfToken || !cfAccountId) throw new Error("Credentials are required.");
 
+  // 3.5 Optional Metered TURN Setup
+  let meteredDomain: string | null = null;
+  let meteredSecret: string | null = null;
+
+  if (prompt("Set up a Metered TURN relay now? [y/N]:")?.toLowerCase() === "y") {
+    meteredDomain = prompt("Enter your Metered App Domain (e.g. 'myapp' for myapp.metered.live):");
+    meteredSecret = prompt("Paste your Metered Secret Key:");
+
+    if (meteredDomain && meteredSecret) {
+      try {
+        let wContent = readFileSync("./wrangler.jsonc", "utf-8");
+        wContent = wContent.replace('// "METERED_APP_DOMAIN": ""', `"METERED_APP_DOMAIN": "${meteredDomain}"`);
+        writeFileSync("./wrangler.jsonc", wContent);
+      } catch (e) {
+        console.warn("Could not update wrangler.jsonc with METERED_APP_DOMAIN, skipping...");
+      }
+    }
+  }
+
   // 4. Set Secrets & Push (Amend Initial Commit)
   console.log(`\x1b[34m[3/5]\x1b[0m Setting GitHub Secrets...`);
   await $`gh secret set CLOUDFLARE_API_TOKEN --body ${cfToken}`;
   await $`gh secret set CLOUDFLARE_ACCOUNT_ID --body ${cfAccountId}`;
+  if (meteredSecret) {
+    await $`gh secret set METERED_SECRET_KEY --body ${meteredSecret}`;
+  }
 
   console.log(`\x1b[34m[4/5]\x1b[0m Amending initial commit and force pushing...`);
   await $`git add .`;

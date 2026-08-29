@@ -7,8 +7,7 @@ import { unified } from '@astrojs/markdown-remark';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://durable-objects-webgame-starter.tmercer.workers.dev',
-  session: false,
-  output: 'server',
+  output: 'static',
   adapter: cloudflare(),
   integrations: [react()],
   markdown: {

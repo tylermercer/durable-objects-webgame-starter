@@ -285,4 +285,71 @@ describe("GameSession Durable Object", () => {
     const newJoinRes = await controllerApi.join(cb);
     expect(newJoinRes.name).toBe("Player 5");
   });
+
+  it("handles /api/turn-credentials fetch and caching in DO", async () => {
+    const storageMap = new Map<string, any>();
+    const ctx = {
+      storage: {
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val))
+      }
+    };
+    const env = {
+      METERED_APP_DOMAIN: "testdomain",
+      METERED_SECRET_KEY: "testsecret"
+    };
+
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn(async () => {
+      return new Response(JSON.stringify({ username: "u1", password: "p1" }), { status: 200 });
+    });
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const session = new GameSession(ctx as any, env as any);
+
+      // First request mints credential
+      const req1 = new Request("http://localhost/api/turn-credentials?code=TEST1");
+      const resp1 = await session.fetch(req1);
+      expect(resp1.status).toBe(200);
+      const data1 = (await resp1.json()) as { iceServers: RTCIceServer[] };
+      expect(data1.iceServers.length).toBe(1);
+      expect(data1.iceServers[0].username).toBe("u1");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(ctx.storage.put).toHaveBeenCalledWith("turnCredentials", expect.objectContaining({
+        iceServers: data1.iceServers
+      }));
+
+      // Second request reuses cache (no second Metered call)
+      const req2 = new Request("http://localhost/api/turn-credentials?code=TEST1");
+      const resp2 = await session.fetch(req2);
+      expect(resp2.status).toBe(200);
+      const data2 = (await resp2.json()) as { iceServers: RTCIceServer[] };
+      expect(data2.iceServers[0].username).toBe("u1");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      // New DO instance reading from storage (DO cold-start)
+      const session2 = new GameSession(ctx as any, env as any);
+      const req3 = new Request("http://localhost/api/turn-credentials?code=TEST1");
+      const resp3 = await session2.fetch(req3);
+      expect(resp3.status).toBe(200);
+      const data3 = (await resp3.json()) as { iceServers: RTCIceServer[] };
+      expect(data3.iceServers[0].username).toBe("u1");
+      expect(fetchSpy).toHaveBeenCalledTimes(1); // Storage cache reused, Metered not called
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("returns empty iceServers array when TURN env vars are missing", async () => {
+    const ctx = {};
+    const env = {};
+    const session = new GameSession(ctx as any, env as any);
+
+    const req = new Request("http://localhost/api/turn-credentials?code=TEST1");
+    const resp = await session.fetch(req);
+    expect(resp.status).toBe(200);
+    const data = await resp.json();
+    expect(data).toEqual({ iceServers: [] });
+  });
 });

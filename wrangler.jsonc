@@ -9,6 +9,9 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "vars": {
+    // "METERED_APP_DOMAIN": ""
+  },
   "durable_objects": {
     "bindings": [
       {

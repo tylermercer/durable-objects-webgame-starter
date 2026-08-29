@@ -154,11 +154,17 @@ By default, a controller refresh looks like a brand-new player joining — fine 
 
 ### TURN Relay Configuration (Optional)
 
-WebRTC STUN server is used by default for P2P connection establishment. In environments with restrictive NATs or firewalls (e.g., venue Wi-Fi), a TURN relay server is recommended. The template supports optional TURN server configuration via environment variables:
+WebRTC STUN server is used by default for P2P connection establishment. In environments with restrictive NATs or firewalls (e.g., venue Wi-Fi), a server-issued TURN relay server via [Metered](https://www.metered.ca/turn-server) is recommended.
 
-- `PUBLIC_TURN_URLS`: Comma-separated list of TURN server URLs (e.g., `turn:turn.example.com:3478`).
-- `PUBLIC_TURN_USERNAME`: TURN server username.
-- `PUBLIC_TURN_CREDENTIAL`: TURN server password/credential.
+Credentials are generated server-side per room session using Metered's API and cached in the Durable Object:
+
+1. Sign up for a free Metered account at [dashboard.metered.ca](https://dashboard.metered.ca). Note: Metered's TURN service hosts the Open Relay dashboard.
+2. Find your App Domain (e.g., `myapp` from `myapp.metered.live`) and Secret Key under the **Secret Key** section.
+3. Configure your variables:
+   - `METERED_APP_DOMAIN`: Set under `vars` in `wrangler.jsonc` (or `.dev.vars` for local dev).
+   - `METERED_SECRET_KEY`: Set securely using `wrangler secret put METERED_SECRET_KEY` (or `.dev.vars` locally).
+
+If these environment variables are omitted, `/api/turn-credentials` falls back to STUN-only mode.
 
 ### Sending frequently-changing state reliably
 
