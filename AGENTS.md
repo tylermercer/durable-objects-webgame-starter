@@ -58,3 +58,57 @@ The project uses two WebRTC data channels between the console and each controlle
 - `control`: Reliable and ordered channel used for identity assignment, ping/pong latency checks, and game protocol messages.
 
 When extending or building new gameplay features, extend the `control` channel's message protocol rather than modifying the signaling layer.
+
+## Dev Harness & Playwright Verification
+
+The dev-only route `/dev/harness` (`src/pages/dev/harness.astro`) embeds one console iframe (`#console-frame`) and N controller iframes (`.ctrl-frame`) on a single page, connected to the real Durable Object signaling backend and WebRTC/relay transport.
+
+### Route & Query Parameters
+- **URL**: `http://localhost:4321/dev/harness` (Only accessible in `DEV` mode; returns 404 when `!import.meta.env.DEV`).
+- **Query Params**:
+  - `game` (default `touch-demo`): Example game key matching `EXAMPLES` in `@examples/registry`.
+  - `players` (default `2`): Number of controller iframes to render.
+  - `transport` (default `relay`): Transport override (`relay`, `rtc`, or `auto`).
+
+### Architecture & Isolation
+- **Console Iframe (`#console-frame`)**: `sandbox="allow-scripts allow-same-origin allow-forms"`. Same-origin access allows the harness page to poll `consoleFrame.contentWindow.sessionStorage.getItem('console_room_code')` and dynamically set controller frame `src` attributes.
+- **Controller Iframes (`.ctrl-frame`)**: `sandbox="allow-scripts allow-forms"` (without `allow-same-origin`). Each controller receives a unique opaque origin, isolating `sessionStorage` (`rejoin_token_<CODE>`, `playerName`) so embedded controllers act as independent devices without identity collisions.
+
+### Python Playwright Verification Pattern
+When verifying console + controller multi-device flows, write a Python script using `playwright.sync_api` (`/home/jules/verification/verify_harness.py`):
+
+```python
+from playwright.sync_api import sync_playwright, expect
+
+def run():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 960})
+
+        # 1. Navigate to dev harness
+        page.goto("http://localhost:4321/dev/harness?game=touch-demo&players=2&transport=relay")
+
+        # 2. Access frame locators
+        console = page.frame_locator("#console-frame")
+        ctrl1 = page.frame_locator(".ctrl-frame").nth(0)
+        ctrl2 = page.frame_locator(".ctrl-frame").nth(1)
+
+        # 3. Wait for controllers to load room code URL and show join screen
+        ctrl1.get_by_role("textbox").wait_for(state="visible", timeout=10000)
+
+        # 4. Fill player names and join
+        ctrl1.get_by_role("textbox").fill("Alice")
+        ctrl1.get_by_role("button", name="Join").click()
+
+        ctrl2.get_by_role("textbox").fill("Bob")
+        ctrl2.get_by_role("button", name="Join").click()
+
+        # 5. Capture combined console + controllers state in a single screenshot
+        page.screenshot(path="/home/jules/verification/verification.png")
+        browser.close()
+
+if __name__ == "__main__":
+    run()
+```
+
+Inspect the screenshot with `read_image_file('/home/jules/verification/verification.png')` and complete verification with `frontend_verification_complete('/home/jules/verification/verification.png')`.
