@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ConsoleContext, ControllerPeer } from "@contract/gameTypes";
 import type { GameTransport, ControlMessage } from "@transport/transport";
-import type { UnoControlMessage, PublicUnoState } from "./types";
+import type { PublicOthelloState } from "./types";
 
 vi.mock("react-dom/client", () => ({
   createRoot: () => ({
@@ -10,13 +10,16 @@ vi.mock("react-dom/client", () => ({
   }),
 }));
 
-vi.mock("./UnoConsole", () => ({
-  UnoConsole: () => null,
+vi.mock("./OthelloConsole", () => ({
+  OthelloConsole: () => null,
 }));
 
 import { createGame } from "./console";
 
-function createMockTransport(): GameTransport & { controlListeners: ((msg: ControlMessage) => void)[]; sentControlMsgs: unknown[] } {
+function createMockTransport(): GameTransport & {
+  controlListeners: ((msg: ControlMessage) => void)[];
+  sentControlMsgs: unknown[];
+} {
   const controlListeners: ((msg: ControlMessage) => void)[] = [];
   const sentControlMsgs: unknown[] = [];
   return {
@@ -24,10 +27,10 @@ function createMockTransport(): GameTransport & { controlListeners: ((msg: Contr
     controlListeners,
     sentControlMsgs,
     sendInput: vi.fn(),
-    sendControl: vi.fn((msg) => sentControlMsgs.push(msg)),
+    sendControl: vi.fn(msg => sentControlMsgs.push(msg)),
     sendControlCoalesced: vi.fn((key, msg) => sentControlMsgs.push(msg)),
     addInputListener: vi.fn(() => () => {}),
-    addControlListener: vi.fn((listener) => {
+    addControlListener: vi.fn(listener => {
       controlListeners.push(listener);
       return () => {
         const idx = controlListeners.indexOf(listener);
@@ -39,8 +42,8 @@ function createMockTransport(): GameTransport & { controlListeners: ((msg: Contr
   };
 }
 
-describe("UnoConsole integration", () => {
-  it("attaches control listeners for live-relay peers and handles card plays", () => {
+describe("OthelloConsole integration", () => {
+  it("attaches control listeners, starts game, and handles piece placement", () => {
     const container = {} as any;
     const p1Transport = createMockTransport();
     const p2Transport = createMockTransport();
@@ -53,7 +56,7 @@ describe("UnoConsole integration", () => {
           name: "Alice",
           color: "#ff0000",
           isFirstPlayer: true,
-          status: "live-relay",
+          status: "live",
           state: "connected",
           pc: p1Transport,
         },
@@ -65,7 +68,7 @@ describe("UnoConsole integration", () => {
           name: "Bob",
           color: "#00ff00",
           isFirstPlayer: false,
-          status: "live-relay",
+          status: "live",
           state: "connected",
           pc: p2Transport,
         },
@@ -95,46 +98,27 @@ describe("UnoConsole integration", () => {
 
     // Find gameState broadcast in sent messages
     const lastGameStateMsg = p1Transport.sentControlMsgs
-      .filter((m): m is { type: "gameState"; state: PublicUnoState } => (m as any)?.type === "gameState")
+      .filter((m): m is { type: "gameState"; state: PublicOthelloState } => (m as any)?.type === "gameState")
       .pop();
 
     expect(lastGameStateMsg).toBeDefined();
     expect(lastGameStateMsg!.state.phase).toBe("playing");
     expect(lastGameStateMsg!.state.turnPlayerId).toBe("peer-1");
+    expect(lastGameStateMsg!.state.blackPlayer?.id).toBe("peer-1");
+    expect(lastGameStateMsg!.state.whitePlayer?.id).toBe("peer-2");
+    expect(lastGameStateMsg!.state.blackCount).toBe(2);
+    expect(lastGameStateMsg!.state.whiteCount).toBe(2);
 
-    // Get hands sent to peer 1
-    const p1HandMsg = p1Transport.sentControlMsgs
-      .filter((m): m is { type: "yourHand"; hand: any[] } => (m as any)?.type === "yourHand")
+    // Peer 1 (Black) places piece at (2, 3)
+    p1Transport.controlListeners[0]({ type: "placePiece", x: 2, y: 3 });
+
+    const nextGameStateMsg = p1Transport.sentControlMsgs
+      .filter((m): m is { type: "gameState"; state: PublicOthelloState } => (m as any)?.type === "gameState")
       .pop();
-    expect(p1HandMsg).toBeDefined();
-    expect(p1HandMsg!.hand.length).toBe(7);
 
-    // Play a valid card or a wild card from p1's hand
-    const topCard = lastGameStateMsg!.state.topCard!;
-    const activeColor = lastGameStateMsg!.state.activeColor!;
-
-    const playableCard = p1HandMsg!.hand.find(
-      c => (c.color === "wild" && c.value === "wild") ||
-           ((c.color === activeColor || c.value === topCard.value) && !["skip", "reverse", "draw2", "wild4"].includes(c.value))
-    );
-
-    if (playableCard) {
-      const playMsg: UnoControlMessage = {
-        type: "playCard",
-        cardId: playableCard.id,
-        chosenColor: playableCard.color === "wild" ? "red" : undefined,
-      };
-
-      p1Transport.controlListeners[0](playMsg as unknown as ControlMessage);
-
-      // Verify turn advanced to peer-2 and p1 hand size is now 6
-      const nextGameStateMsg = p1Transport.sentControlMsgs
-        .filter((m): m is { type: "gameState"; state: PublicUnoState } => (m as any)?.type === "gameState")
-        .pop();
-
-      expect(nextGameStateMsg!.state.turnPlayerId).toBe("peer-2");
-      expect(nextGameStateMsg!.state.players.find(p => p.id === "peer-1")?.cardCount).toBe(6);
-    }
+    expect(nextGameStateMsg!.state.turnPlayerId).toBe("peer-2");
+    expect(nextGameStateMsg!.state.blackCount).toBe(4);
+    expect(nextGameStateMsg!.state.whiteCount).toBe(1);
 
     instance.destroy?.();
   });

@@ -3,6 +3,24 @@ export interface GridPos {
   y: number;
 }
 
+export interface TileGridState<T> {
+  width: number;
+  height: number;
+  cells: T[];
+}
+
+/** The 8 directions `ray()` takes a single step in — reused as-is by any game walking every line from a cell. */
+export const DIRECTIONS_8: Array<[-1 | 0 | 1, -1 | 0 | 1]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
+
 export class TileGrid<T> {
   private cells: T[];
 
@@ -29,6 +47,32 @@ export class TileGrid<T> {
 
   set(pos: GridPos, value: T): void {
     if (this.inBounds(pos)) this.cells[pos.y * this.width + pos.x] = value;
+  }
+
+  toJSON(): TileGridState<T> {
+    return { width: this.width, height: this.height, cells: [...this.cells] };
+  }
+
+  static fromJSON<T>(state: TileGridState<T>): TileGrid<T> {
+    const grid = new TileGrid<T>(state.width, state.height, () => undefined as unknown as T);
+    grid.cells = [...state.cells];
+    return grid;
+  }
+
+  /**
+   * Cells walking outward from `start` in a straight line — NOT including
+   * `start` itself — stopping at the grid edge. `dx`/`dy` are a single
+   * step's direction (-1, 0, or 1 per axis; both 0 is a no-op that yields
+   * nothing). For flanking checks (Othello), line-of-sight, or any sliding
+   * search along a row/column/diagonal.
+   */
+  *ray(start: GridPos, dx: -1 | 0 | 1, dy: -1 | 0 | 1): Generator<{ pos: GridPos; value: T }> {
+    if (dx === 0 && dy === 0) return;
+    let pos: GridPos = { x: start.x + dx, y: start.y + dy };
+    while (this.inBounds(pos)) {
+      yield { pos, value: this.get(pos) as T };
+      pos = { x: pos.x + dx, y: pos.y + dy };
+    }
   }
 
   *neighbors(pos: GridPos, diagonals = false): Generator<GridPos> {
