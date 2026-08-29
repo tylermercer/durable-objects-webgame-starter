@@ -62,9 +62,14 @@ export function UnoController({ ctx }: { ctx: ControllerContext }) {
   const currentName = typeof document !== "undefined"
     ? document.getElementById("player-name")?.textContent || ""
     : "";
-  const cleanCurrentName = currentName.replace(/\s*\(Host\)$/, "");
-  const me = gameState.players.find(p => p.name === cleanCurrentName || p.name === currentName);
-  const isMyTurn = me ? me.isTurn : false;
+  const cleanCurrentName = currentName.replace(/\s*\(Host\)$/, "").trim();
+  const me = gameState.players.find(
+    p => p.name === cleanCurrentName || p.name === currentName || p.name.trim() === cleanCurrentName
+  );
+  const isTurnByName = gameState.turnPlayerName
+    ? (gameState.turnPlayerName === cleanCurrentName || gameState.turnPlayerName === currentName || gameState.turnPlayerName.trim() === cleanCurrentName)
+    : false;
+  const isMyTurn = me ? me.isTurn : isTurnByName;
 
   const connectedPlayersCount = gameState.players.filter(p => p.connected).length;
   const firstPlayerName = gameState.firstPlayerId

@@ -32,18 +32,18 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
-      if (peer.isFirstPlayer && (peer.status === "live" || peer.state === "connected")) {
+      if (peer.isFirstPlayer && (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected")) {
         return peer.id;
       }
     }
     for (const peer of ctx.peers.values()) {
-      if (peer.status === "live" || peer.state === "connected") return peer.id;
+      if (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected") return peer.id;
     }
     return null;
   }
 
   function isConnected(peer: ControllerPeer): boolean {
-    return peer.status ? peer.status === "live" : peer.state === "connected";
+    return peer.status ? (peer.status === "live" || peer.status === "live-relay") : peer.state === "connected";
   }
 
   function sendHand(peer: ControllerPeer, hand: UnoCard[]) {
@@ -291,7 +291,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
 
     for (const [id, peer] of ctx.peers) {
-      if (peer.pc && peer.pc.controlChannel?.readyState === "open" && !attachedListeners.has(id)) {
+      const isLive = isConnected(peer);
+      if (peer.pc && isLive && !attachedListeners.has(id)) {
         attachedListeners.add(id);
         peer.pc.addControlListener(msg => {
           handleControlMessage(id, msg as unknown as UnoControlMessage);

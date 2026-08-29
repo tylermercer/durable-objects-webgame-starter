@@ -1,11 +1,11 @@
-import type { PeerConnection } from "@transport/peer-connection";
+import type { GameTransport } from "@transport/transport";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { UnoController } from "./UnoController";
 
 export interface ControllerContext {
-  peerConnection: PeerConnection | null;
+  peerConnection: GameTransport | null;
   isFirstPlayer?: () => boolean;
 }
 
