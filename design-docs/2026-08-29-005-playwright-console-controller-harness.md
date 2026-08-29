@@ -29,7 +29,7 @@ This doc proposes a single dev-only route, `/dev/harness`, that embeds one conso
 
 `src/utils/deviceIdentity.ts` and `src/host/console.ts` store all per-device state in `sessionStorage`: `rejoin_token_<CODE>`, `playerName`, and (console side) `console_room_code` / `console_token_<CODE>`. `sessionStorage` is scoped per **top-level browsing context**, not per iframe — same-origin iframes sharing one tab share one `sessionStorage`. Give every iframe on the harness page `sandbox="allow-same-origin"` and every controller frame would write `rejoin_token_<CODE>` and `playerName` to the same bucket, so controller 2 would load controller 1's name and rejoin token and the two would effectively fight over one player slot.
 
-The fix is to only grant `allow-same-origin` to the console iframe (there's exactly one, so no collision risk, and the harness needs to read `console_room_code` back out of it). Controller iframes get `sandbox="allow-scripts allow-forms"` **without** `allow-same-origin`, which gives each one a unique opaque origin per navigation. Opaque origins still permit `fetch`/`WebSocket`/`RTCPeerConnection` (sandbox doesn't gate networking, and the local dev server doesn't do origin-based auth on the signaling endpoint), but each frame's `sessionStorage` is private to that frame's opaque origin — exactly the "separate device" isolation real phones give you for free. The tradeoff: an opaque-origin frame's storage doesn't survive that frame's own reload, so this harness can't be used to test rejoin-after-refresh for a single controller in isolation (see Non-goals / Open questions).
+The fix is to only grant `allow-same-origin` to the console iframe (there's exactly one, so no collision risk, and the harness needs to read `console_room_code` back out of it). Controller iframes get `sandbox="allow-scripts allow-forms"` **without** `allow-same-origin`, which gives each one a unique opaque origin per navigation. Opaque origins still permit `fetch`/`WebSocket`/`RTCPeerConnection` (sandbox doesn't gate networking, and the local dev server doesn't do origin-based auth on the signaling endpoint), but each frame's `sessionStorage` is private to that frame's opaque origin — exactly the "separate device" isolation real phones give you for free. The tradeoff: an opaque-origin frame's storage doesn't survive that frame's own reload, so this harness can't be used to test rejoin-after-refresh for a single controller in isolation (see Non-goals / Resolved Design Decisions).
 
 ## Design
 
@@ -82,7 +82,7 @@ const gate = setInterval(() => {
 }, 200);
 ```
 
-This works because the console frame *does* have `allow-same-origin`, so it's genuinely same-origin with the parent page and its `contentWindow.sessionStorage` is directly readable — no `postMessage` plumbing needed. Reading is polled rather than event-driven since `console.ts` doesn't currently emit a "room code ready" event; adding one is a one-line, low-risk addition to `console.ts` if the polling proves flaky in practice (see Open questions).
+This works because the console frame *does* have `allow-same-origin`, so it's genuinely same-origin with the parent page and its `contentWindow.sessionStorage` is directly readable — no `postMessage` plumbing needed. Reading is polled rather than event-driven since `console.ts` doesn't currently emit a "room code ready" event; polling requires zero changes to shipped code.
 
 Each controller frame still goes through its normal name-entry screen on load (`getSavedName()` returns empty in a fresh opaque-origin frame, so `init()` shows `#name-screen`) — Jules's Python Playwright script fills that in per-frame via `page.frame_locator('.ctrl-frame').nth(i)`, same as it would on a real phone. This is deliberate: it keeps the harness exercising the real join UI rather than short-circuiting it.
 
@@ -152,8 +152,13 @@ if __name__ == "__main__":
   - Reloading a single controller frame gets a fresh opaque origin and re-shows the name screen (expected, documented limitation — not a bug).
   - Route 404s when built for production (`pnpm build && pnpm preview`, confirm `/dev/harness` isn't reachable).
 
-## Open questions
+## Resolved Design Decisions
 
-- Is polling `sessionStorage` for `console_room_code` reliable enough, or should `console.ts` gain a one-line custom event (`window.dispatchEvent(new CustomEvent('console-room-ready', { detail: code }))`) that the harness can listen for instead? Recommend starting with polling since it requires zero changes to shipped code, and only adding the event if Jules reports flakiness in practice.
-- Should the harness support a "console has no controllers yet" screenshot vs. "controllers joined" screenshot as two distinct states Jules can request, or is a single fully-joined view sufficient? Leaning toward leaving this to Jules's Python Playwright verification script (it can take `page.screenshot()` at any point in execution) rather than building state capture into the harness itself.
-- Worth adding a `names` param (comma-separated) so Jules can pre-fill controller names instead of typing them per frame? Would save a few interactions per script run but adds param-parsing surface for a tool only Jules uses — recommend deferring until it's clear how often Jules re-runs this against the same game.
+- **Polling vs. Custom Events for Room Code:**
+  Client-side polling via `setInterval` (checking `consoleFrame.contentWindow.sessionStorage.getItem('console_room_code')` every 200ms) is the chosen approach. Python Playwright's `wait_for` and frame locators naturally await DOM updates once the `src` attribute of the controller frames is set. This avoids adding dev-harness-specific custom events to production runtime code (`src/host/console.ts`).
+
+- **Console & Controller State Screenshots:**
+  The harness does not need pre-baked state capture parameters or server-side state triggers. Because Jules's Python Playwright scripts run imperatively, the script can take `page.screenshot(...)` at any point during execution (e.g., initial load, post-join, mid-game, or post-turn).
+
+- **Handling Controller Display Names:**
+  Controller display names will not be pre-filled via harness URL query parameters (`?names=Alice,Bob`). Exercising the real `#name-screen` UI by using `fill()` and `click()` in Python Playwright scripts takes milliseconds and ensures that the controller onboarding flow remains fully tested during verification.
