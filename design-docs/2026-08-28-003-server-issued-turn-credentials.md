@@ -1,6 +1,6 @@
 # Server-issued TURN credentials via Metered
 
-Status: proposed
+Status: rejected in favor of 2026-08-28-004-relay-fallback-transport.md
 Author: (drafted with Claude, for Jules to implement)
 Related docs: none directly, but touches the same connection layer as
 `2026-08-25-004-resilience-primitives.md` (ICE restart / `failed` handling)
