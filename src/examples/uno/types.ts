@@ -45,6 +45,7 @@ export interface PersistedUnoState {
 
 export type YourHandMessage = { type: "yourHand"; hand: UnoCard[] };
 export type GameStateMessage = { type: "gameState"; state: PublicUnoState };
+export type RequestSyncControlMessage = { type: "requestSync" };
 export type RequestStartActionMessage = { type: "requestStart" };
 export type PlayCardActionMessage = {
   type: "playCard";
@@ -57,6 +58,7 @@ export type PlayAgainActionMessage = { type: "playAgain" };
 export type UnoControlMessage =
   | YourHandMessage
   | GameStateMessage
+  | RequestSyncControlMessage
   | RequestStartActionMessage
   | PlayCardActionMessage
   | DrawCardActionMessage

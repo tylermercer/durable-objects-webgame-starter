@@ -440,6 +440,9 @@ export class ConsoleApp {
     const controller = this.controllers.get(id);
     if (controller) {
       controller.signalingConnected = false;
+      controller.orchestrator?.close();
+      controller.orchestrator = null;
+      controller.pc = null;
       this.updateControllerStatus(controller);
     }
   }
@@ -456,6 +459,9 @@ export class ConsoleApp {
     const controller = this.controllers.get(id);
     if (controller) {
       controller.signalingConnected = true;
+      controller.orchestrator?.close();
+      controller.orchestrator = null;
+      controller.pc = null;
       this.updateControllerStatus(controller);
     }
   }
@@ -501,6 +507,11 @@ export class ConsoleApp {
 
   handleSignal(from: string, signal: RTCSignal) {
     const controller = this.getOrCreateController(from);
+    if ("sdp" in signal && signal.sdp && signal.sdp.type === "offer") {
+      controller.orchestrator?.close();
+      controller.orchestrator = null;
+      controller.pc = null;
+    }
     const orchestrator = this.getOrCreateOrchestrator(controller);
     orchestrator.handleSignal(signal).catch(err => {
       console.error(`Error handling signal from ${from}:`, err);

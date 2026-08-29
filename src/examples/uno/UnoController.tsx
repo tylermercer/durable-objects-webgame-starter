@@ -50,6 +50,10 @@ export function UnoController({ ctx }: { ctx: ControllerContext }) {
 
   usePeerControlMessage(ctx.peerConnection, handleControlMessage);
 
+  React.useEffect(() => {
+    ctx.peerConnection?.sendControl({ type: "requestSync" } as unknown as UnoControlMessage);
+  }, [ctx.peerConnection]);
+
   if (!gameState) {
     return (
       <div style={{ padding: "2rem", textAlign: "center", color: "#888" }}>
