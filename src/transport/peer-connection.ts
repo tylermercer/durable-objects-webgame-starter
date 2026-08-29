@@ -37,6 +37,10 @@ const ICE_CONFIG: RTCConfiguration = {
 export class PeerConnection implements GameTransport {
   readonly mode: TransportMode = "p2p";
   pc: RTCPeerConnection;
+
+  get connectionState(): RTCPeerConnectionState {
+    return this.pc.connectionState;
+  }
   inputChannel: RTCDataChannel | null = null;
   controlChannel: RTCDataChannel | null = null;
   pendingIceCandidates: RTCIceCandidateInit[] = [];

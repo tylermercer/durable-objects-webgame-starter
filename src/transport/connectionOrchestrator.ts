@@ -75,10 +75,7 @@ export class ConnectionOrchestrator {
       const timeoutMs = this.opts.negotiationTimeoutMs ?? 8000;
       this.negotiationTimer = setTimeout(() => {
         this.negotiationTimer = null;
-        if (
-          this.transport.mode === "p2p" &&
-          (this.transport as PeerConnection).pc.connectionState !== "connected"
-        ) {
+        if (this.transport.connectionState !== "connected") {
           this.forcePromoteToRelay();
         }
       }, timeoutMs);
@@ -101,10 +98,7 @@ export class ConnectionOrchestrator {
         const graceMs = this.opts.disconnectGraceMs ?? 4000;
         this.disconnectTimer = setTimeout(() => {
           this.disconnectTimer = null;
-          if (
-            this.transport.mode === "p2p" &&
-            (this.transport as PeerConnection).pc.connectionState !== "connected"
-          ) {
+          if (this.transport.connectionState !== "connected") {
             this.forcePromoteToRelay();
           }
         }, graceMs);

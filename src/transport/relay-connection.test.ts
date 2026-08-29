@@ -14,6 +14,11 @@ describe("RelayConnection", () => {
     expect(modeSpy).toHaveBeenCalledWith("relay");
   });
 
+  it("reports connectionState as connected immediately after construction", () => {
+    const relay = new RelayConnection(null, "player-1");
+    expect(relay.connectionState).toBe("connected");
+  });
+
   it("relays input and control messages through ConsoleApi when peerId is provided", () => {
     const mockConsoleApi = {
       relayInput: vi.fn(),
