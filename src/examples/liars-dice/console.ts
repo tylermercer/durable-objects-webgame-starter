@@ -34,12 +34,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
-      if (peer.isFirstPlayer && (peer.status === "live" || peer.state === "connected")) {
+      if (peer.isFirstPlayer && (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected")) {
         return peer.id;
       }
     }
     for (const peer of ctx.peers.values()) {
-      if (peer.status === "live" || peer.state === "connected") return peer.id;
+      if (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected") return peer.id;
     }
     return null;
   }
@@ -60,7 +60,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     const players: PlayerPublicInfo[] = Array.from(ctx.peers.values()).map(peer => {
       const diceCount = playerDiceCounts.get(peer.id) ?? 5;
-      const isConnected = peer.status ? (peer.status === "live") : (peer.state === "connected");
+      const isConnected = peer.status ? (peer.status === "live" || peer.status === "live-relay") : (peer.state === "connected");
       return {
         id: peer.id,
         name: peer.name,
@@ -324,13 +324,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function syncPeersAndListeners() {
     for (const id of attachedListeners) {
       const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || (peer.status ? peer.status !== "live" : peer.state !== "connected")) {
+      if (!peer || !peer.pc || (peer.status ? (peer.status !== "live" && peer.status !== "live-relay") : peer.state !== "connected")) {
         attachedListeners.delete(id);
       }
     }
 
     for (const [id, peer] of ctx.peers) {
-      if (peer.pc && peer.pc.controlChannel?.readyState === "open" && !attachedListeners.has(id)) {
+      const isLive = peer.status ? (peer.status === "live" || peer.status === "live-relay") : (peer.state === "connected");
+      if (peer.pc && isLive && !attachedListeners.has(id)) {
         attachedListeners.add(id);
         peer.pc.addControlListener((msg) => {
           handleControlMessage(id, msg as unknown as LiarsDiceControlMessage);

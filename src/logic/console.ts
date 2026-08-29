@@ -1,4 +1,4 @@
-import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
+import type { GameTransport, TouchMessage } from "@transport/transport";
 import type { RpcStub } from "capnweb";
 import type { ConsoleApi } from "../lib/signaling-api";
 
@@ -6,7 +6,7 @@ export interface ControllerPeer {
   id: string;
   name: string;
   color: string;
-  pc: PeerConnection | null;
+  pc: GameTransport | null;
   state: string;
   lastTouch?: TouchMessage;
 }

@@ -91,6 +91,8 @@ describe("GameSession Durable Object", () => {
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -128,6 +130,8 @@ describe("GameSession Durable Object", () => {
       onConsoleGone: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -140,6 +144,8 @@ describe("GameSession Durable Object", () => {
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -185,6 +191,72 @@ describe("GameSession Durable Object", () => {
     vi.useRealTimers();
   });
 
+  it("relays input and control messages and bounds control queues to 25 messages", async () => {
+    const ctx = { storage: { setAlarm: vi.fn(async () => {}) } };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const controllerCallbacks = {
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    await consoleApi.join(consoleCallbacks);
+
+    const controllerWs = createMockWebSocket();
+    const controllerApi = (session as any).makeControllerApi(controllerWs);
+    const joinRes = await controllerApi.join(controllerCallbacks);
+    const playerId = joinRes.id;
+
+    // Test live forwarding
+    controllerApi.relayInput({ type: "touch", x: 0.1, y: 0.2 });
+    expect(consoleCallbacks.onRelayInput).toHaveBeenCalledWith(playerId, { type: "touch", x: 0.1, y: 0.2 });
+
+    consoleApi.relayControl(playerId, { type: "privateDice", dice: [1, 2, 3] });
+    expect(controllerCallbacks.onRelayControl).toHaveBeenCalledWith({ type: "privateDice", dice: [1, 2, 3] });
+
+    // Disconnect controller
+    await (session as any).handleClose(controllerWs);
+
+    // Send 30 control messages to disconnected player -> queue capped at 25
+    for (let i = 1; i <= 30; i++) {
+      consoleApi.relayControl(playerId, { type: "state", msgId: i });
+    }
+
+    // Rejoin controller
+    const controllerWs2 = createMockWebSocket();
+    const controllerApi2 = (session as any).makeControllerApi(controllerWs2);
+    controllerCallbacks.onRelayControl.mockClear();
+
+    await controllerApi2.join(controllerCallbacks, joinRes.rejoinToken);
+
+    // Verify 25 flushed messages (messages 6 to 30)
+    expect(controllerCallbacks.onRelayControl).toHaveBeenCalledTimes(25);
+    expect(controllerCallbacks.onRelayControl).toHaveBeenNthCalledWith(1, { type: "state", msgId: 6 });
+    expect(controllerCallbacks.onRelayControl).toHaveBeenLastCalledWith({ type: "state", msgId: 30 });
+  });
+
   it("tracks and broadcasts first connected player changes", async () => {
     const ctx = { storage: { setAlarm: vi.fn(async () => {}) } };
     const session = new GameSession(ctx as any, {} as any);
@@ -195,6 +267,8 @@ describe("GameSession Durable Object", () => {
       onConsoleGone: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     });
 
@@ -207,6 +281,8 @@ describe("GameSession Durable Object", () => {
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
       onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 
@@ -275,6 +351,8 @@ describe("GameSession Durable Object", () => {
       onConsoleGone: vi.fn(),
       onSignal: vi.fn(),
       onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
       [Symbol.dispose]: vi.fn()
     };
 

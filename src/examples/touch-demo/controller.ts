@@ -1,9 +1,9 @@
-import type { PeerConnection, TouchMessage } from "@transport/peer-connection";
+import type { GameTransport, TouchMessage } from "@transport/transport";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { WebHaptics } from "web-haptics";
 
 export interface ControllerContext {
-  peerConnection: PeerConnection | null;
+  peerConnection: GameTransport | null;
   isFirstPlayer?: () => boolean;
 }
 

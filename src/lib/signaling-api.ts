@@ -10,6 +10,8 @@ export interface ConsoleCallbacks extends RpcTarget {
   onSignal(from: string, signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
   onControllerRenamed(id: string, name: string): void;
+  onRelayInput(from: string, payload: unknown): void;
+  onRelayControl(from: string, payload: unknown): void;
 }
 
 export interface ControllerCallbacks extends RpcTarget {
@@ -17,6 +19,8 @@ export interface ControllerCallbacks extends RpcTarget {
   onConsoleGone(): void;
   onSignal(signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
+  onRelayInput(payload: unknown): void;
+  onRelayControl(payload: unknown): void;
 }
 
 // Exposed by the DO when role=console.
@@ -29,6 +33,8 @@ export interface ConsoleApi extends RpcTarget {
     | { controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }
     | Promise<{ controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }>;
   sendSignal(to: string, signal: RTCSignal): void;
+  relayInput(to: string, payload: unknown): void;
+  relayControl(to: string, payload: unknown): void;
   saveGameState(state: unknown): void;
   loadGameState(): unknown | Promise<unknown>;
 }
@@ -43,4 +49,6 @@ export interface ControllerApi extends RpcTarget {
     | { id: string; name: string; consoleConnected: boolean; rejoinToken: string; isFirstPlayer: boolean }
     | Promise<{ id: string; name: string; consoleConnected: boolean; rejoinToken: string; isFirstPlayer: boolean }>;
   sendSignal(signal: RTCSignal): void; // implicitly addressed to the room's console
+  relayInput(payload: unknown): void;
+  relayControl(payload: unknown): void;
 }

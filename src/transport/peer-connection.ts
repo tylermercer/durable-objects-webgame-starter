@@ -1,64 +1,27 @@
 import type { RTCSignal } from "../lib/signaling-api";
+import {
+  CoalescingSender,
+  type ControlMessage,
+  type GameTransport,
+  type InputMessage,
+  type PongMessage,
+  type TouchMessage,
+  type TransportMode,
+} from "./transport";
 
-export class CoalescingSender {
-  private pending = new Map<string, unknown>();
-  private flushing = false;
-
-  constructor(private channel: () => RTCDataChannel | null) {}
-
-  send(key: string, msg: unknown) {
-    this.pending.set(key, msg); // overwrites any not-yet-sent value for this key
-    if (!this.flushing) {
-      this.flushing = true;
-      queueMicrotask(() => this.flush());
-    }
-  }
-
-  flush() {
-    this.flushing = false;
-    const ch = this.channel();
-    if (!ch || ch.readyState !== "open") return;
-    for (const msg of this.pending.values()) ch.send(JSON.stringify(msg));
-    this.pending.clear();
-  }
-}
-
-export type TouchMessage = {
-  type: "touch";
-  phase: "start" | "move" | "end" | "cancel";
-  pointerId: number;
-  x: number; // normalized 0–1
-  y: number; // normalized 0–1
-  t: number; // performance.now()
-};
-
-export type IdentityMessage = {
-  type: "identity";
-  name: string;
-  color: string;
-};
-
-export type PingMessage = {
-  type: "ping";
-  t: number;
-};
-
-export type PongMessage = {
-  type: "pong";
-  t: number;
-};
-
-export type UnknownControlMessage = { type: string } & Record<string, unknown>;
-
-export type ControlMessage =
-  | IdentityMessage
-  | PingMessage
-  | PongMessage
-  | UnknownControlMessage;
-
-export type UnknownInputMessage = { type: string } & Record<string, unknown>;
-
-export type InputMessage = TouchMessage | UnknownInputMessage;
+export type {
+  TouchMessage,
+  IdentityMessage,
+  PingMessage,
+  PongMessage,
+  UnknownControlMessage,
+  ControlMessage,
+  UnknownInputMessage,
+  InputMessage,
+  TransportMode,
+  GameTransport,
+} from "./transport";
+export { CoalescingSender } from "./transport";
 
 export interface PeerConnectionCallbacks {
   onSignal: (signal: RTCSignal) => void;
@@ -80,7 +43,8 @@ const ICE_CONFIG: RTCConfiguration = {
   ]
 };
 
-export class PeerConnection {
+export class PeerConnection implements GameTransport {
+  readonly mode: TransportMode = "p2p";
   pc: RTCPeerConnection;
   inputChannel: RTCDataChannel | null = null;
   controlChannel: RTCDataChannel | null = null;
@@ -88,13 +52,20 @@ export class PeerConnection {
   private coalescingControlSender: CoalescingSender;
   private controlListeners: Array<(msg: ControlMessage) => void> = [];
   private inputListeners: Array<(msg: InputMessage) => void> = [];
+  private modeListeners: Array<(mode: TransportMode) => void> = [];
 
   constructor(
     public isInitiator: boolean,
     private callbacks: PeerConnectionCallbacks
   ) {
     this.pc = new RTCPeerConnection(ICE_CONFIG);
-    this.coalescingControlSender = new CoalescingSender(() => this.controlChannel);
+    this.coalescingControlSender = new CoalescingSender((jsonStr) => {
+      if (this.controlChannel && this.controlChannel.readyState === "open") {
+        this.controlChannel.send(jsonStr);
+        return true;
+      }
+      return false;
+    });
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
@@ -135,6 +106,15 @@ export class PeerConnection {
         }
       };
     }
+  }
+
+  onModeChange(listener: (mode: TransportMode) => void) {
+    this.modeListeners.push(listener);
+    // PeerConnection is fixed to "p2p", so notify immediately
+    listener(this.mode);
+    return () => {
+      this.modeListeners = this.modeListeners.filter(l => l !== listener);
+    };
   }
 
   addControlListener(listener: (msg: ControlMessage) => void) {
