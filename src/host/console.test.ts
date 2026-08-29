@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { ConsoleApp, getForcedTransport, computePlayerStatus } from "./console";
 
 describe("getForcedTransport and computePlayerStatus", () => {
@@ -270,5 +270,116 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
 
     expect(elements["start-screen"].classList.contains("u-hidden")).toBe(true);
     expect(elements["add-players-btn"].classList.contains("u-hidden")).toBe(false);
+  });
+});
+
+class MockRTCPeerConnection {
+  connectionState: RTCPeerConnectionState = "new";
+  onconnectionstatechange: (() => void) | null = null;
+  onicecandidate: any = null;
+  ondatachannel: any = null;
+
+  createDataChannel() {
+    return {
+      onmessage: null,
+      readyState: "open",
+      send: () => {},
+      close: () => {},
+    };
+  }
+
+  async createOffer() {
+    return { type: "offer" as const, sdp: "mock sdp offer" };
+  }
+
+  async createAnswer() {
+    return { type: "answer" as const, sdp: "mock sdp answer" };
+  }
+
+  async setLocalDescription() {}
+  async setRemoteDescription() {}
+  async addIceCandidate() {}
+
+  close() {
+    this.connectionState = "closed";
+  }
+}
+
+class MockRTCSessionDescription {
+  type: string;
+  sdp: string;
+  constructor(init: any) {
+    this.type = init?.type;
+    this.sdp = init?.sdp;
+  }
+}
+
+describe("ConsoleApp handleSignal and ICE restart preservation", () => {
+  let originalRTC: any;
+  let originalSDP: any;
+
+  beforeEach(() => {
+    originalRTC = globalThis.RTCPeerConnection;
+    originalSDP = (globalThis as any).RTCSessionDescription;
+    (globalThis as any).RTCPeerConnection = MockRTCPeerConnection;
+    (globalThis as any).RTCSessionDescription = MockRTCSessionDescription;
+  });
+
+  afterEach(() => {
+    (globalThis as any).RTCPeerConnection = originalRTC;
+    (globalThis as any).RTCSessionDescription = originalSDP;
+  });
+
+  it("retains existing orchestrator when offer arrives while connected (ICE restart)", () => {
+    const app = new ConsoleApp();
+    app.addController("ctrl-1", "Alice");
+
+    const controller = app.controllers.get("ctrl-1")!;
+    const mockOrchestrator = {
+      handleSignal: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn(),
+    } as any;
+
+    const mockTransport = {
+      connectionState: "connected" as RTCPeerConnectionState,
+      mode: "p2p" as const,
+      close: vi.fn(),
+    } as any;
+
+    controller.orchestrator = mockOrchestrator;
+    controller.pc = mockTransport;
+
+    const restartOffer = { sdp: { type: "offer" as const, sdp: "v=0..." } };
+    app.handleSignal("ctrl-1", restartOffer);
+
+    expect(controller.orchestrator).toBe(mockOrchestrator);
+    expect(mockOrchestrator.close).not.toHaveBeenCalled();
+    expect(mockOrchestrator.handleSignal).toHaveBeenCalledWith(restartOffer);
+  });
+
+  it("recreates orchestrator when offer arrives while state is failed or closed", () => {
+    const app = new ConsoleApp();
+    app.addController("ctrl-1", "Alice");
+
+    const controller = app.controllers.get("ctrl-1")!;
+    const oldOrchestrator = {
+      handleSignal: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn(),
+    } as any;
+
+    const oldTransport = {
+      connectionState: "failed" as RTCPeerConnectionState,
+      mode: "p2p" as const,
+      close: vi.fn(),
+    } as any;
+
+    controller.orchestrator = oldOrchestrator;
+    controller.pc = oldTransport;
+
+    const freshOffer = { sdp: { type: "offer" as const, sdp: "v=0..." } };
+    app.handleSignal("ctrl-1", freshOffer);
+
+    expect(oldOrchestrator.close).toHaveBeenCalled();
+    expect(controller.orchestrator).not.toBe(oldOrchestrator);
   });
 });
