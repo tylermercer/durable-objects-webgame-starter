@@ -16,6 +16,7 @@ async function main() {
 
   console.log("\x1b[34m[1/4]\x1b[0m Removing example route, demo games, and eject CI workflow...");
   rmSync("./src/pages/play", { recursive: true, force: true });
+  rmSync("./src/pages/dev", { recursive: true, force: true });
   rmSync("./src/examples", { recursive: true, force: true });
   rmSync("./.github/workflows/test-eject.yml", { force: true });
 
