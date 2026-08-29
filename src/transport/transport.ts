@@ -39,6 +39,7 @@ export type TransportMode = "p2p" | "relay";
 
 export interface GameTransport {
   readonly mode: TransportMode;
+  readonly connectionState: RTCPeerConnectionState;
   sendInput(msg: unknown): void;
   sendControl(msg: ControlMessage): void;
   sendControlCoalesced(key: string, msg: unknown): void;

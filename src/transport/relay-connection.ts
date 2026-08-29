@@ -18,6 +18,10 @@ export interface RelayConnectionCallbacks {
 export class RelayConnection implements GameTransport {
   readonly mode: TransportMode = "relay";
 
+  get connectionState(): RTCPeerConnectionState {
+    return "connected";
+  }
+
   private inputListeners: Array<(msg: InputMessage) => void> = [];
   private controlListeners: Array<(msg: ControlMessage) => void> = [];
   private modeListeners: Array<(mode: TransportMode) => void> = [];

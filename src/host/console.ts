@@ -3,7 +3,6 @@ import QRCode from "qrcode";
 import type { ConsoleApi, ConsoleCallbacks, RTCSignal } from "../lib/signaling-api";
 import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
-import { PeerConnection } from "../transport/peer-connection";
 import type { GameTransport, TouchMessage, TransportMode } from "../transport/transport";
 import { ConnectionOrchestrator } from "../transport/connectionOrchestrator";
 import { loadConsoleGame } from "../contract/gameSource";
@@ -462,10 +461,7 @@ export class ConsoleApp {
   }
 
   updateControllerStatus(controller: ControllerState) {
-    let rtcState: RTCPeerConnectionState | null = null;
-    if (controller.pc && controller.pc instanceof PeerConnection) {
-      rtcState = controller.pc.pc.connectionState;
-    }
+    const rtcState = controller.pc?.connectionState ?? null;
     controller.status = computePlayerStatus(controller.signalingConnected, rtcState, controller.pc?.mode);
     controller.state = controller.status;
     this.updateControllerUI();
@@ -482,35 +478,29 @@ export class ConsoleApp {
     }
   }
 
-  handleRelayInput(from: string, payload: unknown) {
-    let controller = this.controllers.get(from);
+  private getOrCreateController(id: string): ControllerState {
+    let controller = this.controllers.get(id);
     if (!controller) {
-      this.addController(from, `Player ${this.controllers.size + 1}`);
-      controller = this.controllers.get(from)!;
+      this.addController(id, `Player ${this.controllers.size + 1}`);
+      controller = this.controllers.get(id)!;
     }
+    return controller;
+  }
 
+  handleRelayInput(from: string, payload: unknown) {
+    const controller = this.getOrCreateController(from);
     const orchestrator = this.getOrCreateOrchestrator(controller);
     orchestrator.handleRelayInput(payload);
   }
 
   handleRelayControl(from: string, payload: unknown) {
-    let controller = this.controllers.get(from);
-    if (!controller) {
-      this.addController(from, `Player ${this.controllers.size + 1}`);
-      controller = this.controllers.get(from)!;
-    }
-
+    const controller = this.getOrCreateController(from);
     const orchestrator = this.getOrCreateOrchestrator(controller);
     orchestrator.handleRelayControl(payload);
   }
 
   handleSignal(from: string, signal: RTCSignal) {
-    let controller = this.controllers.get(from);
-    if (!controller) {
-      this.addController(from, `Player ${this.controllers.size + 1}`);
-      controller = this.controllers.get(from)!;
-    }
-
+    const controller = this.getOrCreateController(from);
     const orchestrator = this.getOrCreateOrchestrator(controller);
     orchestrator.handleSignal(signal).catch(err => {
       console.error(`Error handling signal from ${from}:`, err);
