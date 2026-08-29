@@ -19,6 +19,11 @@ export const EXAMPLES = {
     console: () => import("@examples/grid-dungeon/console"),
     controller: () => import("@examples/grid-dungeon/controller"),
   },
+  "uno": {
+    label: "Uno",
+    console: () => import("@examples/uno/console"),
+    controller: () => import("@examples/uno/controller"),
+  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;
