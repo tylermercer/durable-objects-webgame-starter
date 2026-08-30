@@ -6,6 +6,9 @@ import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
 import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 import { isController } from "../utils/isController";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("ControllerHost");
 
 export interface ControllerContext {
   peerConnection: GameTransport | null;
@@ -60,6 +63,7 @@ class ControllerApp {
   constructor() {
     const params = new URLSearchParams(window.location.search);
     this.code = (params.get("code") || "").toUpperCase();
+    logger.info(`ControllerApp initialized with room code: ${this.code}`);
   }
 
   async init() {
@@ -105,22 +109,28 @@ class ControllerApp {
 
   handleFirstPlayerChanged(firstPlayerId: string | null) {
     this.isFirstPlayer = (firstPlayerId === this.id);
+    logger.info(`First player changed. Am host: ${this.isFirstPlayer}`);
     this.updatePlayerInfo(this.name, this.color);
   }
 
   connectSignaling() {
     if (!this.code) {
+      logger.error("Missing room code in URL");
       this.updateStatus("Error: Missing room code.");
       return;
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/signaling?code=${this.code}&role=controller`;
+    logger.info(`Connecting to signaling server at ${wsUrl}`);
 
     try {
       this.api = newWebSocketRpcSession<ControllerApi>(wsUrl);
 
-      this.api.onRpcBroken(() => this.scheduleReconnect());
+      this.api.onRpcBroken(() => {
+        logger.warn("Signaling RPC session broken");
+        this.scheduleReconnect();
+      });
 
       const callbacks = new ControllerCallbacksHandler(this);
       const token = getOrCreateRejoinToken(this.code);
@@ -133,6 +143,7 @@ class ControllerApp {
         if (res.rejoinToken) {
           persistRejoinToken(res.rejoinToken, this.code);
         }
+        logger.info(`Joined room ${this.code} as player '${res.name}' (id: ${res.id}, host: ${res.isFirstPlayer}, consoleConnected: ${res.consoleConnected})`);
         this.updatePlayerInfo(this.name, this.color);
 
         if (res.consoleConnected) {
@@ -141,11 +152,11 @@ class ControllerApp {
           this.updateStatus(`Connected as ${this.name}. Waiting for console...`);
         }
       }).catch(err => {
-        console.error("Failed to join as controller:", err);
+        logger.error("Failed to join as controller:", err);
         this.scheduleReconnect();
       });
     } catch (err) {
-      console.error("Signaling error:", err);
+      logger.error("Signaling error:", err);
       this.scheduleReconnect();
     }
   }
@@ -155,11 +166,13 @@ class ControllerApp {
     this.updateStatus("Signaling broken. Reconnecting...");
     const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * base * 0.3;
+    const delay = Math.round(base + jitter);
+    logger.info(`Scheduling signaling reconnect attempt ${this.reconnectAttempt + 1} in ${delay}ms`);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.reconnectAttempt++;
       this.connectSignaling();
-    }, base + jitter);
+    }, delay);
   }
 
   private async loadGame() {
@@ -177,11 +190,12 @@ class ControllerApp {
         isFirstPlayer: () => this.isFirstPlayer,
       });
     } catch (err) {
-      console.error("Failed to load controller game logic:", err);
+      logger.error("Failed to load controller game logic:", err);
     }
   }
 
   async initiateWebRTC() {
+    logger.info("Initiating ConnectionOrchestrator for WebRTC/relay connection...");
     this.orchestrator?.close();
 
     this.orchestrator = new ConnectionOrchestrator(
@@ -194,6 +208,7 @@ class ControllerApp {
           this.api?.sendSignal(signal);
         },
         onTransportChange: (transport) => {
+          logger.info(`Transport changed -> ${transport.mode}`);
           this.pc = transport;
           if (transport.mode === "relay") {
             this.updateStatus("Connected to Console (Relay)");
@@ -203,6 +218,7 @@ class ControllerApp {
           this.loadGame();
         },
         onStateChange: (state) => {
+          logger.info(`WebRTC connection state -> ${state}`);
           if (state === "connected") {
             this.updateStatus("Connected to Console!");
           } else {
@@ -212,6 +228,7 @@ class ControllerApp {
         onControlMessage: (msg) => {
           if (msg.type === "identity") {
             const identityMsg = msg as IdentityMessage;
+            logger.info(`Received identity update: name='${identityMsg.name}', color='${identityMsg.color}'`);
             this.name = identityMsg.name;
             this.color = identityMsg.color;
             this.updatePlayerInfo(this.name, this.color);
@@ -222,15 +239,17 @@ class ControllerApp {
 
     if (this.orchestrator.transport.mode === "p2p") {
       try {
+        logger.info("Creating local WebRTC SDP offer to send to console");
         const offer = await this.orchestrator.createOffer();
         this.api?.sendSignal({ sdp: offer });
       } catch (err) {
-        console.error("Failed to create offer:", err);
+        logger.error("Failed to create offer:", err);
       }
     }
   }
 
   handleConsoleGone() {
+    logger.warn("Console disconnected. Cleaning up transport and active game");
     this.orchestrator?.close();
     this.orchestrator = null;
     this.activeGame?.destroy?.();
@@ -240,14 +259,17 @@ class ControllerApp {
   }
 
   handleSignal(signal: RTCSignal) {
+    const sigType = "sdp" in signal && signal.sdp ? `SDP (${signal.sdp.type})` : "ICE candidate";
+    logger.info(`Received RTCSignal from console: ${sigType}`);
     if (this.orchestrator) {
       this.orchestrator.handleSignal(signal).catch((err) => {
-        console.error("Error handling signal from console:", err);
+        logger.error("Error handling signal from console:", err);
       });
     }
   }
 
   handleRelayInput(payload: unknown) {
+    logger.debug("Received relay input message from console");
     if (!this.orchestrator) {
       this.initiateWebRTC();
     }
@@ -255,6 +277,7 @@ class ControllerApp {
   }
 
   handleRelayControl(payload: unknown) {
+    logger.debug("Received relay control message from console");
     if (!this.orchestrator) {
       this.initiateWebRTC();
     }

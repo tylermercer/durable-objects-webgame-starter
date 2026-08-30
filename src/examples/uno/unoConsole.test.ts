@@ -21,6 +21,7 @@ function createMockTransport(): GameTransport & { controlListeners: ((msg: Contr
   const sentControlMsgs: unknown[] = [];
   return {
     mode: "relay",
+    connectionState: "connected",
     controlListeners,
     sentControlMsgs,
     sendInput: vi.fn(),

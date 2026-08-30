@@ -4,6 +4,9 @@ import type { ControlMessage, GameTransport, TouchMessage } from "./transport";
 import { PeerConnection } from "./peer-connection";
 import { RelayConnection } from "./relay-connection";
 import { getForcedTransport } from "../host/console";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("ConnectionOrchestrator");
 
 export interface ConnectionOrchestratorCallbacks {
   onSignal: (signal: RTCSignal) => void;
@@ -37,6 +40,8 @@ export class ConnectionOrchestrator {
         ? opts.forcedTransport
         : getForcedTransport();
 
+    logger.info(`Initializing (forced: ${forced ?? "none"}, isInitiator: ${opts.isInitiator}${opts.peerId ? `, peerId: ${opts.peerId}` : ""})`);
+
     if (forced === "relay") {
       this.initRelay();
     } else {
@@ -46,6 +51,7 @@ export class ConnectionOrchestrator {
 
   private initRelay() {
     this.clearTimers();
+    logger.info(`Initialized RelayConnection transport${this.opts.peerId ? ` for peer ${this.opts.peerId}` : ""}`);
     const relay = new RelayConnection(this.opts.getApi(), this.opts.peerId, {
       onInputMessage: this.callbacks.onInputMessage,
       onControlMessage: this.callbacks.onControlMessage,
@@ -56,6 +62,7 @@ export class ConnectionOrchestrator {
 
   private initPeerConnection() {
     this.clearTimers();
+    logger.info(`Initialized PeerConnection transport (isInitiator: ${this.opts.isInitiator})`);
     const forced =
       this.opts.forcedTransport !== undefined
         ? this.opts.forcedTransport
@@ -73,9 +80,11 @@ export class ConnectionOrchestrator {
 
     if (forced !== "rtc") {
       const timeoutMs = this.opts.negotiationTimeoutMs ?? 8000;
+      logger.info(`Started negotiation timeout timer (${timeoutMs}ms)`);
       this.negotiationTimer = setTimeout(() => {
         this.negotiationTimer = null;
         if (this.transport.connectionState !== "connected") {
+          logger.warn(`Negotiation timeout (${timeoutMs}ms) reached before WebRTC connected. Promoting to relay transport`);
           this.forcePromoteToRelay();
         }
       }, timeoutMs);
@@ -84,6 +93,7 @@ export class ConnectionOrchestrator {
 
   private handlePeerStateChange(state: RTCPeerConnectionState) {
     if (this.isClosed) return;
+    logger.info(`PeerConnection state changed -> ${state}`);
     this.callbacks.onStateChange?.(state);
 
     const forced =
@@ -92,19 +102,23 @@ export class ConnectionOrchestrator {
         : getForcedTransport();
 
     if (state === "connected") {
+      logger.info("PeerConnection connected. Clearing active timers");
       this.clearTimers();
     } else if (state === "disconnected") {
       if (forced !== "rtc" && this.disconnectTimer === null) {
         const graceMs = this.opts.disconnectGraceMs ?? 4000;
+        logger.info(`PeerConnection disconnected. Starting disconnect grace timer (${graceMs}ms)`);
         this.disconnectTimer = setTimeout(() => {
           this.disconnectTimer = null;
           if (this.transport.connectionState !== "connected") {
+            logger.warn(`Disconnect grace period (${graceMs}ms) expired without WebRTC reconnecting. Promoting to relay transport`);
             this.forcePromoteToRelay();
           }
         }, graceMs);
       }
     } else if (state === "failed") {
       if (forced !== "rtc") {
+        logger.warn("PeerConnection failed. Promoting to relay transport");
         this.forcePromoteToRelay();
       }
     }
@@ -112,6 +126,7 @@ export class ConnectionOrchestrator {
 
   async handleSignal(signal: RTCSignal): Promise<void> {
     if (this.isClosed) return;
+    logger.debug(`Processing incoming RTCSignal: ${"sdp" in signal && signal.sdp ? `SDP (${signal.sdp.type})` : "ICE candidate"}`);
     if (this.transport instanceof PeerConnection) {
       await this.transport.handleSignal(signal);
     }
@@ -119,6 +134,7 @@ export class ConnectionOrchestrator {
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
     if (this.transport instanceof PeerConnection) {
+      logger.info("Creating WebRTC SDP offer");
       return await this.transport.createOffer();
     }
     throw new Error("Cannot create offer: active transport is not a PeerConnection");
@@ -126,6 +142,7 @@ export class ConnectionOrchestrator {
 
   forcePromoteToRelay(): void {
     if (this.isClosed || this.transport.mode === "relay") return;
+    logger.info("Force promoting transport from P2P to RelayConnection");
     this.transport.close();
     this.initRelay();
   }
@@ -133,6 +150,7 @@ export class ConnectionOrchestrator {
   handleRelayInput(payload: unknown): void {
     if (this.isClosed) return;
     if (this.transport.mode !== "relay") {
+      logger.info("Received relay input while in P2P mode. Promoting to RelayConnection");
       this.forcePromoteToRelay();
     }
     if (this.transport instanceof RelayConnection) {
@@ -143,6 +161,7 @@ export class ConnectionOrchestrator {
   handleRelayControl(payload: unknown): void {
     if (this.isClosed) return;
     if (this.transport.mode !== "relay") {
+      logger.info("Received relay control while in P2P mode. Promoting to RelayConnection");
       this.forcePromoteToRelay();
     }
     if (this.transport instanceof RelayConnection) {
@@ -151,6 +170,7 @@ export class ConnectionOrchestrator {
   }
 
   close(): void {
+    logger.info("Closing ConnectionOrchestrator");
     this.isClosed = true;
     this.clearTimers();
     this.transport.close();

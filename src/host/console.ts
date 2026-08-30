@@ -9,6 +9,9 @@ import { loadConsoleGame } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("ConsoleHost");
 
 const PLAYER_COLORS = [
   "#FF4136", "#0074D9", "#2ECC40", "#FFDC00",
@@ -136,6 +139,7 @@ export class ConsoleApp {
       }
     }
     this.code = code.toUpperCase();
+    logger.info(`ConsoleApp initialized with room code: ${this.code}`);
   }
 
   async init() {
@@ -315,6 +319,7 @@ export class ConsoleApp {
   }
 
   handleFirstPlayerChanged(firstPlayerId: string | null) {
+    logger.info(`First player changed to: ${firstPlayerId ?? "none"}`);
     this.firstPlayerId = firstPlayerId;
     for (const controller of this.controllers.values()) {
       controller.isFirstPlayer = (controller.id === firstPlayerId);
@@ -325,15 +330,20 @@ export class ConsoleApp {
   connectSignaling() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/signaling?code=${this.code}&role=console`;
+    logger.info(`Connecting to signaling WebSocket: ${wsUrl}`);
 
     try {
       this.api = newWebSocketRpcSession<ConsoleApi>(wsUrl);
-      this.api.onRpcBroken(() => this.scheduleReconnect());
+      this.api.onRpcBroken(() => {
+        logger.warn("Signaling RPC session broken");
+        this.scheduleReconnect();
+      });
 
       const callbacks = new ConsoleCallbacksHandler(this);
       const token = this.getConsoleToken();
       this.api.join(callbacks, token).then(res => {
         this.reconnectAttempt = 0;
+        logger.info(`Console joined signaling session for room ${this.code}. Controllers connected: ${res?.controllers?.length ?? 0}`);
         if (res) {
           if (res.consoleToken) {
             sessionStorage.setItem(`console_token_${this.code}`, res.consoleToken);
@@ -348,11 +358,11 @@ export class ConsoleApp {
           }
         }
       }).catch(err => {
-        console.error("Failed to join as console:", err);
+        logger.error("Failed to join signaling session as console:", err);
         this.scheduleReconnect();
       });
     } catch (err) {
-      console.error("Signaling connection error:", err);
+      logger.error("Signaling connection error:", err);
       this.scheduleReconnect();
     }
   }
@@ -361,15 +371,18 @@ export class ConsoleApp {
     if (this.reconnectTimer) return;
     const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * base * 0.3;
+    const delay = Math.round(base + jitter);
+    logger.info(`Scheduling signaling reconnect attempt ${this.reconnectAttempt + 1} in ${delay}ms`);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.reconnectAttempt++;
       this.connectSignaling();
-    }, base + jitter);
+    }, delay);
   }
 
   private getOrCreateOrchestrator(controller: ControllerState): ConnectionOrchestrator {
     if (!controller.orchestrator) {
+      logger.info(`Creating ConnectionOrchestrator for controller ${controller.name} (${controller.id})`);
       controller.orchestrator = new ConnectionOrchestrator(
         {
           isInitiator: false,
@@ -379,6 +392,7 @@ export class ConsoleApp {
         {
           onSignal: (sig) => this.api?.sendSignal(controller.id, sig),
           onTransportChange: (transport) => {
+            logger.info(`Transport changed for controller ${controller.name} (${controller.id}) -> ${transport.mode}`);
             controller.pc = transport;
             this.updateControllerStatus(controller);
             if (transport.mode === "relay") {
@@ -390,6 +404,7 @@ export class ConsoleApp {
             }
           },
           onStateChange: (state) => {
+            logger.info(`Peer connection state for ${controller.name} (${controller.id}) changed -> ${state}`);
             this.updateControllerStatus(controller);
             if (state === "connected") {
               controller.pc?.sendControl({
@@ -415,6 +430,8 @@ export class ConsoleApp {
     const color = PLAYER_COLORS[colorIndex];
     const isFirstPlayer = (id === this.firstPlayerId);
 
+    logger.info(`Controller registered: ${name} (id: ${id}, host: ${isFirstPlayer})`);
+
     const controller: ControllerState = {
       id,
       name,
@@ -439,6 +456,7 @@ export class ConsoleApp {
   handleControllerDisconnected(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
+      logger.warn(`Controller signaling disconnected: ${controller.name} (${id})`);
       controller.signalingConnected = false;
       this.updateControllerStatus(controller);
     }
@@ -447,6 +465,7 @@ export class ConsoleApp {
   handleControllerRenamed(id: string, name: string) {
     const controller = this.controllers.get(id);
     if (controller) {
+      logger.info(`Controller renamed: ${controller.name} -> ${name} (id: ${id})`);
       controller.name = name;
       this.updateControllerUI();
     }
@@ -455,6 +474,7 @@ export class ConsoleApp {
   handleControllerRejoined(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
+      logger.info(`Controller signaling rejoined: ${controller.name} (${id})`);
       controller.signalingConnected = true;
       this.updateControllerStatus(controller);
     }
@@ -462,14 +482,17 @@ export class ConsoleApp {
 
   updateControllerStatus(controller: ControllerState) {
     const rtcState = controller.pc?.connectionState ?? null;
+    const prevStatus = controller.status;
     controller.status = computePlayerStatus(controller.signalingConnected, rtcState, controller.pc?.mode);
     controller.state = controller.status;
+    logger.info(`Player ${controller.name} (${controller.id}) status: ${prevStatus} -> ${controller.status} (signaling: ${controller.signalingConnected}, rtcState: ${rtcState}, transport: ${controller.pc?.mode ?? "none"})`);
     this.updateControllerUI();
   }
 
   removeController(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
+      logger.info(`Controller removed/purged: ${controller.name} (${id})`);
       controller.orchestrator?.close();
       controller.orchestrator = null;
       controller.pc = null;
@@ -501,9 +524,13 @@ export class ConsoleApp {
 
   handleSignal(from: string, signal: RTCSignal) {
     const controller = this.getOrCreateController(from);
+    const sigType = "sdp" in signal && signal.sdp ? `SDP (${signal.sdp.type})` : "ICE candidate";
+    logger.info(`Received signal from controller ${controller.name} (${from}): ${sigType}`);
+
     if ("sdp" in signal && signal.sdp && signal.sdp.type === "offer") {
       const state = controller.pc?.connectionState;
       if (!controller.pc || state === "failed" || state === "closed") {
+        logger.info(`Resetting orchestrator for ${controller.name} (${from}) due to incoming offer on ${state ?? "null"} state`);
         controller.orchestrator?.close();
         controller.orchestrator = null;
         controller.pc = null;
@@ -511,7 +538,7 @@ export class ConsoleApp {
     }
     const orchestrator = this.getOrCreateOrchestrator(controller);
     orchestrator.handleSignal(signal).catch(err => {
-      console.error(`Error handling signal from ${from}:`, err);
+      logger.error(`Error handling signal from ${from}:`, err);
     });
   }
 

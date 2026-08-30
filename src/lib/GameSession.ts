@@ -2,6 +2,9 @@ import { DurableObject } from "cloudflare:workers";
 import { RpcTarget, newWebSocketRpcSession, type RpcStub } from "capnweb";
 import type { ConsoleApi, ConsoleCallbacks, ControllerApi, ControllerCallbacks, RTCSignal } from "./signaling-api";
 import { sanitizeName } from "../utils/deviceIdentity";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("GameSession");
 
 type Role = "console" | "controller";
 
@@ -72,6 +75,8 @@ export class GameSession extends DurableObject {
       return new Response("Invalid role. Expected 'console' or 'controller'", { status: 400 });
     }
 
+    logger.info(`WebSocket connection upgrade requested for role: ${role}`);
+
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -98,6 +103,7 @@ export class GameSession extends DurableObject {
     const newFirstPlayerId = this.getFirstPlayerId();
     if (newFirstPlayerId !== this.currentFirstPlayerId) {
       this.currentFirstPlayerId = newFirstPlayerId;
+      logger.info(`First player ID updated -> ${newFirstPlayerId ?? "none"}`);
       this.forConsole(cb => {
         try {
           (cb as RpcStub<ConsoleCallbacks>).onFirstPlayerChanged(newFirstPlayerId);
@@ -119,6 +125,7 @@ export class GameSession extends DurableObject {
 
   async alarm(): Promise<void> {
     await this.hydrateIfNeeded();
+    logger.info("Disconnect grace period alarm triggered. Checking for expired player sessions...");
     const now = Date.now();
     let earliestNextDisconnect: number | null = null;
     let tokensChanged = false;
@@ -127,6 +134,7 @@ export class GameSession extends DurableObject {
       if (record.disconnectedAt !== null) {
         const elapsed = now - record.disconnectedAt;
         if (elapsed >= this.gracePeriodMs) {
+          logger.info(`Purged expired controller session: ${record.name} (${record.id})`);
           this.rejoinTokens.delete(token);
           this.controlQueues.delete(record.id);
           tokensChanged = true;
@@ -161,6 +169,7 @@ export class GameSession extends DurableObject {
         }
 
         if (self.consoleToken && consoleToken !== self.consoleToken) {
+          logger.warn("Console join rejected: invalid console token");
           throw new Error("Invalid console token");
         }
 
@@ -197,6 +206,8 @@ export class GameSession extends DurableObject {
           callbacks: (callbacks as unknown as RpcStub<ConsoleCallbacks>).dup()
         });
 
+        logger.info(`Console joined signaling session. Connected controllers count: ${controllers.length}`);
+
         ws.addEventListener("close", () => self.handleClose(ws));
         ws.addEventListener("error", () => self.handleClose(ws));
 
@@ -214,6 +225,7 @@ export class GameSession extends DurableObject {
         // Flush any queued control messages for console
         const consoleQueue = self.controlQueues.get("console");
         if (consoleQueue && consoleQueue.length > 0) {
+          logger.info(`Flushing ${consoleQueue.length} queued relay control messages for console`);
           for (const item of consoleQueue as Array<{ from: string; payload: unknown }>) {
             try {
               (callbacks as unknown as RpcStub<ConsoleCallbacks>).onRelayControl(item.from, item.payload);
@@ -323,6 +335,11 @@ export class GameSession extends DurableObject {
         ws.addEventListener("close", () => self.handleClose(ws));
         ws.addEventListener("error", () => self.handleClose(ws));
 
+        const firstPlayerId = self.getFirstPlayerId();
+        const isFirstPlayer = (firstPlayerId === id);
+
+        logger.info(`Controller joined session: '${name_}' (id: ${id}, isRejoin: ${isRejoin}, isHost: ${isFirstPlayer}, consoleConnected: ${consoleConnected})`);
+
         // Announce controller join to console if not a seamless rejoin while connected
         if (!isRejoin) {
           self.forConsole(cb => (cb as RpcStub<ConsoleCallbacks>).onControllerJoined(id, name_));
@@ -339,14 +356,12 @@ export class GameSession extends DurableObject {
           });
         }
 
-        const firstPlayerId = self.getFirstPlayerId();
-        const isFirstPlayer = (firstPlayerId === id);
-
         self.checkAndBroadcastFirstPlayer();
 
         // Flush any queued control messages for this controller ID
         const controllerQueue = self.controlQueues.get(id);
         if (controllerQueue && controllerQueue.length > 0) {
+          logger.info(`Flushing ${controllerQueue.length} queued relay control messages for controller ${id}`);
           for (const payload of controllerQueue) {
             try {
               (callbacks as unknown as RpcStub<ControllerCallbacks>).onRelayControl(payload);
@@ -404,6 +419,8 @@ export class GameSession extends DurableObject {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
+
+    logger.info(`WebSocket closed for role: ${session.role}, id: ${session.id}`);
 
     try {
       session.callbacks[Symbol.dispose]();

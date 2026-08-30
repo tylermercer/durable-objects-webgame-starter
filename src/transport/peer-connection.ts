@@ -8,6 +8,9 @@ import {
   type TouchMessage,
   type TransportMode,
 } from "./transport";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("PeerConnection");
 
 export type {
   TouchMessage,
@@ -53,6 +56,7 @@ export class PeerConnection implements GameTransport {
     public isInitiator: boolean,
     private callbacks: PeerConnectionCallbacks
   ) {
+    logger.info(`Created PeerConnection (isInitiator: ${isInitiator})`);
     this.pc = new RTCPeerConnection(ICE_CONFIG);
     this.coalescingControlSender = new CoalescingSender((jsonStr) => {
       if (this.controlChannel && this.controlChannel.readyState === "open") {
@@ -64,20 +68,24 @@ export class PeerConnection implements GameTransport {
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
+        logger.debug("Generated local ICE candidate");
         this.callbacks.onSignal({ candidate: event.candidate.toJSON() });
       }
     };
 
     this.pc.onconnectionstatechange = () => {
       const state = this.pc.connectionState;
+      logger.info(`RTCPeerConnection state changed -> ${state}`);
       this.callbacks.onStateChange?.(state);
       if (state === "failed" && this.isInitiator) {
+        logger.warn("PeerConnection state is 'failed'. Triggering ICE restart");
         this.restartIce().catch(() => {});
       }
     };
 
     if (this.isInitiator) {
       // Controller opens data channels
+      logger.info("Creating local data channels: input & control");
       this.inputChannel = this.pc.createDataChannel("input", {
         ordered: false,
         maxRetransmits: 0
@@ -92,6 +100,7 @@ export class PeerConnection implements GameTransport {
       // Console receives data channels
       this.pc.ondatachannel = event => {
         const channel = event.channel;
+        logger.info(`Received remote data channel: '${channel.label}'`);
         if (channel.label === "input") {
           this.inputChannel = channel;
           this.setupChannel(channel);
@@ -127,10 +136,16 @@ export class PeerConnection implements GameTransport {
   }
 
   private setupChannel(channel: RTCDataChannel) {
+    logger.info(`Setting up data channel '${channel.label}'`);
     channel.onopen = () => {
+      logger.info(`Data channel '${channel.label}' opened`);
       if (channel.label === "control") {
         this.coalescingControlSender.flush();
       }
+    };
+
+    channel.onclose = () => {
+      logger.info(`Data channel '${channel.label}' closed`);
     };
 
     channel.onmessage = event => {
@@ -144,6 +159,7 @@ export class PeerConnection implements GameTransport {
             listener(data as InputMessage);
           }
         } else if (channel.label === "control") {
+          logger.debug(`Received control message on '${channel.label}' channel: ${data.type}`);
           if (data.type === "ping") {
             this.sendControl({ type: "pong", t: data.t });
           }
@@ -160,6 +176,7 @@ export class PeerConnection implements GameTransport {
 
   async restartIce() {
     if (!this.isInitiator) return;
+    logger.info("Restarting WebRTC ICE connection...");
     const offer = await this.pc.createOffer({ iceRestart: true });
     await this.pc.setLocalDescription(offer);
     this.callbacks.onSignal({ sdp: offer });
@@ -180,6 +197,7 @@ export class PeerConnection implements GameTransport {
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
+    logger.info("Creating local SDP offer...");
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     return offer;
@@ -187,23 +205,30 @@ export class PeerConnection implements GameTransport {
 
   async handleSignal(signal: RTCSignal) {
     if ("sdp" in signal && signal.sdp) {
+      logger.info(`Setting remote SDP description (${signal.sdp.type})`);
       await this.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
       await this.flushIceCandidates();
       if (signal.sdp.type === "offer") {
+        logger.info("Creating SDP answer for remote offer");
         const answer = await this.pc.createAnswer();
         await this.pc.setLocalDescription(answer);
         this.callbacks.onSignal({ sdp: answer });
       }
     } else if ("candidate" in signal && signal.candidate) {
       if (this.pc.remoteDescription) {
+        logger.debug("Added remote ICE candidate");
         await this.pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
       } else {
+        logger.debug("Queued remote ICE candidate (remoteDescription pending)");
         this.pendingIceCandidates.push(signal.candidate);
       }
     }
   }
 
   private async flushIceCandidates() {
+    if (this.pendingIceCandidates.length > 0) {
+      logger.debug(`Flushing ${this.pendingIceCandidates.length} pending remote ICE candidates`);
+    }
     while (this.pendingIceCandidates.length > 0) {
       const candidate = this.pendingIceCandidates.shift()!;
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -227,6 +252,7 @@ export class PeerConnection implements GameTransport {
   }
 
   close() {
+    logger.info("Closing PeerConnection");
     if (this.inputChannel) {
       this.inputChannel.close();
       this.inputChannel = null;
