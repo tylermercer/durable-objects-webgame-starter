@@ -9,6 +9,9 @@ import {
   type TouchMessage,
   type TransportMode,
 } from "./transport";
+import { createLogger } from "@utils/logger";
+
+const logger = createLogger("RelayConnection");
 
 export interface RelayConnectionCallbacks {
   onInputMessage?: (msg: TouchMessage) => void;
@@ -32,6 +35,7 @@ export class RelayConnection implements GameTransport {
     public peerId?: string, // Target controller ID if this is console side; undefined if controller side
     private callbacks?: RelayConnectionCallbacks
   ) {
+    logger.info(`Created RelayConnection (${peerId ? `target peer: ${peerId}` : "controller -> console"})`);
     this.coalescingControlSender = new CoalescingSender((jsonStr) => {
       try {
         const parsed = JSON.parse(jsonStr) as ControlMessage;
@@ -67,6 +71,7 @@ export class RelayConnection implements GameTransport {
 
   handleRelayInput(payload: unknown) {
     if (!payload || typeof payload !== "object") return;
+    logger.debug("Received relay input message");
     const msg = payload as InputMessage;
     if (msg.type === "touch") {
       this.callbacks?.onInputMessage?.(msg as TouchMessage);
@@ -79,6 +84,7 @@ export class RelayConnection implements GameTransport {
   handleRelayControl(payload: unknown) {
     if (!payload || typeof payload !== "object") return;
     const msg = payload as ControlMessage;
+    logger.debug(`Received relay control message: ${msg.type}`);
     if (msg.type === "ping") {
       this.sendControl({ type: "pong", t: msg.t });
     }
@@ -105,6 +111,7 @@ export class RelayConnection implements GameTransport {
   sendInput(msg: unknown) {
     if (!this.api) return;
     try {
+      logger.debug(`Sending relay input message to ${this.peerId ?? "console"}`);
       if (this.peerId !== undefined) {
         (this.api as RpcStub<ConsoleApi>).relayInput(this.peerId, msg);
       } else {
@@ -118,6 +125,7 @@ export class RelayConnection implements GameTransport {
   sendControl(msg: ControlMessage) {
     if (!this.api) return;
     try {
+      logger.debug(`Sending relay control message (${msg.type}) to ${this.peerId ?? "console"}`);
       if (this.peerId !== undefined) {
         (this.api as RpcStub<ConsoleApi>).relayControl(this.peerId, msg);
       } else {
@@ -133,6 +141,7 @@ export class RelayConnection implements GameTransport {
   }
 
   close() {
+    logger.info("Closing RelayConnection");
     this.inputListeners = [];
     this.controlListeners = [];
     this.modeListeners = [];
