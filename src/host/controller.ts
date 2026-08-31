@@ -45,7 +45,7 @@ class ControllerCallbacksHandler extends RpcTarget implements ControllerCallback
   }
 }
 
-class ControllerApp {
+export class ControllerApp {
   code: string;
   id: string = "";
   name: string = "";
@@ -59,6 +59,8 @@ class ControllerApp {
   activeGame: ControllerGameInstance | null = null;
   chosenName: string = "";
   private loadGameToken = 0;
+  hasSubmittedName: boolean = false;
+  wakeLock: WakeLockSentinel | null = null;
 
   constructor() {
     const params = new URLSearchParams(window.location.search);
@@ -66,7 +68,86 @@ class ControllerApp {
     logger.info(`ControllerApp initialized with room code: ${this.code}`);
   }
 
+  async requestWakeLock() {
+    if ("wakeLock" in navigator && !this.wakeLock) {
+      try {
+        this.wakeLock = await navigator.wakeLock.request("screen");
+        this.wakeLock.addEventListener("release", () => {
+          this.wakeLock = null;
+        });
+        logger.info("Screen Wake Lock acquired");
+      } catch (err) {
+        logger.warn("Failed to acquire Screen Wake Lock:", err);
+      }
+    }
+  }
+
+  isFullscreenActive(): boolean {
+    return !!(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement
+    );
+  }
+
+  async requestFullscreen(element: HTMLElement = document.documentElement): Promise<void> {
+    try {
+      if (element.requestFullscreen) {
+        await element.requestFullscreen();
+      } else if ((element as any).webkitRequestFullscreen) {
+        await (element as any).webkitRequestFullscreen();
+      } else if ((element as any).mozRequestFullScreen) {
+        await (element as any).mozRequestFullScreen();
+      } else if ((element as any).msRequestFullscreen) {
+        await (element as any).msRequestFullscreen();
+      }
+    } catch (err) {
+      logger.warn("Request fullscreen failed:", err);
+    }
+  }
+
+  updateFullscreenButtonVisibility() {
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    if (!fullscreenBtn) return;
+
+    if (this.hasSubmittedName && !this.isFullscreenActive()) {
+      fullscreenBtn.classList.remove("u-hidden");
+    } else {
+      fullscreenBtn.classList.add("u-hidden");
+    }
+  }
+
+  setupFullscreenAndWakeLockListeners() {
+    const fullscreenEvents = [
+      "fullscreenchange",
+      "webkitfullscreenchange",
+      "mozfullscreenchange",
+      "MSFullscreenChange",
+    ];
+
+    for (const evt of fullscreenEvents) {
+      document.addEventListener(evt, () => {
+        this.updateFullscreenButtonVisibility();
+      });
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && this.hasSubmittedName) {
+        this.requestWakeLock();
+        this.updateFullscreenButtonVisibility();
+      }
+    });
+
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    fullscreenBtn?.addEventListener("click", () => {
+      this.requestFullscreen();
+    });
+  }
+
   async init() {
+    this.setupFullscreenAndWakeLockListeners();
+
     const savedName = getSavedName();
     const nameScreen = document.getElementById("name-screen");
     const controllerMain = document.getElementById("controller-main");
@@ -79,8 +160,11 @@ class ControllerApp {
 
     if (savedName && sanitizeName(savedName)) {
       this.chosenName = savedName;
+      this.hasSubmittedName = true;
       if (nameScreen) nameScreen.classList.add("u-hidden");
       if (controllerMain) controllerMain.classList.remove("u-hidden");
+      this.requestWakeLock();
+      this.updateFullscreenButtonVisibility();
       this.startConnection();
     } else if (nameForm && nameScreen && controllerMain) {
       nameScreen.classList.remove("u-hidden");
@@ -93,8 +177,12 @@ class ControllerApp {
           saveName(clean);
           this.chosenName = clean;
         }
-        nameScreen.classList.add("u-hidden");
-        controllerMain.classList.remove("u-hidden");
+        this.hasSubmittedName = true;
+        this.requestFullscreen();
+        this.requestWakeLock();
+        if (nameScreen) nameScreen.classList.add("u-hidden");
+        if (controllerMain) controllerMain.classList.remove("u-hidden");
+        this.updateFullscreenButtonVisibility();
         this.startConnection();
       });
     } else {
