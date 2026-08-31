@@ -29,8 +29,13 @@ const { game } = Astro.props;
     </div>
     <div id="controller-main" class="controller-main-container">
       <header id="controller-header" class="controller-header u-guttered-md">
-        <h1 id="player-name" class="u-step-2">Controller</h1>
-        <p id="controller-status" class="u-step--1">Connecting...</p>
+        <div class="controller-header-content">
+          <h1 id="player-name" class="u-step-2">Controller</h1>
+          <p id="controller-status" class="u-step--1">Connecting...</p>
+        </div>
+        <button id="fullscreen-btn" class="btn-fullscreen u-hidden" type="button">
+          Fullscreen ⛶
+        </button>
       </header>
       <div id="touch-surface" class="touch-surface">
         <div class="touch-instructions u-step-0 u-color-muted">
@@ -368,6 +373,32 @@ const { game } = Astro.props;
     background: rgba(0, 0, 0, 0.05);
     text-align: center;
     transition: background-color 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .controller-header-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .btn-fullscreen {
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.15);
+    color: inherit;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .btn-fullscreen:hover {
+    background-color: rgba(0, 0, 0, 0.25);
   }
 
   .touch-surface {
