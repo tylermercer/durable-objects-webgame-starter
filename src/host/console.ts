@@ -5,7 +5,7 @@ import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import type { GameTransport, TouchMessage, TransportMode } from "../transport/transport";
 import { ConnectionOrchestrator } from "../transport/connectionOrchestrator";
-import { loadConsoleGame } from "../contract/gameSource";
+import { loadConsoleGame, getGameMaxPlayers } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
@@ -112,6 +112,7 @@ export class ConsoleApp {
   api: RpcStub<ConsoleApi> | null = null;
   reconnectTimer: number | null = null;
   private reconnectAttempt = 0;
+  maxPlayers: number | null = null;
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
@@ -139,7 +140,8 @@ export class ConsoleApp {
       }
     }
     this.code = code.toUpperCase();
-    logger.info(`ConsoleApp initialized with room code: ${this.code}`);
+    this.maxPlayers = getGameMaxPlayers() ?? null;
+    logger.info(`ConsoleApp initialized with room code: ${this.code}, maxPlayers: ${this.maxPlayers ?? "unlimited"}`);
   }
 
   async init() {
@@ -184,14 +186,18 @@ export class ConsoleApp {
       this.ensureResizeObserver();
       const rect = surface ? surface.getBoundingClientRect() : { width: 800, height: 600 };
 
-      const { createGame } = await loadConsoleGame();
+      const gameMod = await loadConsoleGame();
+      if (gameMod && typeof (gameMod as any).maxPlayers === "number") {
+        this.maxPlayers = (gameMod as any).maxPlayers;
+      }
+      const { createGame } = gameMod;
       this.activeGame = createGame({
         session: this.api,
         peers: this.controllers as Map<string, ControllerPeer>,
         viewport: {
           container: surface ?? document.createElement("div"),
           initialSize: { width: rect.width, height: rect.height },
-          onResize: (cb) => {
+          onResize: (cb: (size: ViewportSize) => void) => {
             this.resizeSubscribers.add(cb);
             return () => this.resizeSubscribers.delete(cb);
           },
@@ -270,6 +276,7 @@ export class ConsoleApp {
   }
 
   openModal() {
+    this.updateControllerUI();
     if (this.modal && !this.modal.open) {
       this.modal.showModal();
     }
@@ -341,7 +348,7 @@ export class ConsoleApp {
 
       const callbacks = new ConsoleCallbacksHandler(this);
       const token = this.getConsoleToken();
-      this.api.join(callbacks, token).then(res => {
+      this.api.join(callbacks, token, undefined, this.maxPlayers ?? undefined).then(res => {
         this.reconnectAttempt = 0;
         logger.info(`Console joined signaling session for room ${this.code}. Controllers connected: ${res?.controllers?.length ?? 0}`);
         if (res) {
@@ -356,6 +363,7 @@ export class ConsoleApp {
               this.addController(c.id, c.name);
             }
           }
+          this.updateControllerUI();
         }
       }).catch(err => {
         logger.error("Failed to join signaling session as console:", err);
@@ -545,6 +553,27 @@ export class ConsoleApp {
   updateControllerUI() {
     const listEl = document.getElementById("controller-list");
     if (!listEl) return;
+
+    const badgeEl = document.getElementById("player-limit-badge");
+    const noticeEl = document.getElementById("room-full-notice");
+
+    if (badgeEl) {
+      if (this.maxPlayers !== null) {
+        badgeEl.textContent = `Limit: ${this.controllers.size}/${this.maxPlayers}`;
+        badgeEl.classList.remove("u-hidden");
+      } else {
+        badgeEl.classList.add("u-hidden");
+      }
+    }
+
+    if (noticeEl) {
+      if (this.maxPlayers !== null && this.controllers.size >= this.maxPlayers) {
+        noticeEl.textContent = `Player limit reached (${this.controllers.size}/${this.maxPlayers})`;
+        noticeEl.classList.remove("u-hidden");
+      } else {
+        noticeEl.classList.add("u-hidden");
+      }
+    }
 
     listEl.innerHTML = "";
 

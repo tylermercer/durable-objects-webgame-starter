@@ -9,3 +9,7 @@ export function loadConsoleGame() {
 export function loadControllerGame() {
   return import("@logic/controller");
 }
+
+export function getGameMaxPlayers(): number | undefined {
+  return undefined;
+}

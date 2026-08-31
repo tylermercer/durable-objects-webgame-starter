@@ -363,4 +363,73 @@ describe("GameSession Durable Object", () => {
     const newJoinRes = await controllerApi.join(cb);
     expect(newJoinRes.name).toBe("Player 5");
   });
+
+  it("enforces maxPlayers limit for new controllers but permits rejoining", async () => {
+    const storageMap = new Map<string, any>();
+    const ctx = {
+      storage: {
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const makeControllerCb = () => ({
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    });
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    await consoleApi.join(consoleCallbacks, undefined, undefined, 2);
+
+    expect(session.maxPlayers).toBe(2);
+    expect(ctx.storage.put).toHaveBeenCalledWith("maxPlayers", 2);
+
+    // Join player 1
+    const cb1 = makeControllerCb();
+    const ws1 = createMockWebSocket();
+    const api1 = (session as any).makeControllerApi(ws1);
+    const p1 = await api1.join(cb1);
+
+    // Join player 2
+    const cb2 = makeControllerCb();
+    const ws2 = createMockWebSocket();
+    const api2 = (session as any).makeControllerApi(ws2);
+    await api2.join(cb2);
+
+    // Join player 3 -> should fail because maxPlayers is 2
+    const cb3 = makeControllerCb();
+    const ws3 = createMockWebSocket();
+    const api3 = (session as any).makeControllerApi(ws3);
+    await expect(api3.join(cb3)).rejects.toThrow("Room is full. Maximum limit of 2 players reached.");
+
+    // Disconnect p1 and rejoin with token -> should succeed
+    await (session as any).handleClose(ws1);
+    const ws1_reconnect = createMockWebSocket();
+    const api1_reconnect = (session as any).makeControllerApi(ws1_reconnect);
+    const p1_reconnect = await api1_reconnect.join(cb1, p1.rejoinToken);
+    expect(p1_reconnect.id).toBe(p1.id);
+  });
 });

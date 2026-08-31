@@ -30,6 +30,7 @@ export class GameSession extends DurableObject {
   rejoinTokens = new Map<string, ControllerRecord>();
   consoleToken: string | null = null;
   gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
+  maxPlayers: number | null = null;
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
   private hydrationPromise: Promise<void> | null = null;
@@ -50,6 +51,8 @@ export class GameSession extends DurableObject {
       if (nextNum) this.nextPlayerNumber = nextNum;
       const grace = await this.ctx.storage.get<number>("gracePeriodMs");
       if (grace) this.gracePeriodMs = grace;
+      const maxP = await this.ctx.storage.get<number>("maxPlayers");
+      if (maxP !== undefined) this.maxPlayers = maxP;
     }
   }
 
@@ -163,7 +166,7 @@ export class GameSession extends DurableObject {
   private makeConsoleApi(ws: WebSocket): ConsoleApi {
     const self = this;
     return new (class extends RpcTarget implements ConsoleApi {
-      async join(callbacks: ConsoleCallbacks, consoleToken?: string, gracePeriodMs?: number) {
+      async join(callbacks: ConsoleCallbacks, consoleToken?: string, gracePeriodMs?: number, maxPlayers?: number) {
         if (!self.consoleToken && self.ctx?.storage?.get) {
           self.consoleToken = (await self.ctx.storage.get<string>("consoleToken")) ?? null;
         }
@@ -184,6 +187,18 @@ export class GameSession extends DurableObject {
           self.gracePeriodMs = gracePeriodMs;
           if (self.ctx?.storage?.put) {
             await self.ctx.storage.put("gracePeriodMs", self.gracePeriodMs);
+          }
+        }
+
+        if (maxPlayers !== undefined && maxPlayers > 0) {
+          self.maxPlayers = maxPlayers;
+          if (self.ctx?.storage?.put) {
+            await self.ctx.storage.put("maxPlayers", self.maxPlayers);
+          }
+        } else if (maxPlayers === null || maxPlayers === 0) {
+          self.maxPlayers = null;
+          if (self.ctx?.storage?.delete) {
+            await self.ctx.storage.delete("maxPlayers");
           }
         }
 
@@ -310,6 +325,10 @@ export class GameSession extends DurableObject {
           record.disconnectedAt = null;
           isRejoin = true;
         } else {
+          if (self.maxPlayers !== null && self.rejoinTokens.size >= self.maxPlayers) {
+            logger.warn(`Controller join rejected: player limit of ${self.maxPlayers} reached`);
+            throw new Error(`Room is full. Maximum limit of ${self.maxPlayers} players reached.`);
+          }
           id = crypto.randomUUID();
           name_ = cleanName ?? self.nextPlayerName();
           token = rejoinToken || crypto.randomUUID();

@@ -50,3 +50,12 @@ export interface ConsoleGameInstance {
 export interface ControllerGameInstance {
   destroy?: () => void;
 }
+
+export interface ConsoleGameModule {
+  createGame(ctx: ConsoleContext): ConsoleGameInstance;
+  maxPlayers?: number;
+}
+
+export interface ControllerGameModule {
+  createGame(ctx: { peerConnection: GameTransport | null; isFirstPlayer: () => boolean }): ControllerGameInstance;
+}

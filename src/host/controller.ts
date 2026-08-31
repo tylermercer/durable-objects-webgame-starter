@@ -153,7 +153,12 @@ class ControllerApp {
         }
       }).catch(err => {
         logger.error("Failed to join as controller:", err);
-        this.scheduleReconnect();
+        const msg = String(err?.message || err);
+        if (msg.includes("Room is full") || msg.includes("limit")) {
+          this.updateStatus(msg);
+        } else {
+          this.scheduleReconnect();
+        }
       });
     } catch (err) {
       logger.error("Signaling error:", err);
