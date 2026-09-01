@@ -34,6 +34,25 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const attachedListeners = new Set<string>();
   const knownPlayerIds = new Set<string>();
 
+  function handlePeerLeft(id: string) {
+    if (phase === "bidding") {
+      const currentTurnPlayerId = turnOrder[turnIndex % Math.max(1, turnOrder.length)];
+      const wasCurrentTurn = (id === currentTurnPlayerId);
+      turnOrder = turnOrder.filter(pId => pId !== id);
+      if (turnOrder.length < 2) {
+        phase = "waiting";
+        broadcastState();
+        persistState();
+      } else if (wasCurrentTurn) {
+        turnIndex = turnIndex % turnOrder.length;
+        broadcastState();
+        persistState();
+      }
+    }
+  }
+
+  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
       if (peer.isFirstPlayer && (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected")) {
@@ -324,20 +343,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeersAndListeners() {
-    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-    if (departed.length > 0 && phase === "bidding") {
-      const currentTurnPlayerId = turnOrder[turnIndex % Math.max(1, turnOrder.length)];
-      const wasCurrentTurn = departed.includes(currentTurnPlayerId);
-      turnOrder = turnOrder.filter(id => !departed.includes(id));
-      if (turnOrder.length < 2) {
-        phase = "waiting";
-        broadcastState();
-        persistState();
-      } else if (wasCurrentTurn) {
-        turnIndex = turnIndex % turnOrder.length;
-        broadcastState();
-        persistState();
-      }
+    if (!ctx.onPeerLeft) {
+      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+      for (const id of departed) handlePeerLeft(id);
     }
 
     for (const id of attachedListeners) {
@@ -394,6 +402,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
 
     destroy: () => {
+      unsubscribePeerLeft?.();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },

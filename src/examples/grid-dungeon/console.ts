@@ -47,6 +47,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const knownPlayerIds = new Set<string>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
+  function handlePeerLeft(id: string) {
+    registry.remove(id);
+    joystickInputs.delete(id);
+    attachedListeners.delete(id);
+  }
+
+  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+
   const camera = new Camera({
     viewportWidth: ROOM_WIDTH * TILE_SIZE,
     viewportHeight: ROOM_HEIGHT * TILE_SIZE,
@@ -100,11 +108,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeers() {
-    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-    for (const id of departed) {
-      registry.remove(id);
-      joystickInputs.delete(id);
-      attachedListeners.delete(id);
+    if (!ctx.onPeerLeft) {
+      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+      for (const id of departed) {
+        handlePeerLeft(id);
+      }
     }
 
     const activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus; state?: string }> = [];
@@ -283,6 +291,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     destroy: () => {
       loop.stop();
       unsubscribeResize();
+      unsubscribePeerLeft?.();
       canvas.remove();
     },
   };

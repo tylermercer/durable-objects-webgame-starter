@@ -17,6 +17,7 @@ import { createGame } from "./console";
 function createMockConsoleContext(): {
   ctx: ConsoleContext;
   peers: Map<string, ControllerPeer>;
+  triggerPeerLeft: (id: string) => void;
 } {
   const container = {
     appendChild: vi.fn(),
@@ -24,10 +25,15 @@ function createMockConsoleContext(): {
   } as unknown as HTMLDivElement;
 
   const peers = new Map<string, ControllerPeer>();
+  let peerLeftCb: ((id: string) => void) | null = null;
 
   const ctx: ConsoleContext = {
     peers,
     session: null,
+    onPeerLeft: (cb) => {
+      peerLeftCb = cb;
+      return () => { peerLeftCb = null; };
+    },
     viewport: {
       container,
       initialSize: { width: 800, height: 600 },
@@ -35,12 +41,12 @@ function createMockConsoleContext(): {
     },
   };
 
-  return { ctx, peers };
+  return { ctx, peers, triggerPeerLeft: (id: string) => peerLeftCb?.(id) };
 }
 
 describe("Liar's Dice Player Departure", () => {
   it("advances turn or transitions to waiting when current turn player departs during bidding", () => {
-    const { ctx, peers } = createMockConsoleContext();
+    const { ctx, peers, triggerPeerLeft } = createMockConsoleContext();
 
     const sendControlMock = vi.fn();
 
@@ -74,8 +80,10 @@ describe("Liar's Dice Player Departure", () => {
     const game = createGame(ctx);
     game.tick?.(1 / 60);
 
-    // Remove p1
+    // Remove p1 and trigger event
     peers.delete("p1");
+    triggerPeerLeft("p1");
+
     game.tick?.(1 / 60);
 
     game.destroy?.();

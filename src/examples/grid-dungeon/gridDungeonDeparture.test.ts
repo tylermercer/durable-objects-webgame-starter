@@ -13,13 +13,13 @@ import { createGame } from "./console";
 function createMockConsoleContext(): {
   ctx: ConsoleContext;
   peers: Map<string, ControllerPeer>;
+  triggerPeerLeft: (id: string) => void;
 } {
   const container = {
     appendChild: vi.fn(),
     innerHTML: "",
   } as unknown as HTMLDivElement;
 
-  // Mock canvas element if created
   const canvasMock = {
     style: {},
     getContext: () => ({
@@ -43,10 +43,15 @@ function createMockConsoleContext(): {
   }
 
   const peers = new Map<string, ControllerPeer>();
+  let peerLeftCb: ((id: string) => void) | null = null;
 
   const ctx: ConsoleContext = {
     peers,
     session: null,
+    onPeerLeft: (cb) => {
+      peerLeftCb = cb;
+      return () => { peerLeftCb = null; };
+    },
     viewport: {
       container,
       initialSize: { width: 800, height: 600 },
@@ -54,11 +59,15 @@ function createMockConsoleContext(): {
     },
   };
 
-  return { ctx, peers };
+  return {
+    ctx,
+    peers,
+    triggerPeerLeft: (id: string) => peerLeftCb?.(id),
+  };
 }
 
 describe("Grid Dungeon Player Departure", () => {
-  it("removes player entity from registry when peer departs", () => {
+  it("removes player entity from registry when peer departs via event or polling", () => {
     if (!(globalThis as any).window) {
       (globalThis as any).window = { devicePixelRatio: 1 };
     }
@@ -69,7 +78,6 @@ describe("Grid Dungeon Player Departure", () => {
       (globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
     }
     if (!globalThis.document) {
-      // Create minimal document object if running in node environment without DOM
       (globalThis as any).document = {
         createElement: (tagName: string) => {
           if (tagName === "canvas") {
@@ -91,7 +99,7 @@ describe("Grid Dungeon Player Departure", () => {
       };
     }
 
-    const { ctx, peers } = createMockConsoleContext();
+    const { ctx, peers, triggerPeerLeft } = createMockConsoleContext();
 
     peers.set("p1", {
       id: "p1",
@@ -106,10 +114,10 @@ describe("Grid Dungeon Player Departure", () => {
     // Initial tick to register p1
     game.tick?.(1 / 60);
 
-    // Remove p1 from ctx.peers (player departure)
+    // Trigger departure event
     peers.delete("p1");
+    triggerPeerLeft("p1");
 
-    // Second tick triggers diffDepartedPeers and registry.remove("p1")
     game.tick?.(1 / 60);
 
     game.destroy?.();

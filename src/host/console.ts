@@ -9,6 +9,7 @@ import { loadConsoleGame, getGameMaxPlayers } from "../contract/gameSource";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
+import { createPeerNotifier, type PeerNotifier } from "../utils/peerDeparture";
 import { createLogger } from "@utils/logger";
 
 const logger = createLogger("ConsoleHost");
@@ -117,6 +118,7 @@ export class ConsoleApp {
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
   pendingKickTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  peerNotifier: PeerNotifier<ControllerPeer> = createPeerNotifier(this.controllers as Map<string, ControllerPeer>);
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -195,6 +197,8 @@ export class ConsoleApp {
       this.activeGame = createGame({
         session: this.api,
         peers: this.controllers as Map<string, ControllerPeer>,
+        onPeerJoined: this.peerNotifier.onPeerJoined,
+        onPeerLeft: this.peerNotifier.onPeerLeft,
         viewport: {
           container: surface ?? document.createElement("div"),
           initialSize: { width: rect.width, height: rect.height },
@@ -454,6 +458,7 @@ export class ConsoleApp {
     };
 
     this.controllers.set(id, controller);
+    this.peerNotifier.notifyJoined(controller);
 
     if (getForcedTransport() === "relay") {
       this.getOrCreateOrchestrator(controller);
@@ -515,6 +520,7 @@ export class ConsoleApp {
       controller.orchestrator = null;
       controller.pc = null;
       this.controllers.delete(id);
+      this.peerNotifier.notifyLeft(id);
       const timer = this.pendingKickTimers.get(id);
       if (timer) {
         clearTimeout(timer);

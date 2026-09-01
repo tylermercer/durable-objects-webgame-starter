@@ -32,6 +32,28 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const attachedListeners = new Map<string, GameTransport>();
   const knownPlayerIds = new Set<string>();
 
+  function handlePeerLeft(id: string) {
+    turnOrder.removePlayer(id);
+    hands.delete(id);
+    if (roundFlow.is("playing")) {
+      const remaining = turnOrder.all();
+      if (remaining.length === 1) {
+        const soleId = remaining[0];
+        const peer = ctx.peers.get(soleId);
+        winner = { id: soleId, name: peer ? peer.name : "Player" };
+        roundFlow.transition("roundOver");
+        broadcastState();
+        persistState();
+      } else if (remaining.length === 0) {
+        roundFlow.transition("waiting");
+        broadcastState();
+        persistState();
+      }
+    }
+  }
+
+  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
       if (peer.isFirstPlayer && (peer.status === "live" || peer.status === "live-relay" || peer.state === "connected")) {
@@ -281,25 +303,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncRemovedPlayers() {
-    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-    for (const id of departed) {
-      turnOrder.removePlayer(id);
-      hands.delete(id);
-    }
-    if (departed.length > 0 && roundFlow.is("playing")) {
-      const remaining = turnOrder.all();
-      if (remaining.length === 1) {
-        const soleId = remaining[0];
-        const peer = ctx.peers.get(soleId);
-        winner = { id: soleId, name: peer ? peer.name : "Player" };
-        roundFlow.transition("roundOver");
-        broadcastState();
-        persistState();
-      } else if (remaining.length === 0) {
-        roundFlow.transition("waiting");
-        broadcastState();
-        persistState();
-      }
+    if (!ctx.onPeerLeft) {
+      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+      for (const id of departed) handlePeerLeft(id);
     }
   }
 
@@ -334,6 +340,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
 
     destroy: () => {
+      unsubscribePeerLeft?.();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },
