@@ -19,7 +19,7 @@ on:
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed'
+    if: (github.event_name != 'pull_request' || github.event.action != 'closed') && github.repository == 'tylermercer/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
