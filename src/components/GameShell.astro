@@ -43,6 +43,22 @@ const { game } = Astro.props;
         </div>
       </div>
     </div>
+
+    <!-- Controller Full Dialog Modal -->
+    <dialog id="controller-full-modal" class="room-modal controller-modal">
+      <div class="modal-content l-stack l-space-m">
+        <div class="modal-header l-stack l-space-xs">
+          <h2 class="u-step-2">Room Full</h2>
+          <p id="controller-full-message" class="u-step--1 u-color-muted">
+            This game session has reached its maximum player limit.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button id="controller-full-close-btn" class="btn-done" type="button">Back</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="@host/controller.ts"></script>
   </main>
 
@@ -82,7 +98,13 @@ const { game } = Astro.props;
         </div>
 
         <div class="modal-controllers l-stack l-space-xs">
-          <h3 class="u-step-0">Connected Players</h3>
+          <div class="l-cluster l-space-between">
+            <h3 id="connected-players-title" class="u-step-0">Connected Players</h3>
+            <span id="player-limit-badge" class="player-limit-badge u-hidden"></span>
+          </div>
+          <div id="room-full-notice" class="room-full-notice u-hidden">
+            Player limit reached
+          </div>
           <div id="controller-list" class="controller-list l-stack l-space-xs">
             <p class="u-step--1 u-color-muted">Initializing room...</p>
           </div>
@@ -293,6 +315,23 @@ const { game } = Astro.props;
 
   .btn-done:hover {
     background-color: var(--primary-10, #0051a2);
+  }
+
+  .player-limit-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--gray-10, #666);
+  }
+
+  .room-full-notice {
+    padding: 0.5rem 0.75rem;
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-align: center;
   }
 
   /* Mobile Join Form Styling */

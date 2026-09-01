@@ -28,7 +28,8 @@ export interface ConsoleApi extends RpcTarget {
   join(
     callbacks: ConsoleCallbacks,
     consoleToken?: string,
-    gracePeriodMs?: number
+    gracePeriodMs?: number,
+    maxPlayers?: number
   ):
     | { controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }
     | Promise<{ controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }>;

@@ -1,7 +1,7 @@
 import { EXAMPLES, DEFAULT_EXAMPLE, type ExampleId } from "./registry";
 
 export function getSelectedExampleId(): ExampleId {
-  if (typeof document === "undefined") return DEFAULT_EXAMPLE;
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return DEFAULT_EXAMPLE;
 
   const id = document.querySelector("[data-game]")?.getAttribute("data-game");
   return id && id in EXAMPLES ? (id as ExampleId) : DEFAULT_EXAMPLE;

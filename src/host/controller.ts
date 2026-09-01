@@ -241,7 +241,12 @@ export class ControllerApp {
         }
       }).catch(err => {
         logger.error("Failed to join as controller:", err);
-        this.scheduleReconnect();
+        const msg = String(err?.message || err);
+        if (msg.includes("Room is full") || msg.includes("limit")) {
+          this.showRoomFullModal(msg);
+        } else {
+          this.scheduleReconnect();
+        }
       });
     } catch (err) {
       logger.error("Signaling error:", err);
@@ -375,6 +380,35 @@ export class ControllerApp {
   updateStatus(text: string) {
     const statusEl = document.getElementById("controller-status");
     if (statusEl) statusEl.textContent = text;
+  }
+
+  private showRoomFullModal(message: string) {
+    logger.warn(`Controller join failed because room is full: ${message}`);
+    this.orchestrator?.close();
+    this.orchestrator = null;
+    this.activeGame?.destroy?.();
+    this.activeGame = null;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    const msgEl = document.getElementById("controller-full-message");
+    if (msgEl) {
+      msgEl.textContent = message;
+    }
+
+    const modal = document.getElementById("controller-full-modal") as HTMLDialogElement | null;
+    if (modal && !modal.open) {
+      modal.showModal();
+    }
+
+    const closeBtn = document.getElementById("controller-full-close-btn");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        window.location.href = "/";
+      };
+    }
   }
 
   updatePlayerInfo(name: string, color: string) {

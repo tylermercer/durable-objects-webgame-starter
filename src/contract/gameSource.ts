@@ -15,3 +15,8 @@ export function loadControllerGame(joinUrl: URL) {
   const exampleId = exampleIdFromJoinUrl(joinUrl) ?? DEFAULT_EXAMPLE;
   return EXAMPLES[exampleId].controller();
 }
+
+export function getGameMaxPlayers(): number | undefined {
+  const exampleId = getSelectedExampleId() ?? DEFAULT_EXAMPLE;
+  return EXAMPLES[exampleId]?.maxPlayers;
+}

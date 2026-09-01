@@ -1,4 +1,13 @@
-export const EXAMPLES = {
+import type { ConsoleGameModule, ControllerGameModule } from "../contract/gameTypes";
+
+export interface GameEntry {
+  label: string;
+  maxPlayers?: number;
+  console: () => Promise<ConsoleGameModule | any>;
+  controller: () => Promise<ControllerGameModule | any>;
+}
+
+export const EXAMPLES: Record<string, GameEntry> = {
   "touch-demo": {
     label: "Touch Demo",
     console: () => import("@examples/touch-demo/console"),
@@ -6,6 +15,7 @@ export const EXAMPLES = {
   },
   "liars-dice": {
     label: "Liar's Dice",
+    maxPlayers: 6,
     console: () => import("@examples/liars-dice/console"),
     controller: () => import("@examples/liars-dice/controller"),
   },
@@ -21,11 +31,13 @@ export const EXAMPLES = {
   },
   "uno": {
     label: "Uno",
+    maxPlayers: 6,
     console: () => import("@examples/uno/console"),
     controller: () => import("@examples/uno/controller"),
   },
   "othello": {
     label: "Othello",
+    maxPlayers: 2,
     console: () => import("@examples/othello/console"),
     controller: () => import("@examples/othello/controller"),
   },
