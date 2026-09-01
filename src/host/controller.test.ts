@@ -175,4 +175,116 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
 
     expect(requestWakeSpy).toHaveBeenCalled();
   });
+
+  it("handles handleKicked by clearing token, closing connections, and switching UI to name screen", async () => {
+    const app = new ControllerApp();
+    vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    app.id = "p1-id";
+    app.name = "Alice";
+    app.hasSubmittedName = true;
+    app.chosenName = "Alice";
+    app.orchestrator = { close: vi.fn() } as any;
+    app.activeGame = { destroy: vi.fn() } as any;
+
+    app.handleKicked();
+
+    expect(app.wasKicked).toBe(true);
+    expect(app.id).toBe("");
+    expect(app.name).toBe("");
+    expect(app.hasSubmittedName).toBe(false);
+    expect(app.orchestrator).toBeNull();
+    expect(app.activeGame).toBeNull();
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(false);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(true);
+  });
+
+  it("prevents auto-reconnect when wasKicked is true until manual name submission", async () => {
+    let nameFormSubmitCb: ((e: any) => void) | null = null;
+    elements["name-form"].addEventListener = vi.fn((event: string, cb: any) => {
+      if (event === "submit") nameFormSubmitCb = cb;
+    });
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    app.handleKicked();
+    expect(app.wasKicked).toBe(true);
+
+    // Call scheduleReconnect (simulating RPC broken / socket close event)
+    connectSpy.mockClear();
+    app.scheduleReconnect();
+
+    // Verify connectSignaling was NOT scheduled/called
+    expect(app.reconnectTimer).toBeNull();
+    expect(connectSpy).not.toHaveBeenCalled();
+
+    // User submits name form to manually rejoin
+    elements["player-name-input"].value = "Alice";
+    nameFormSubmitCb!({ preventDefault: vi.fn() });
+
+    expect(app.wasKicked).toBe(false);
+    expect(connectSpy).toHaveBeenCalled();
+  });
+
+  it("resets controller to name screen and suppresses reconnect when join is rejected due to kick", async () => {
+    const app = new ControllerApp();
+    const handleKickedSpy = vi.spyOn(app, "handleKicked");
+    const scheduleReconnectSpy = vi.spyOn(app, "scheduleReconnect");
+
+    app.api = {
+      join: vi.fn().mockRejectedValue(new Error("You have been removed from this session.")),
+      onRpcBroken: vi.fn()
+    } as any;
+
+    // Simulate join failure catch block
+    try {
+      await app.api!.join({} as any, "token", "Alice");
+    } catch (err) {
+      const msg = String((err as any)?.message || err);
+      if (msg.includes("removed from this session")) {
+        app.handleKicked();
+      } else {
+        app.scheduleReconnect();
+      }
+    }
+
+    expect(handleKickedSpy).toHaveBeenCalled();
+    expect(scheduleReconnectSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows name screen and pre-fills name when savedName is present but token was cleared (e.g. after kick and refresh)", async () => {
+    const deviceIdentity = await import("../utils/deviceIdentity");
+    vi.spyOn(deviceIdentity, "getSavedName").mockReturnValue("Alice");
+    vi.spyOn(deviceIdentity, "hasRejoinToken").mockReturnValue(false);
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    expect(elements["player-name-input"].value).toBe("Alice");
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(false);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(true);
+    expect(connectSpy).not.toHaveBeenCalled();
+  });
+
+  it("auto-skips to controller main and connects when savedName AND rejoinToken are present on refresh", async () => {
+    const deviceIdentity = await import("../utils/deviceIdentity");
+    vi.spyOn(deviceIdentity, "getSavedName").mockReturnValue("Alice");
+    vi.spyOn(deviceIdentity, "hasRejoinToken").mockReturnValue(true);
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(true);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(false);
+    expect(connectSpy).toHaveBeenCalled();
+  });
 });

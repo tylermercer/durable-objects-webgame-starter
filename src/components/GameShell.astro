@@ -487,4 +487,32 @@ const { game } = Astro.props;
     background: #ff4136;
     color: white;
   }
+
+  :global(.btn-kick-controller) {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    margin-left: auto;
+    border-radius: 4px;
+    background: var(--gray-4, #ddd);
+    color: var(--gray-12, #111);
+    border: 1px solid var(--gray-6, #ccc);
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+
+  :global(.btn-kick-controller:hover) {
+    background: var(--gray-5, #ccc);
+  }
+
+  :global(.btn-kick-controller.is-confirming) {
+    background: #ff4136;
+    color: white;
+    border-color: #ff4136;
+  }
+
+  :global(.btn-kick-controller.is-confirming:hover) {
+    background: #e02b20;
+    border-color: #e02b20;
+  }
 </style>

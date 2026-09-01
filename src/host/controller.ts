@@ -4,7 +4,7 @@ import { ConnectionOrchestrator } from "@transport/connectionOrchestrator";
 import type { GameTransport, IdentityMessage } from "@transport/transport";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
-import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, hasRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 import { isController } from "../utils/isController";
 import { createLogger } from "@utils/logger";
 
@@ -26,6 +26,10 @@ class ControllerCallbacksHandler extends RpcTarget implements ControllerCallback
 
   onConsoleGone() {
     this.app.handleConsoleGone();
+  }
+
+  onKicked() {
+    this.app.handleKicked();
   }
 
   onSignal(signal: RTCSignal) {
@@ -60,6 +64,7 @@ export class ControllerApp {
   chosenName: string = "";
   private loadGameToken = 0;
   hasSubmittedName: boolean = false;
+  wasKicked: boolean = false;
   wakeLock: WakeLockSentinel | null = null;
 
   constructor() {
@@ -149,6 +154,7 @@ export class ControllerApp {
     this.setupFullscreenAndWakeLockListeners();
 
     const savedName = getSavedName();
+    const canAutoRejoin = hasRejoinToken(this.code);
     const nameScreen = document.getElementById("name-screen");
     const controllerMain = document.getElementById("controller-main");
     const nameInput = document.getElementById("player-name-input") as HTMLInputElement;
@@ -158,7 +164,7 @@ export class ControllerApp {
       nameInput.value = savedName;
     }
 
-    if (savedName && sanitizeName(savedName)) {
+    if (savedName && sanitizeName(savedName) && canAutoRejoin) {
       this.chosenName = savedName;
       this.hasSubmittedName = true;
       if (nameScreen) nameScreen.classList.add("u-hidden");
@@ -191,6 +197,7 @@ export class ControllerApp {
   }
 
   private startConnection() {
+    this.wasKicked = false;
     this.updateStatus("Connecting to signaling server...");
     this.connectSignaling();
   }
@@ -242,7 +249,9 @@ export class ControllerApp {
       }).catch(err => {
         logger.error("Failed to join as controller:", err);
         const msg = String(err?.message || err);
-        if (msg.includes("Room is full") || msg.includes("limit")) {
+        if (msg.includes("removed from this session")) {
+          this.handleKicked();
+        } else if (msg.includes("Room is full") || msg.includes("limit")) {
           this.showRoomFullModal(msg);
         } else {
           this.scheduleReconnect();
@@ -255,7 +264,7 @@ export class ControllerApp {
   }
 
   scheduleReconnect() {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer || this.wasKicked) return;
     this.updateStatus("Signaling broken. Reconnecting...");
     const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * base * 0.3;
@@ -349,6 +358,43 @@ export class ControllerApp {
     this.activeGame = null;
     this.pc = null;
     this.updateStatus("Console disconnected. Waiting for console...");
+  }
+
+  handleKicked() {
+    logger.warn("Controller was kicked from room. Resetting state and memory.");
+    this.wasKicked = true;
+    clearRejoinToken(this.code);
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    this.orchestrator?.close();
+    this.orchestrator = null;
+    this.activeGame?.destroy?.();
+    this.activeGame = null;
+    this.pc = null;
+
+    try {
+      (this.api as any)?.[Symbol.dispose]?.();
+    } catch {
+      // Ignore RPC disposal error
+    }
+    this.api = null;
+
+    this.id = "";
+    this.name = "";
+    this.color = "";
+    this.isFirstPlayer = false;
+    this.hasSubmittedName = false;
+    this.chosenName = "";
+
+    const nameScreen = document.getElementById("name-screen");
+    const controllerMain = document.getElementById("controller-main");
+    if (nameScreen) nameScreen.classList.remove("u-hidden");
+    if (controllerMain) controllerMain.classList.add("u-hidden");
+    this.updateFullscreenButtonVisibility();
   }
 
   handleSignal(signal: RTCSignal) {

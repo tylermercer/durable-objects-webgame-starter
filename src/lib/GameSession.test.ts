@@ -432,4 +432,121 @@ describe("GameSession Durable Object", () => {
     const p1_reconnect = await api1_reconnect.join(cb1, p1.rejoinToken);
     expect(p1_reconnect.id).toBe(p1.id);
   });
+
+  it("handles kickController: notifies controller, purges rejoinToken, closes WS, and notifies console", async () => {
+    const ctx = {
+      storage: {
+        get: vi.fn(async () => null),
+        put: vi.fn(async () => {}),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const controllerCallbacks = {
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onKicked: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    await consoleApi.join(consoleCallbacks);
+
+    const controllerWs = createMockWebSocket();
+    const controllerApi = (session as any).makeControllerApi(controllerWs);
+    const joinRes = await controllerApi.join(controllerCallbacks);
+
+    expect(joinRes.id).toBeDefined();
+    expect(session.rejoinTokens.has(joinRes.rejoinToken)).toBe(true);
+
+    // Console kicks controller
+    await consoleApi.kickController(joinRes.id);
+
+    expect(controllerCallbacks.onKicked).toHaveBeenCalled();
+    expect(controllerWs.close).toHaveBeenCalledWith(4001, "kicked");
+    expect(session.rejoinTokens.has(joinRes.rejoinToken)).toBe(false);
+    expect(consoleCallbacks.onControllerLeft).toHaveBeenCalledWith(joinRes.id);
+
+    // If controller attempts to rejoin with old token, it should be rejected as kicked
+    const controllerWsRejoin = createMockWebSocket();
+    const controllerApiRejoin = (session as any).makeControllerApi(controllerWsRejoin);
+    await expect(controllerApiRejoin.join(controllerCallbacks, joinRes.rejoinToken)).rejects.toThrow("You have been removed from this session.");
+  });
+
+  it("rejects join attempt from offline kicked token", async () => {
+    const ctx = {
+      storage: {
+        get: vi.fn(async () => null),
+        put: vi.fn(async () => {}),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const controllerCallbacks = {
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onKicked: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    await consoleApi.join(consoleCallbacks);
+
+    const controllerWs = createMockWebSocket();
+    const controllerApi = (session as any).makeControllerApi(controllerWs);
+    const joinRes = await controllerApi.join(controllerCallbacks);
+
+    // Simulate controller going offline / disconnected
+    await (session as any).handleClose(controllerWs);
+
+    // Console kicks the offline controller
+    await consoleApi.kickController(joinRes.id);
+
+    // Later, offline controller comes back online and attempts join with stale token
+    const controllerWsOffline = createMockWebSocket();
+    const controllerApiOffline = (session as any).makeControllerApi(controllerWsOffline);
+    await expect(controllerApiOffline.join(controllerCallbacks, joinRes.rejoinToken)).rejects.toThrow("You have been removed from this session.");
+  });
 });

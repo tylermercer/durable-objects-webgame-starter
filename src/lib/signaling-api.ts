@@ -17,6 +17,7 @@ export interface ConsoleCallbacks extends RpcTarget {
 export interface ControllerCallbacks extends RpcTarget {
   onConsoleReady(): void;
   onConsoleGone(): void;
+  onKicked(): void;
   onSignal(signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
   onRelayInput(payload: unknown): void;
@@ -33,6 +34,7 @@ export interface ConsoleApi extends RpcTarget {
   ):
     | { controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }
     | Promise<{ controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }>;
+  kickController(id: string): void | Promise<void>;
   sendSignal(to: string, signal: RTCSignal): void;
   relayInput(to: string, payload: unknown): void;
   relayControl(to: string, payload: unknown): void;
