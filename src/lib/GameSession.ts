@@ -28,6 +28,7 @@ const MAX_CONTROL_QUEUE_SIZE = 25;
 export class GameSession extends DurableObject {
   sessions = new Map<WebSocket, Session>();
   rejoinTokens = new Map<string, ControllerRecord>();
+  kickedTokens = new Set<string>();
   consoleToken: string | null = null;
   gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
   maxPlayers: number | null = null;
@@ -47,6 +48,8 @@ export class GameSession extends DurableObject {
     if (this.ctx?.storage?.get) {
       const storedTokens = await this.ctx.storage.get<[string, ControllerRecord][]>("rejoinTokens");
       if (storedTokens) this.rejoinTokens = new Map(storedTokens);
+      const storedKicked = await this.ctx.storage.get<string[]>("kickedTokens");
+      if (storedKicked) this.kickedTokens = new Set(storedKicked);
       const nextNum = await this.ctx.storage.get<number>("nextPlayerNumber");
       if (nextNum) this.nextPlayerNumber = nextNum;
       const grace = await this.ctx.storage.get<number>("gracePeriodMs");
@@ -59,6 +62,7 @@ export class GameSession extends DurableObject {
   private async persistRejoinTokens() {
     if (this.ctx?.storage?.put) {
       await this.ctx.storage.put("rejoinTokens", [...this.rejoinTokens.entries()]);
+      await this.ctx.storage.put("kickedTokens", [...this.kickedTokens]);
       await this.ctx.storage.put("nextPlayerNumber", this.nextPlayerNumber);
       await this.ctx.storage.put("gracePeriodMs", this.gracePeriodMs);
     }
@@ -271,6 +275,7 @@ export class GameSession extends DurableObject {
 
         if (foundToken) {
           self.rejoinTokens.delete(foundToken);
+          self.kickedTokens.add(foundToken);
           await self.persistRejoinTokens();
         }
 
@@ -372,6 +377,10 @@ export class GameSession extends DurableObject {
           record.disconnectedAt = null;
           isRejoin = true;
         } else {
+          if (rejoinToken && self.kickedTokens.has(rejoinToken)) {
+            logger.warn("Rejected join attempt from previously-kicked token");
+            throw new Error("You have been removed from this session.");
+          }
           if (self.maxPlayers !== null && self.rejoinTokens.size >= self.maxPlayers) {
             logger.warn(`Controller join rejected: player limit of ${self.maxPlayers} reached`);
             throw new Error(`Room is full. Maximum limit of ${self.maxPlayers} players reached.`);

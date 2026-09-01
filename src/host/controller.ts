@@ -248,7 +248,9 @@ export class ControllerApp {
       }).catch(err => {
         logger.error("Failed to join as controller:", err);
         const msg = String(err?.message || err);
-        if (msg.includes("Room is full") || msg.includes("limit")) {
+        if (msg.includes("removed from this session")) {
+          this.handleKicked();
+        } else if (msg.includes("Room is full") || msg.includes("limit")) {
           this.showRoomFullModal(msg);
         } else {
           this.scheduleReconnect();

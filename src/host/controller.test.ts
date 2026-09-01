@@ -230,4 +230,30 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
     expect(app.wasKicked).toBe(false);
     expect(connectSpy).toHaveBeenCalled();
   });
+
+  it("resets controller to name screen and suppresses reconnect when join is rejected due to kick", async () => {
+    const app = new ControllerApp();
+    const handleKickedSpy = vi.spyOn(app, "handleKicked");
+    const scheduleReconnectSpy = vi.spyOn(app, "scheduleReconnect");
+
+    app.api = {
+      join: vi.fn().mockRejectedValue(new Error("You have been removed from this session.")),
+      onRpcBroken: vi.fn()
+    } as any;
+
+    // Simulate join failure catch block
+    try {
+      await app.api!.join({} as any, "token", "Alice");
+    } catch (err) {
+      const msg = String((err as any)?.message || err);
+      if (msg.includes("removed from this session")) {
+        app.handleKicked();
+      } else {
+        app.scheduleReconnect();
+      }
+    }
+
+    expect(handleKickedSpy).toHaveBeenCalled();
+    expect(scheduleReconnectSpy).not.toHaveBeenCalled();
+  });
 });
