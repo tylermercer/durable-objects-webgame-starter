@@ -57,7 +57,7 @@ async function main() {
       content = content.replaceAll(TEMPLATE_NAME, newProjectName);
       content = content.replaceAll(TEMPLATE_SUBDOMAIN, cfSubdomain);
       if (path === "./.github/workflows/main.yml") {
-        content = content.replace(/\n\s*if: github\.repository == 'tylermercer\/astro-cloudflare-starter' # prevents failure before init; removed via init\.ts/, "");
+        content = content.replace(/\s&& github\.repository == 'tylermercer\/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init/, "");
       }
       writeFileSync(path, content);
     } catch (e) {
