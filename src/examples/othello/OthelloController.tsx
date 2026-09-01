@@ -32,20 +32,56 @@ export const OthelloController: React.FC<{ ctx: ControllerContext }> = ({ ctx })
 
   const role: "black" | "white" | "spectator" = useMemo(() => {
     if (!gameState) return "spectator";
-    if (gameState.blackPlayer && (gameState.blackPlayer.name === cleanCurrentName || gameState.blackPlayer.name === currentName)) {
+    const matchesName = (name?: string | null) => {
+      if (!name) return false;
+      const trimmed = name.trim();
+      return (
+        name === cleanCurrentName ||
+        name === currentName ||
+        trimmed === cleanCurrentName ||
+        trimmed === currentName.trim()
+      );
+    };
+
+    if (gameState.blackPlayer && matchesName(gameState.blackPlayer.name)) {
       return "black";
     }
-    if (gameState.whitePlayer && (gameState.whitePlayer.name === cleanCurrentName || gameState.whitePlayer.name === currentName)) {
+    if (gameState.whitePlayer && matchesName(gameState.whitePlayer.name)) {
       return "white";
     }
     return "spectator";
   }, [gameState, cleanCurrentName, currentName]);
 
-  const isTurnByName = gameState?.turnPlayerName
-    ? (gameState.turnPlayerName === cleanCurrentName || gameState.turnPlayerName === currentName)
-    : false;
+  const isTurnByName = useMemo(() => {
+    if (!gameState?.turnPlayerName) return false;
+    const name = gameState.turnPlayerName;
+    const trimmed = name.trim();
+    return (
+      name === cleanCurrentName ||
+      name === currentName ||
+      trimmed === cleanCurrentName ||
+      trimmed === currentName.trim()
+    );
+  }, [gameState?.turnPlayerName, cleanCurrentName, currentName]);
 
-  const isMyTurn = gameState?.phase === "playing" && (isTurnByName || (role !== "spectator" && gameState.turnPlayerId !== null));
+  const isTurnByRole = useMemo(() => {
+    if (!gameState || role === "spectator") return false;
+    if (role === "black") {
+      return (
+        (gameState.blackPlayer && gameState.turnPlayerId === gameState.blackPlayer.id) ||
+        (gameState.blackPlayer && gameState.turnPlayerName === gameState.blackPlayer.name)
+      );
+    }
+    if (role === "white") {
+      return (
+        (gameState.whitePlayer && gameState.turnPlayerId === gameState.whitePlayer.id) ||
+        (gameState.whitePlayer && gameState.turnPlayerName === gameState.whitePlayer.name)
+      );
+    }
+    return false;
+  }, [gameState, role]);
+
+  const isMyTurn = gameState?.phase === "playing" && (isTurnByName || isTurnByRole);
 
   const legalMoveSet = useMemo(() => {
     if (!gameState || !isMyTurn || role === "spectator") return new Set<string>();
