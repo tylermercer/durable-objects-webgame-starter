@@ -280,7 +280,7 @@ export class GameSession extends DurableObject {
         for (const [ws, session] of Array.from(self.sessions.entries())) {
           if (session.id === id) {
             try {
-              (session.callbacks as RpcStub<ControllerCallbacks>).onKicked?.();
+              (session.callbacks as RpcStub<ControllerCallbacks>).onKicked();
             } catch {
               // Ignore RPC failure
             }

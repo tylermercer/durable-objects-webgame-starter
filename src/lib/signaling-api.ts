@@ -17,7 +17,7 @@ export interface ConsoleCallbacks extends RpcTarget {
 export interface ControllerCallbacks extends RpcTarget {
   onConsoleReady(): void;
   onConsoleGone(): void;
-  onKicked?(): void;
+  onKicked(): void;
   onSignal(signal: RTCSignal): void;
   onFirstPlayerChanged(id: string | null): void;
   onRelayInput(payload: unknown): void;
