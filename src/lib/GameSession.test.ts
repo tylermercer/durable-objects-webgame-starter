@@ -549,4 +549,199 @@ describe("GameSession Durable Object", () => {
     const controllerApiOffline = (session as any).makeControllerApi(controllerWsOffline);
     await expect(controllerApiOffline.join(controllerCallbacks, joinRes.rejoinToken)).rejects.toThrow("You have been removed from this session.");
   });
+
+  describe("Room lifetime and cleanup", () => {
+    const makeConsoleCb = () => ({
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    });
+
+    const makeControllerCb = () => ({
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onKicked: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    });
+
+    it("wipes storage and resets in-memory state when room remains empty past 24 hours", async () => {
+      const storageMap = new Map<string, any>();
+      const ctx = {
+        storage: {
+          get: vi.fn(async (key: string) => storageMap.get(key)),
+          put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+          delete: vi.fn(async (key: string) => storageMap.delete(key)),
+          deleteAll: vi.fn(async () => storageMap.clear()),
+          setAlarm: vi.fn(async () => {})
+        }
+      };
+      const session = new GameSession(ctx as any, {} as any);
+
+      const consoleWs = createMockWebSocket();
+      const consoleApi = (session as any).makeConsoleApi(consoleWs);
+      await consoleApi.join(makeConsoleCb(), undefined, undefined, 4);
+
+      const controllerWs = createMockWebSocket();
+      const controllerApi = (session as any).makeControllerApi(controllerWs);
+      await controllerApi.join(makeControllerCb());
+
+      // Disconnect controller then console -> sessions empty
+      await (session as any).handleClose(controllerWs);
+      await (session as any).handleClose(consoleWs);
+
+      expect(session.sessions.size).toBe(0);
+      expect(session.roomEmptySince).not.toBeNull();
+      expect(ctx.storage.put).toHaveBeenCalledWith("roomEmptySince", session.roomEmptySince);
+
+      // Fast forward past 24 hours (24 * 60 * 60 * 1000 + 1000 ms)
+      vi.useFakeTimers();
+      const futureTime = session.roomEmptySince! + 24 * 60 * 60 * 1000 + 1000;
+      vi.setSystemTime(futureTime);
+
+      await session.alarm();
+
+      expect(ctx.storage.deleteAll).toHaveBeenCalled();
+      expect(session.roomEmptySince).toBeNull();
+      expect(session.rejoinTokens.size).toBe(0);
+      expect(session.kickedTokens.size).toBe(0);
+      expect(session.consoleToken).toBeNull();
+      expect(session.maxPlayers).toBeNull();
+      expect((session as any).nextPlayerNumber).toBe(1);
+
+      vi.useRealTimers();
+    });
+
+    it("clears roomEmptySince on join and prevents room cleanup if reconnected before threshold", async () => {
+      const storageMap = new Map<string, any>();
+      const ctx = {
+        storage: {
+          get: vi.fn(async (key: string) => storageMap.get(key)),
+          put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+          delete: vi.fn(async (key: string) => storageMap.delete(key)),
+          deleteAll: vi.fn(async () => storageMap.clear()),
+          setAlarm: vi.fn(async () => {})
+        }
+      };
+      const session = new GameSession(ctx as any, {} as any);
+
+      const consoleWs = createMockWebSocket();
+      const consoleApi = (session as any).makeConsoleApi(consoleWs);
+      await consoleApi.join(makeConsoleCb());
+
+      // Disconnect console -> room empty
+      await (session as any).handleClose(consoleWs);
+      expect(session.roomEmptySince).not.toBeNull();
+
+      // Controller joins before 24h deadline
+      const controllerWs = createMockWebSocket();
+      const controllerApi = (session as any).makeControllerApi(controllerWs);
+      await controllerApi.join(makeControllerCb());
+
+      expect(session.roomEmptySince).toBeNull();
+      expect(ctx.storage.delete).toHaveBeenCalledWith("roomEmptySince");
+
+      // Advance time to 24h past original empty time and trigger alarm
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+
+      await session.alarm();
+
+      // Storage should NOT have been deleted because room is no longer empty
+      expect(ctx.storage.deleteAll).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it("never wipes storage for an active session continuously connected past 24 hours", async () => {
+      const storageMap = new Map<string, any>();
+      const ctx = {
+        storage: {
+          get: vi.fn(async (key: string) => storageMap.get(key)),
+          put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+          delete: vi.fn(async (key: string) => storageMap.delete(key)),
+          deleteAll: vi.fn(async () => storageMap.clear()),
+          setAlarm: vi.fn(async () => {})
+        }
+      };
+      const session = new GameSession(ctx as any, {} as any);
+
+      const consoleWs = createMockWebSocket();
+      const consoleApi = (session as any).makeConsoleApi(consoleWs);
+      await consoleApi.join(makeConsoleCb());
+
+      const controllerWs = createMockWebSocket();
+      const controllerApi = (session as any).makeControllerApi(controllerWs);
+      await controllerApi.join(makeControllerCb());
+
+      expect(session.roomEmptySince).toBeNull();
+
+      // Advance time past 24 hours without disconnecting anyone
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 30 * 60 * 60 * 1000);
+
+      await session.alarm();
+
+      expect(ctx.storage.deleteAll).not.toHaveBeenCalled();
+      expect(session.sessions.size).toBe(2);
+
+      vi.useRealTimers();
+    });
+
+    it("allows a fresh join after storage cleanup that behaves like a brand-new room", async () => {
+      const storageMap = new Map<string, any>();
+      const ctx = {
+        storage: {
+          get: vi.fn(async (key: string) => storageMap.get(key)),
+          put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+          delete: vi.fn(async (key: string) => storageMap.delete(key)),
+          deleteAll: vi.fn(async () => storageMap.clear()),
+          setAlarm: vi.fn(async () => {})
+        }
+      };
+      const session = new GameSession(ctx as any, {} as any);
+
+      const consoleWs1 = createMockWebSocket();
+      const consoleApi1 = (session as any).makeConsoleApi(consoleWs1);
+      const res1 = await consoleApi1.join(makeConsoleCb(), undefined, undefined, 2);
+      const oldConsoleToken = res1.consoleToken;
+
+      await (session as any).handleClose(consoleWs1);
+
+      // Trigger cleanup
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+      await session.alarm();
+      vi.useRealTimers();
+
+      expect(ctx.storage.deleteAll).toHaveBeenCalled();
+
+      // Fresh console join
+      const consoleWs2 = createMockWebSocket();
+      const consoleApi2 = (session as any).makeConsoleApi(consoleWs2);
+      const res2 = await consoleApi2.join(makeConsoleCb());
+
+      expect(res2.consoleToken).not.toBe(oldConsoleToken);
+      expect(session.maxPlayers).toBeNull();
+
+      // Controller join gets Player 1
+      const controllerWs = createMockWebSocket();
+      const controllerApi = (session as any).makeControllerApi(controllerWs);
+      const ctrlRes = await controllerApi.join(makeControllerCb());
+
+      expect(ctrlRes.name).toBe("Player 1");
+    });
+  });
 });

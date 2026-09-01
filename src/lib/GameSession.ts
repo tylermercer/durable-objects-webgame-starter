@@ -23,6 +23,7 @@ type ControllerRecord = {
 };
 
 const DISCONNECT_GRACE_PERIOD_MS = 45000;
+const ROOM_ABANDONED_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const MAX_CONTROL_QUEUE_SIZE = 25;
 
 export class GameSession extends DurableObject {
@@ -32,6 +33,7 @@ export class GameSession extends DurableObject {
   consoleToken: string | null = null;
   gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
   maxPlayers: number | null = null;
+  roomEmptySince: number | null = null;
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
   private hydrationPromise: Promise<void> | null = null;
@@ -56,6 +58,20 @@ export class GameSession extends DurableObject {
       if (grace) this.gracePeriodMs = grace;
       const maxP = await this.ctx.storage.get<number>("maxPlayers");
       if (maxP !== undefined) this.maxPlayers = maxP;
+      const emptySince = await this.ctx.storage.get<number>("roomEmptySince");
+      if (emptySince !== undefined) this.roomEmptySince = emptySince;
+    }
+  }
+
+  private async persistRoomEmptySince() {
+    if (this.roomEmptySince !== null) {
+      if (this.ctx?.storage?.put) {
+        await this.ctx.storage.put("roomEmptySince", this.roomEmptySince);
+      }
+    } else {
+      if (this.ctx?.storage?.delete) {
+        await this.ctx.storage.delete("roomEmptySince");
+      }
     }
   }
 
@@ -162,6 +178,29 @@ export class GameSession extends DurableObject {
 
     this.checkAndBroadcastFirstPlayer();
 
+    if (this.roomEmptySince !== null) {
+      const roomDeadline = this.roomEmptySince + ROOM_ABANDONED_EXPIRY_MS;
+      if (now >= roomDeadline) {
+        logger.info("Room has been empty past the abandonment threshold — wiping storage.");
+        if (this.ctx?.storage?.deleteAll) {
+          await this.ctx.storage.deleteAll();
+        }
+        this.sessions = new Map();
+        this.rejoinTokens = new Map();
+        this.kickedTokens = new Set();
+        this.consoleToken = null;
+        this.gracePeriodMs = DISCONNECT_GRACE_PERIOD_MS;
+        this.maxPlayers = null;
+        this.nextPlayerNumber = 1;
+        this.currentFirstPlayerId = null;
+        this.roomEmptySince = null;
+        this.controlQueues = new Map();
+        return;
+      } else if (earliestNextDisconnect === null || roomDeadline < earliestNextDisconnect) {
+        earliestNextDisconnect = roomDeadline;
+      }
+    }
+
     if (earliestNextDisconnect !== null && this.ctx?.storage?.setAlarm) {
       await this.ctx.storage.setAlarm(earliestNextDisconnect);
     }
@@ -224,6 +263,11 @@ export class GameSession extends DurableObject {
           name: "console",
           callbacks: (callbacks as unknown as RpcStub<ConsoleCallbacks>).dup()
         });
+
+        if (self.roomEmptySince !== null) {
+          self.roomEmptySince = null;
+          await self.persistRoomEmptySince();
+        }
 
         logger.info(`Console joined signaling session. Connected controllers count: ${controllers.length}`);
 
@@ -407,6 +451,11 @@ export class GameSession extends DurableObject {
           rejoinToken: token
         });
 
+        if (self.roomEmptySince !== null) {
+          self.roomEmptySince = null;
+          await self.persistRoomEmptySince();
+        }
+
         ws.addEventListener("close", () => self.handleClose(ws));
         ws.addEventListener("error", () => self.handleClose(ws));
 
@@ -531,6 +580,23 @@ export class GameSession extends DurableObject {
             // Ignore error
           }
         }
+      }
+    }
+
+    if (this.sessions.size === 0) {
+      this.roomEmptySince = Date.now();
+      await this.persistRoomEmptySince();
+      let earliestNextAlarm = this.roomEmptySince + ROOM_ABANDONED_EXPIRY_MS;
+      for (const record of this.rejoinTokens.values()) {
+        if (record.disconnectedAt !== null) {
+          const disconnectTime = record.disconnectedAt + this.gracePeriodMs;
+          if (disconnectTime < earliestNextAlarm) {
+            earliestNextAlarm = disconnectTime;
+          }
+        }
+      }
+      if (this.ctx?.storage?.setAlarm) {
+        await this.ctx.storage.setAlarm(earliestNextAlarm);
       }
     }
   }
