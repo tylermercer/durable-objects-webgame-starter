@@ -404,10 +404,20 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
       const classList = new Set<string>();
       const children: any[] = [];
       const listeners: Record<string, Function[]> = {};
+      let innerHTMLVal = "";
       return {
         tag,
         style: {},
         children,
+        get innerHTML() {
+          return innerHTMLVal;
+        },
+        set innerHTML(val: string) {
+          innerHTMLVal = val;
+          if (val === "") {
+            children.length = 0;
+          }
+        },
         classList: {
           add: (c: string) => classList.add(c),
           remove: (c: string) => classList.delete(c),

@@ -116,7 +116,7 @@ export class ConsoleApp {
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
-  pendingKickTimers = new Map<string, number>();
+  pendingKickTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -651,7 +651,7 @@ export class ConsoleApp {
         } else {
           kickBtn.textContent = "Confirm?";
           kickBtn.classList.add("is-confirming");
-          const timer = window.setTimeout(() => {
+          const timer = setTimeout(() => {
             this.pendingKickTimers.delete(controller.id);
             this.updateControllerUI();
           }, 5000);
