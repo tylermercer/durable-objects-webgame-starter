@@ -175,4 +175,28 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
 
     expect(requestWakeSpy).toHaveBeenCalled();
   });
+
+  it("handles handleKicked by clearing token, closing connections, and switching UI to name screen", async () => {
+    const app = new ControllerApp();
+    vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    app.id = "p1-id";
+    app.name = "Alice";
+    app.hasSubmittedName = true;
+    app.chosenName = "Alice";
+    app.orchestrator = { close: vi.fn() } as any;
+    app.activeGame = { destroy: vi.fn() } as any;
+
+    app.handleKicked();
+
+    expect(app.id).toBe("");
+    expect(app.name).toBe("");
+    expect(app.hasSubmittedName).toBe(false);
+    expect(app.orchestrator).toBeNull();
+    expect(app.activeGame).toBeNull();
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(false);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(true);
+  });
 });

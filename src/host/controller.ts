@@ -4,7 +4,7 @@ import { ConnectionOrchestrator } from "@transport/connectionOrchestrator";
 import type { GameTransport, IdentityMessage } from "@transport/transport";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
-import { getOrCreateRejoinToken, persistRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 import { isController } from "../utils/isController";
 import { createLogger } from "@utils/logger";
 
@@ -26,6 +26,10 @@ class ControllerCallbacksHandler extends RpcTarget implements ControllerCallback
 
   onConsoleGone() {
     this.app.handleConsoleGone();
+  }
+
+  onKicked() {
+    this.app.handleKicked();
   }
 
   onSignal(signal: RTCSignal) {
@@ -349,6 +353,42 @@ export class ControllerApp {
     this.activeGame = null;
     this.pc = null;
     this.updateStatus("Console disconnected. Waiting for console...");
+  }
+
+  handleKicked() {
+    logger.warn("Controller was kicked from room. Resetting state and memory.");
+    clearRejoinToken(this.code);
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    this.orchestrator?.close();
+    this.orchestrator = null;
+    this.activeGame?.destroy?.();
+    this.activeGame = null;
+    this.pc = null;
+
+    try {
+      (this.api as any)?.[Symbol.dispose]?.();
+    } catch {
+      // Ignore RPC disposal error
+    }
+    this.api = null;
+
+    this.id = "";
+    this.name = "";
+    this.color = "";
+    this.isFirstPlayer = false;
+    this.hasSubmittedName = false;
+    this.chosenName = "";
+
+    const nameScreen = document.getElementById("name-screen");
+    const controllerMain = document.getElementById("controller-main");
+    if (nameScreen) nameScreen.classList.remove("u-hidden");
+    if (controllerMain) controllerMain.classList.add("u-hidden");
+    this.updateFullscreenButtonVisibility();
   }
 
   handleSignal(signal: RTCSignal) {

@@ -432,4 +432,68 @@ describe("GameSession Durable Object", () => {
     const p1_reconnect = await api1_reconnect.join(cb1, p1.rejoinToken);
     expect(p1_reconnect.id).toBe(p1.id);
   });
+
+  it("handles kickController: notifies controller, purges rejoinToken, closes WS, and notifies console", async () => {
+    const ctx = {
+      storage: {
+        get: vi.fn(async () => null),
+        put: vi.fn(async () => {}),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+    const session = new GameSession(ctx as any, {} as any);
+
+    const controllerCallbacks = {
+      dup: function() { return this; },
+      onConsoleReady: vi.fn(),
+      onConsoleGone: vi.fn(),
+      onKicked: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleCallbacks = {
+      dup: function() { return this; },
+      onControllerJoined: vi.fn(),
+      onControllerLeft: vi.fn(),
+      onControllerDisconnected: vi.fn(),
+      onControllerRejoined: vi.fn(),
+      onSignal: vi.fn(),
+      onFirstPlayerChanged: vi.fn(),
+      onControllerRenamed: vi.fn(),
+      onRelayInput: vi.fn(),
+      onRelayControl: vi.fn(),
+      [Symbol.dispose]: vi.fn()
+    };
+
+    const consoleWs = createMockWebSocket();
+    const consoleApi = (session as any).makeConsoleApi(consoleWs);
+    await consoleApi.join(consoleCallbacks);
+
+    const controllerWs = createMockWebSocket();
+    const controllerApi = (session as any).makeControllerApi(controllerWs);
+    const joinRes = await controllerApi.join(controllerCallbacks);
+
+    expect(joinRes.id).toBeDefined();
+    expect(session.rejoinTokens.has(joinRes.rejoinToken)).toBe(true);
+
+    // Console kicks controller
+    await consoleApi.kickController(joinRes.id);
+
+    expect(controllerCallbacks.onKicked).toHaveBeenCalled();
+    expect(controllerWs.close).toHaveBeenCalledWith(4001, "kicked");
+    expect(session.rejoinTokens.has(joinRes.rejoinToken)).toBe(false);
+    expect(consoleCallbacks.onControllerLeft).toHaveBeenCalledWith(joinRes.id);
+
+    // If controller attempts to rejoin with old token, it should be treated as a brand new controller with a new ID
+    const controllerWsRejoin = createMockWebSocket();
+    const controllerApiRejoin = (session as any).makeControllerApi(controllerWsRejoin);
+    const rejoinRes = await controllerApiRejoin.join(controllerCallbacks, joinRes.rejoinToken);
+
+    expect(rejoinRes.id).not.toBe(joinRes.id);
+    expect(rejoinRes.name).toBe("Player 2");
+  });
 });

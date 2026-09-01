@@ -479,6 +479,15 @@ export class ConsoleApp {
     }
   }
 
+  kickController(id: string) {
+    const controller = this.controllers.get(id);
+    if (controller) {
+      logger.info(`Kicking controller: ${controller.name} (${id})`);
+      this.api?.kickController(id);
+      this.removeController(id);
+    }
+  }
+
   handleControllerRejoined(id: string) {
     const controller = this.controllers.get(id);
     if (controller) {
@@ -614,7 +623,17 @@ export class ConsoleApp {
       badge.className = `status-badge status-${controller.status}`;
       badge.textContent = controller.status === "live-relay" ? "relay" : controller.status;
 
+      const kickBtn = document.createElement("button");
+      kickBtn.className = "btn-kick-controller";
+      kickBtn.type = "button";
+      kickBtn.textContent = "Kick";
+      kickBtn.title = `Kick ${controller.name}`;
+      kickBtn.addEventListener("click", () => {
+        this.kickController(controller.id);
+      });
+
       row.appendChild(badge);
+      row.appendChild(kickBtn);
       listEl.appendChild(row);
     }
   }

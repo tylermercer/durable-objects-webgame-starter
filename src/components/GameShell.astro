@@ -487,4 +487,21 @@ const { game } = Astro.props;
     background: #ff4136;
     color: white;
   }
+
+  :global(.btn-kick-controller) {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    margin-left: auto;
+    border-radius: 4px;
+    background: #ff4136;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+  }
+
+  :global(.btn-kick-controller:hover) {
+    background: #e02b20;
+  }
 </style>

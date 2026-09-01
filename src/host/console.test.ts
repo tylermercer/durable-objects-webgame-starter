@@ -382,4 +382,18 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
     expect(oldOrchestrator.close).toHaveBeenCalled();
     expect(controller.orchestrator).not.toBe(oldOrchestrator);
   });
+
+  it("kickController calls api.kickController and removes controller locally", () => {
+    const app = new ConsoleApp();
+    app.api = {
+      kickController: vi.fn(),
+    } as any;
+    app.addController("ctrl-1", "Alice");
+    expect(app.controllers.has("ctrl-1")).toBe(true);
+
+    app.kickController("ctrl-1");
+
+    expect(app.api!.kickController).toHaveBeenCalledWith("ctrl-1");
+    expect(app.controllers.has("ctrl-1")).toBe(false);
+  });
 });

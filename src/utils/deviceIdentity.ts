@@ -36,6 +36,22 @@ export function persistRejoinToken(token: string, roomCode?: string): void {
   sessionStore[key] = token;
 }
 
+export function clearRejoinToken(roomCode?: string): void {
+  const key = getStorageKey(roomCode);
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Private browsing / storage disabled
+  }
+
+  const sessionStore = (globalThis as any).__sessionRejoinTokens;
+  if (sessionStore) {
+    delete sessionStore[key];
+  }
+}
+
 const NAME_KEY = "playerName";
 
 export function getSavedName(): string {

@@ -258,6 +258,53 @@ export class GameSession extends DurableObject {
         };
       }
 
+      async kickController(id: string): Promise<void> {
+        logger.info(`Console requested kick for controller ID: ${id}`);
+        // Find rejoin token corresponding to controller ID
+        let foundToken: string | null = null;
+        for (const [token, record] of self.rejoinTokens.entries()) {
+          if (record.id === id) {
+            foundToken = token;
+            break;
+          }
+        }
+
+        if (foundToken) {
+          self.rejoinTokens.delete(foundToken);
+          await self.persistRejoinTokens();
+        }
+
+        self.controlQueues.delete(id);
+
+        // Find and close active session if connected
+        for (const [ws, session] of Array.from(self.sessions.entries())) {
+          if (session.id === id) {
+            try {
+              (session.callbacks as RpcStub<ControllerCallbacks>).onKicked?.();
+            } catch {
+              // Ignore RPC failure
+            }
+            try {
+              ws.close(4001, "kicked");
+            } catch {
+              // Ignore if already closed
+            }
+            self.sessions.delete(ws);
+          }
+        }
+
+        // Notify console that controller has left
+        self.forConsole(cb => {
+          try {
+            (cb as RpcStub<ConsoleCallbacks>).onControllerLeft(id);
+          } catch {
+            // Ignore RPC failure
+          }
+        });
+
+        self.checkAndBroadcastFirstPlayer();
+      }
+
       sendSignal(to: string, signal: RTCSignal) {
         self.sendToId(to, cb => (cb as RpcStub<ControllerCallbacks>).onSignal(signal));
       }
