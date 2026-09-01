@@ -396,4 +396,80 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
     expect(app.api!.kickController).toHaveBeenCalledWith("ctrl-1");
     expect(app.controllers.has("ctrl-1")).toBe(false);
   });
+
+  it("updateControllerUI implements 2-step kick confirmation with 5-second timer", () => {
+    vi.useFakeTimers();
+
+    function createMockDomElement(tag: string) {
+      const classList = new Set<string>();
+      const children: any[] = [];
+      const listeners: Record<string, Function[]> = {};
+      return {
+        tag,
+        style: {},
+        children,
+        classList: {
+          add: (c: string) => classList.add(c),
+          remove: (c: string) => classList.delete(c),
+          contains: (c: string) => classList.has(c),
+        },
+        addEventListener: (evt: string, fn: Function) => {
+          listeners[evt] = listeners[evt] || [];
+          listeners[evt].push(fn);
+        },
+        click: () => {
+          for (const fn of listeners["click"] || []) fn();
+        },
+        appendChild: vi.fn((child: any) => {
+          children.push(child);
+          return child;
+        }),
+        textContent: "",
+        title: "",
+        type: "button",
+      };
+    }
+
+    const mockList = createMockDomElement("div");
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => id === "controller-list" ? mockList : null,
+      createElement: (tag: string) => createMockDomElement(tag)
+    });
+
+    const app = new ConsoleApp();
+    app.api = { kickController: vi.fn() } as any;
+
+    app.addController("ctrl-1", "Alice");
+    app.updateControllerUI();
+
+    // row children: [nameEl, badge, kickBtn]
+    const row1 = mockList.children[0];
+    const kickBtn1 = row1.children[2];
+    expect(kickBtn1.textContent).toBe("Kick");
+    expect(kickBtn1.classList.contains("is-confirming")).toBe(false);
+
+    // First click -> turns into "Confirm?"
+    kickBtn1.click();
+    expect(kickBtn1.textContent).toBe("Confirm?");
+    expect(kickBtn1.classList.contains("is-confirming")).toBe(true);
+    expect(app.api!.kickController).not.toHaveBeenCalled();
+
+    // Fast-forward 6 seconds -> times out and resets back to "Kick"
+    vi.advanceTimersByTime(6000);
+    const row2 = mockList.children[0];
+    const kickBtn2 = row2.children[2];
+    expect(kickBtn2.textContent).toBe("Kick");
+    expect(kickBtn2.classList.contains("is-confirming")).toBe(false);
+
+    // First click again -> "Confirm?"
+    kickBtn2.click();
+    expect(kickBtn2.textContent).toBe("Confirm?");
+
+    // Second click within 5 seconds -> triggers kick
+    kickBtn2.click();
+    expect(app.api!.kickController).toHaveBeenCalledWith("ctrl-1");
+
+    vi.useRealTimers();
+  });
 });

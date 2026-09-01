@@ -116,6 +116,7 @@ export class ConsoleApp {
   modal: HTMLDialogElement | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
+  pendingKickTimers = new Map<string, number>();
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -514,6 +515,11 @@ export class ConsoleApp {
       controller.orchestrator = null;
       controller.pc = null;
       this.controllers.delete(id);
+      const timer = this.pendingKickTimers.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        this.pendingKickTimers.delete(id);
+      }
       this.updateControllerUI();
     }
   }
@@ -626,10 +632,31 @@ export class ConsoleApp {
       const kickBtn = document.createElement("button");
       kickBtn.className = "btn-kick-controller";
       kickBtn.type = "button";
-      kickBtn.textContent = "Kick";
+
+      const isPending = this.pendingKickTimers.has(controller.id);
+      if (isPending) {
+        kickBtn.textContent = "Confirm?";
+        kickBtn.classList.add("is-confirming");
+      } else {
+        kickBtn.textContent = "Kick";
+      }
+
       kickBtn.title = `Kick ${controller.name}`;
       kickBtn.addEventListener("click", () => {
-        this.kickController(controller.id);
+        if (this.pendingKickTimers.has(controller.id)) {
+          const timer = this.pendingKickTimers.get(controller.id);
+          if (timer) clearTimeout(timer);
+          this.pendingKickTimers.delete(controller.id);
+          this.kickController(controller.id);
+        } else {
+          kickBtn.textContent = "Confirm?";
+          kickBtn.classList.add("is-confirming");
+          const timer = window.setTimeout(() => {
+            this.pendingKickTimers.delete(controller.id);
+            this.updateControllerUI();
+          }, 5000);
+          this.pendingKickTimers.set(controller.id, timer);
+        }
       });
 
       row.appendChild(badge);
