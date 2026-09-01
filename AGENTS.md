@@ -59,6 +59,22 @@ The project uses two WebRTC data channels between the console and each controlle
 
 When extending or building new gameplay features, extend the `control` channel's message protocol rather than modifying the signaling layer.
 
+## Durable Object Migrations (wrangler.jsonc)
+
+`wrangler.jsonc`'s `migrations` array currently has a single entry (`"tag": "v1"`, `"new_sqlite_classes": ["GameSession"]`) that registers `GameSession` as a SQLite-backed Durable Object class. Cloudflare tracks migration state per-tag across deployments, so this array is **append-only**: never edit or remove an existing entry, only add new ones with a new, higher `tag` (e.g. `"v2"`).
+
+A new migration entry is required only when the **set of Durable Object classes, or the storage backend of an existing one, changes**:
+- Adding a brand-new DO class (needs its own `new_sqlite_classes` or `new_classes` entry, plus a matching binding in the `durable_objects.bindings` array).
+- Renaming an existing DO class (`renamed_classes`).
+- Deleting a DO class that's no longer used (`deleted_classes`).
+- Moving an existing class between storage backends (e.g. legacy KV-backed → SQLite-backed).
+
+A new migration entry is **not** required for changes to what's stored *inside* an existing class via `ctx.storage` — e.g. adding, removing, or renaming a key like `rejoinTokens`, `kickedTokens`, or `roomEmptySince` on `GameSession`. `ctx.storage` is an opaque key-value store as far as Cloudflare's migration system is concerned; it has no awareness of your internal data shape. When adding a new persisted field to `GameSession`, all that's needed is:
+- A load in `doHydrate()` with a sensible default for rooms that predate the field (mirror the existing `if (grace) this.gracePeriodMs = grace;` pattern — treat an absent key as "not set yet," not as an error).
+- A `persist*()` write wherever the field changes.
+
+If a change you're making only touches `GameSession`'s internal fields/logic, don't touch `wrangler.jsonc`. If it changes which DO classes exist or how one is backed, add a new migration entry — never modify `v1`.
+
 ## Dev Harness & Playwright Verification
 
 The dev-only route `/dev/harness` (`src/pages/dev/harness.astro`) embeds one console iframe (`#console-frame`) and N controller iframes (`.ctrl-frame`) on a single page, connected to the real Durable Object signaling backend and WebRTC/relay transport.
