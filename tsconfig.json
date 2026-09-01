@@ -3,6 +3,7 @@
   "include": [".astro/types.d.ts", "src/**/*"],
   "exclude": ["dist"],
   "compilerOptions": {
+    "jsx": "react-jsx",
     "types": ["@cloudflare/workers-types", "astro/client"],
     "baseUrl": ".",
     "paths": {
