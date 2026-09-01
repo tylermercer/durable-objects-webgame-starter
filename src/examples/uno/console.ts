@@ -4,6 +4,7 @@ import { createRng } from "@utils/rng";
 import { Deck } from "@utils/deck";
 import { TurnOrder } from "@utils/turnOrder";
 import { RoundFlow } from "@utils/roundFlow";
+import { diffDepartedPeers } from "@utils/peerDeparture";
 import { createStore } from "@react/reactStore";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
@@ -280,14 +281,26 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncRemovedPlayers() {
-    for (const id of Array.from(knownPlayerIds)) {
-      if (!ctx.peers.has(id)) {
-        knownPlayerIds.delete(id);
-        turnOrder.removePlayer(id);
-        hands.delete(id);
+    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+    for (const id of departed) {
+      turnOrder.removePlayer(id);
+      hands.delete(id);
+    }
+    if (departed.length > 0 && roundFlow.is("playing")) {
+      const remaining = turnOrder.all();
+      if (remaining.length === 1) {
+        const soleId = remaining[0];
+        const peer = ctx.peers.get(soleId);
+        winner = { id: soleId, name: peer ? peer.name : "Player" };
+        roundFlow.transition("roundOver");
+        broadcastState();
+        persistState();
+      } else if (remaining.length === 0) {
+        roundFlow.transition("waiting");
+        broadcastState();
+        persistState();
       }
     }
-    for (const id of ctx.peers.keys()) knownPlayerIds.add(id);
   }
 
   function syncPeersAndListeners() {

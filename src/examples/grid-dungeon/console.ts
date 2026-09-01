@@ -4,6 +4,7 @@ import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
+import { diffDepartedPeers } from "../../utils/peerDeparture";
 import {
   createRoomGrid,
   createInitialEntities,
@@ -43,6 +44,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let registry = createInitialEntities();
   const joystickInputs = new Map<string, JoystickState>();
   const attachedListeners = new Set<string>();
+  const knownPlayerIds = new Set<string>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
   const camera = new Camera({
@@ -98,11 +100,20 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeers() {
+    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+    for (const id of departed) {
+      registry.remove(id);
+      joystickInputs.delete(id);
+      attachedListeners.delete(id);
+    }
+
     const activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus; state?: string }> = [];
     for (const [id, peer] of ctx.peers) {
       const status = (peer.status ?? peer.state) as PlayerConnectionStatus | string;
       if (status === "live" || status === "reconnecting" || status === "connected") {
         activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status as PlayerConnectionStatus, state: peer.state });
+      } else if (status === "grace-period") {
+        joystickInputs.delete(id);
       }
       if (peer.pc && !attachedListeners.has(id)) {
         attachedListeners.add(id);

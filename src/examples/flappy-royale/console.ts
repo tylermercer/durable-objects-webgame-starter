@@ -315,6 +315,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
   }
 
+  // Note on player departure handling: Flappy Royale does not need explicit code to remove
+  // or eliminate departed players on disconnect/kick. Gravity and collision physics continue
+  // stepping every frame; a departed player simply stops sending flap events, causing their
+  // bird to naturally hit a pipe or ground and eliminate itself within seconds.
   function syncPeers() {
     for (const [id, peer] of ctx.peers) {
       if (peer.pc) {

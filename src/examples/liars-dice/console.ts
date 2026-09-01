@@ -1,5 +1,6 @@
 import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import { createRng } from "../../utils/rng";
+import { diffDepartedPeers } from "../../utils/peerDeparture";
 import { createStore } from "@react/reactStore";
 import { isValidBid, resolveChallenge } from "./rules";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,6 +32,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let winner: { id: string; name: string } | null = null;
 
   const attachedListeners = new Set<string>();
+  const knownPlayerIds = new Set<string>();
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -322,6 +324,22 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeersAndListeners() {
+    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+    if (departed.length > 0 && phase === "bidding") {
+      const currentTurnPlayerId = turnOrder[turnIndex % Math.max(1, turnOrder.length)];
+      const wasCurrentTurn = departed.includes(currentTurnPlayerId);
+      turnOrder = turnOrder.filter(id => !departed.includes(id));
+      if (turnOrder.length < 2) {
+        phase = "waiting";
+        broadcastState();
+        persistState();
+      } else if (wasCurrentTurn) {
+        turnIndex = turnIndex % turnOrder.length;
+        broadcastState();
+        persistState();
+      }
+    }
+
     for (const id of attachedListeners) {
       const peer = ctx.peers.get(id);
       if (!peer || !peer.pc || (peer.status ? (peer.status !== "live" && peer.status !== "live-relay") : peer.state !== "connected")) {

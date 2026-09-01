@@ -2,6 +2,7 @@ import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contr
 import { TileGrid } from "@utils/tileGrid";
 import { TurnOrder } from "@utils/turnOrder";
 import { RoundFlow } from "@utils/roundFlow";
+import { diffDepartedPeers } from "@utils/peerDeparture";
 import { createStore } from "@react/reactStore";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
@@ -160,6 +161,28 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     const whitePeer = whiteId ? ctx.peers.get(whiteId) : null;
     const counts = countPieces(board);
 
+    const players = Array.from(ctx.peers.values()).map(peer => {
+      let pieceColor: "black" | "white" | null = null;
+      let count = 0;
+      if (peer.id === blackId) {
+        pieceColor = "black";
+        count = counts.black;
+      } else if (peer.id === whiteId) {
+        pieceColor = "white";
+        count = counts.white;
+      }
+
+      return {
+        id: peer.id,
+        name: peer.name,
+        color: peer.color,
+        pieceColor,
+        isTurn: peer.id === turnPlayerId,
+        connected: isConnected(peer),
+        count,
+      };
+    });
+
     return {
       phase: roundFlow.current(),
       board: board.toJSON(),
@@ -171,6 +194,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       whiteCount: counts.white,
       winner,
       firstPlayerId: getFirstPlayerId(),
+      players,
     };
   }
 
@@ -231,15 +255,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncRemovedPlayers() {
-    for (const id of Array.from(knownPlayerIds)) {
-      if (!ctx.peers.has(id)) {
-        knownPlayerIds.delete(id);
-        turnOrder.removePlayer(id);
-        if (id === blackId) blackId = null;
-        if (id === whiteId) whiteId = null;
-      }
+    const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
+    for (const id of departed) {
+      turnOrder.removePlayer(id);
+      if (id === blackId) blackId = null;
+      if (id === whiteId) whiteId = null;
     }
-    for (const id of ctx.peers.keys()) knownPlayerIds.add(id);
 
     if (roundFlow.is("playing") && (!blackId || !whiteId)) {
       finishGame();

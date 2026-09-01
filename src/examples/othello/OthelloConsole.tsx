@@ -14,6 +14,11 @@ export const OthelloConsole: React.FC<Props> = ({ store, ctx, onStartGame }) => 
 
   const blackPlayer = state.blackPlayer;
   const whitePlayer = state.whitePlayer;
+  const blackInfo = state.players.find(p => p.id === blackPlayer?.id);
+  const whiteInfo = state.players.find(p => p.id === whitePlayer?.id);
+  const isBlackConnected = blackInfo ? blackInfo.connected : true;
+  const isWhiteConnected = whiteInfo ? whiteInfo.connected : true;
+
   const isWaiting = state.phase === "waiting";
   const isPlaying = state.phase === "playing";
   const isOver = state.phase === "roundOver";
@@ -141,6 +146,7 @@ export const OthelloConsole: React.FC<Props> = ({ store, ctx, onStartGame }) => 
               display: "flex",
               alignItems: "center",
               gap: "0.75rem",
+              opacity: isBlackConnected ? 1 : 0.5,
             }}
           >
             <div
@@ -165,7 +171,7 @@ export const OthelloConsole: React.FC<Props> = ({ store, ctx, onStartGame }) => 
                 Black
               </div>
               <div style={{ fontSize: "0.9rem", fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {blackPlayer ? blackPlayer.name : "Waiting..."}
+                {blackPlayer ? blackPlayer.name : "Waiting..."} {!isBlackConnected && "(Reconnecting...)"}
               </div>
             </div>
           </div>
@@ -181,6 +187,7 @@ export const OthelloConsole: React.FC<Props> = ({ store, ctx, onStartGame }) => 
               display: "flex",
               alignItems: "center",
               gap: "0.75rem",
+              opacity: isWhiteConnected ? 1 : 0.5,
             }}
           >
             <div
@@ -205,7 +212,7 @@ export const OthelloConsole: React.FC<Props> = ({ store, ctx, onStartGame }) => 
                 White
               </div>
               <div style={{ fontSize: "0.9rem", fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {whitePlayer ? whitePlayer.name : "Waiting..."}
+                {whitePlayer ? whitePlayer.name : "Waiting..."} {!isWhiteConnected && "(Reconnecting...)"}
               </div>
             </div>
           </div>
