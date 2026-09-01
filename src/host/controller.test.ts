@@ -191,6 +191,7 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
 
     app.handleKicked();
 
+    expect(app.wasKicked).toBe(true);
     expect(app.id).toBe("");
     expect(app.name).toBe("");
     expect(app.hasSubmittedName).toBe(false);
@@ -198,5 +199,35 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
     expect(app.activeGame).toBeNull();
     expect(elements["name-screen"].classList.contains("u-hidden")).toBe(false);
     expect(elements["controller-main"].classList.contains("u-hidden")).toBe(true);
+  });
+
+  it("prevents auto-reconnect when wasKicked is true until manual name submission", async () => {
+    let nameFormSubmitCb: ((e: any) => void) | null = null;
+    elements["name-form"].addEventListener = vi.fn((event: string, cb: any) => {
+      if (event === "submit") nameFormSubmitCb = cb;
+    });
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    app.handleKicked();
+    expect(app.wasKicked).toBe(true);
+
+    // Call scheduleReconnect (simulating RPC broken / socket close event)
+    connectSpy.mockClear();
+    app.scheduleReconnect();
+
+    // Verify connectSignaling was NOT scheduled/called
+    expect(app.reconnectTimer).toBeNull();
+    expect(connectSpy).not.toHaveBeenCalled();
+
+    // User submits name form to manually rejoin
+    elements["player-name-input"].value = "Alice";
+    nameFormSubmitCb!({ preventDefault: vi.fn() });
+
+    expect(app.wasKicked).toBe(false);
+    expect(connectSpy).toHaveBeenCalled();
   });
 });

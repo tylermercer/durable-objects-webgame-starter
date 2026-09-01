@@ -64,6 +64,7 @@ export class ControllerApp {
   chosenName: string = "";
   private loadGameToken = 0;
   hasSubmittedName: boolean = false;
+  wasKicked: boolean = false;
   wakeLock: WakeLockSentinel | null = null;
 
   constructor() {
@@ -195,6 +196,7 @@ export class ControllerApp {
   }
 
   private startConnection() {
+    this.wasKicked = false;
     this.updateStatus("Connecting to signaling server...");
     this.connectSignaling();
   }
@@ -259,7 +261,7 @@ export class ControllerApp {
   }
 
   scheduleReconnect() {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer || this.wasKicked) return;
     this.updateStatus("Signaling broken. Reconnecting...");
     const base = Math.min(30000, 1000 * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * base * 0.3;
@@ -357,6 +359,7 @@ export class ControllerApp {
 
   handleKicked() {
     logger.warn("Controller was kicked from room. Resetting state and memory.");
+    this.wasKicked = true;
     clearRejoinToken(this.code);
 
     if (this.reconnectTimer) {
