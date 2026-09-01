@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, getSavedName, saveName, sanitizeName } from "./deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, hasRejoinToken, getSavedName, saveName, sanitizeName } from "./deviceIdentity";
 
 describe("deviceIdentity", () => {
   let mockStorage: Record<string, string> = {};
@@ -47,6 +47,17 @@ describe("deviceIdentity", () => {
     expect(mockStorage["rejoin_token_ROOM1"]).toBe(token);
     clearRejoinToken("ROOM1");
     expect(mockStorage["rejoin_token_ROOM1"]).toBeUndefined();
+  });
+
+  it("checks whether token exists via hasRejoinToken without side effects", () => {
+    expect(hasRejoinToken("ROOM1")).toBe(false);
+    expect(mockStorage["rejoin_token_ROOM1"]).toBeUndefined();
+
+    const token = getOrCreateRejoinToken("ROOM1");
+    expect(hasRejoinToken("ROOM1")).toBe(true);
+
+    clearRejoinToken("ROOM1");
+    expect(hasRejoinToken("ROOM1")).toBe(false);
   });
 
   it("falls back to in-memory storage when sessionStorage throws (private browsing)", () => {

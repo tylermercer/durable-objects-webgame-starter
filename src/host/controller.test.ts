@@ -256,4 +256,35 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
     expect(handleKickedSpy).toHaveBeenCalled();
     expect(scheduleReconnectSpy).not.toHaveBeenCalled();
   });
+
+  it("shows name screen and pre-fills name when savedName is present but token was cleared (e.g. after kick and refresh)", async () => {
+    const deviceIdentity = await import("../utils/deviceIdentity");
+    vi.spyOn(deviceIdentity, "getSavedName").mockReturnValue("Alice");
+    vi.spyOn(deviceIdentity, "hasRejoinToken").mockReturnValue(false);
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    expect(elements["player-name-input"].value).toBe("Alice");
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(false);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(true);
+    expect(connectSpy).not.toHaveBeenCalled();
+  });
+
+  it("auto-skips to controller main and connects when savedName AND rejoinToken are present on refresh", async () => {
+    const deviceIdentity = await import("../utils/deviceIdentity");
+    vi.spyOn(deviceIdentity, "getSavedName").mockReturnValue("Alice");
+    vi.spyOn(deviceIdentity, "hasRejoinToken").mockReturnValue(true);
+
+    const app = new ControllerApp();
+    const connectSpy = vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    expect(elements["name-screen"].classList.contains("u-hidden")).toBe(true);
+    expect(elements["controller-main"].classList.contains("u-hidden")).toBe(false);
+    expect(connectSpy).toHaveBeenCalled();
+  });
 });

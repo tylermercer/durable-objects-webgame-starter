@@ -4,7 +4,7 @@ import { ConnectionOrchestrator } from "@transport/connectionOrchestrator";
 import type { GameTransport, IdentityMessage } from "@transport/transport";
 import { loadControllerGame } from "@contract/gameSource";
 import type { ControllerGameInstance } from "@contract/gameTypes";
-import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
+import { getOrCreateRejoinToken, persistRejoinToken, clearRejoinToken, hasRejoinToken, getSavedName, saveName, sanitizeName } from "../utils/deviceIdentity";
 import { isController } from "../utils/isController";
 import { createLogger } from "@utils/logger";
 
@@ -154,6 +154,7 @@ export class ControllerApp {
     this.setupFullscreenAndWakeLockListeners();
 
     const savedName = getSavedName();
+    const canAutoRejoin = hasRejoinToken(this.code);
     const nameScreen = document.getElementById("name-screen");
     const controllerMain = document.getElementById("controller-main");
     const nameInput = document.getElementById("player-name-input") as HTMLInputElement;
@@ -163,7 +164,7 @@ export class ControllerApp {
       nameInput.value = savedName;
     }
 
-    if (savedName && sanitizeName(savedName)) {
+    if (savedName && sanitizeName(savedName) && canAutoRejoin) {
       this.chosenName = savedName;
       this.hasSubmittedName = true;
       if (nameScreen) nameScreen.classList.add("u-hidden");
