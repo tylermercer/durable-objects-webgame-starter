@@ -38,6 +38,22 @@ const { game } = Astro.props;
         </div>
       </div>
     </div>
+
+    <!-- Controller Full Dialog Modal -->
+    <dialog id="controller-full-modal" class="room-modal controller-modal">
+      <div class="modal-content l-stack l-space-m">
+        <div class="modal-header l-stack l-space-xs">
+          <h2 class="u-step-2">Room Full</h2>
+          <p id="controller-full-message" class="u-step--1 u-color-muted">
+            This game session has reached its maximum player limit.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button id="controller-full-close-btn" class="btn-done" type="button">Back</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="@host/controller.ts"></script>
   </main>
 
