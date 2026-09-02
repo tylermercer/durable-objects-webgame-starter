@@ -11,8 +11,12 @@ import '@styles/index.scss';
 		<title>Durable Objects Webgame Starter</title>
 		<script is:inline>
 			// Must match isController() in src/utils/isController.ts
-			if (new URLSearchParams(location.search).has('code')) {
+			const params = new URLSearchParams(location.search);
+			if (params.has('code')) {
 				document.documentElement.classList.add('has-code');
+			}
+			if (params.has('force_console')) {
+				document.documentElement.classList.add('force-console');
 			}
 		</script>
 	</head>

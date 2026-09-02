@@ -117,6 +117,7 @@ export class ConsoleApp {
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
   pendingKickTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private isSignalingReady = false;
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -148,7 +149,26 @@ export class ConsoleApp {
   async init() {
     this.setupUIHandlers();
     this.renderHeader();
+    this.setupPostMessageListener();
     this.connectSignaling();
+  }
+
+  private setupPostMessageListener() {
+    if (typeof window === "undefined") return;
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "GET_CONSOLE_ROOM_CODE" && this.isSignalingReady) {
+        this.notifyRoomReady();
+      }
+    });
+  }
+
+  private notifyRoomReady() {
+    if (typeof window === "undefined") return;
+    try {
+      window.parent.postMessage({ type: "CONSOLE_ROOM_READY", code: this.code }, "*");
+    } catch {
+      // ignore message posting errors
+    }
   }
 
   private ensureResizeObserver() {
@@ -365,6 +385,15 @@ export class ConsoleApp {
             }
           }
           this.updateControllerUI();
+        }
+        this.isSignalingReady = true;
+        this.notifyRoomReady();
+        try {
+          if (typeof sessionStorage !== "undefined") {
+            sessionStorage.setItem("console_room_ready", "true");
+          }
+        } catch {
+          // storage disabled / private browsing
         }
       }).catch(err => {
         logger.error("Failed to join signaling session as console:", err);

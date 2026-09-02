@@ -178,6 +178,15 @@ const { game } = Astro.props;
     display: flex !important;
   }
 
+  :global(html.force-console) .console-shell {
+    display: flex !important;
+  }
+
+  :global(html.force-console) .controller-shell,
+  :global(html.force-console) .join-form-card {
+    display: none !important;
+  }
+
   .room-code {
     font-size: 1.5em;
     letter-spacing: 2px;

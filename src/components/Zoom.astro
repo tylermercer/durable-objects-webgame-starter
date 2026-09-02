@@ -1,0 +1,23 @@
+---
+const { class: className = '', scale, ...rest } = Astro.props;
+---
+<style>
+.zoom {
+  overflow: hidden;
+  --zoom-scale: .5;
+  height: 100%;
+  width: 100%;
+}
+
+.zoom-inner {
+  transform-origin: 0 0;
+  transform: scale(var(--zoom-scale));
+  width: calc(100% / var(--zoom-scale));
+  height: calc(100% / var(--zoom-scale));
+}
+</style>
+<div class={"zoom " + className} style={scale ? `--zoom-scale: ${scale};` : ''} {...rest}>
+  <div class="zoom-inner">
+    <slot />
+  </div>
+</div>

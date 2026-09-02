@@ -77,16 +77,28 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
 <script define:vars={{ game, transportQuery }}>
   const consoleFrame = document.getElementById('console-frame');
   if (consoleFrame) {
-    const gate = setInterval(() => {
-      try {
-        const code = consoleFrame.contentWindow?.sessionStorage?.getItem('console_room_code');
-        if (!code) return;
-        clearInterval(gate);
+    let paired = false;
+
+    window.addEventListener('message', (event) => {
+      if (paired) return;
+      if (event.data && event.data.type === 'CONSOLE_ROOM_READY' && event.data.code) {
+        paired = true;
+        const code = event.data.code;
         document.querySelectorAll('.ctrl-frame').forEach((frame) => {
           frame.src = `/play/${game}?code=${encodeURIComponent(code)}${transportQuery}`;
         });
+      }
+    });
+
+    const poll = setInterval(() => {
+      if (paired) {
+        clearInterval(poll);
+        return;
+      }
+      try {
+        consoleFrame.contentWindow?.postMessage({ type: 'GET_CONSOLE_ROOM_CODE' }, '*');
       } catch (e) {
-        // storage access error while loading
+        // ignore cross-origin/loading errors
       }
     }, 200);
   }
