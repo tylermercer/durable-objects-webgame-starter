@@ -17,7 +17,7 @@ const transportQuery = (transport === 'relay' || transport === 'rtc')
   ? `&force_transport=${encodeURIComponent(transport)}`
   : (transport === 'auto' ? '' : `&force_transport=${encodeURIComponent(transport)}`);
 
-const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : ''}`;
+const consoleSrc = `/play/${game}?force_console=1${transportQuery}`;
 ---
 
 <Layout>
