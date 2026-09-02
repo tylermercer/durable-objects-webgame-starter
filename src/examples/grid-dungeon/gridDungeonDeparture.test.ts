@@ -13,6 +13,7 @@ import { createGame } from "./console";
 function createMockConsoleContext(): {
   ctx: ConsoleContext;
   peers: Map<string, ControllerPeer>;
+  triggerPeerReady: (peer: ControllerPeer) => void;
   triggerPeerLeft: (id: string) => void;
 } {
   const container = {
@@ -43,13 +44,17 @@ function createMockConsoleContext(): {
   }
 
   const peers = new Map<string, ControllerPeer>();
+  let peerReadyCb: ((peer: ControllerPeer) => void) | null = null;
   let peerLeftCb: ((id: string) => void) | null = null;
 
   const ctx: ConsoleContext = {
     peers,
     session: null,
     onPeerJoined: () => () => {},
-    onPeerReady: () => () => {},
+    onPeerReady: (cb) => {
+      peerReadyCb = cb;
+      return () => { peerReadyCb = null; };
+    },
     onPeerLeft: (cb) => {
       peerLeftCb = cb;
       return () => { peerLeftCb = null; };
@@ -64,12 +69,13 @@ function createMockConsoleContext(): {
   return {
     ctx,
     peers,
+    triggerPeerReady: (peer: ControllerPeer) => peerReadyCb?.(peer),
     triggerPeerLeft: (id: string) => peerLeftCb?.(id),
   };
 }
 
 describe("Grid Dungeon Player Departure", () => {
-  it("removes player entity from registry when peer departs via event or polling", () => {
+  it("spawns player on peer ready and removes player entity from registry when peer departs", () => {
     if (!(globalThis as any).window) {
       (globalThis as any).window = { devicePixelRatio: 1 };
     }
@@ -101,22 +107,39 @@ describe("Grid Dungeon Player Departure", () => {
       };
     }
 
-    const { ctx, peers, triggerPeerLeft } = createMockConsoleContext();
+    const { ctx, peers, triggerPeerReady, triggerPeerLeft } = createMockConsoleContext();
 
-    peers.set("p1", {
+    const p1 = {
       id: "p1",
       name: "Alice",
       color: "#ff0000",
       status: "live",
       state: "connected",
-    } as ControllerPeer);
+      pc: { addInputListener: vi.fn() } as any,
+    } as ControllerPeer;
+
+    peers.set("p1", p1);
 
     const game = createGame(ctx);
 
-    // Initial tick to register p1
+    // Initial tick with ready peer
     game.tick?.(1 / 60);
 
-    // Trigger departure event
+    // Trigger peer ready for a second player
+    const p2 = {
+      id: "p2",
+      name: "Bob",
+      color: "#00ff00",
+      status: "live",
+      state: "connected",
+      pc: { addInputListener: vi.fn() } as any,
+    } as ControllerPeer;
+    peers.set("p2", p2);
+    triggerPeerReady(p2);
+
+    game.tick?.(1 / 60);
+
+    // Trigger departure event for p1
     peers.delete("p1");
     triggerPeerLeft("p1");
 

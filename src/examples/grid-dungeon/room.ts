@@ -79,18 +79,7 @@ export function syncPlayers(
       continue;
     }
     const existing = registry.get(peer.id);
-    if (!existing) {
-      // Spawn new player entity at spawn tile (1.5, 1.5)
-      const player: PlayerEntity = {
-        id: peer.id,
-        kind: "player",
-        name: peer.name,
-        color: peer.color,
-        x: 1.5,
-        y: 1.5,
-      };
-      registry.add(player);
-    } else if (existing.kind === "player") {
+    if (existing && existing.kind === "player") {
       // Rejoin / metadata sync: update name & color, retain x & y!
       existing.name = peer.name;
       existing.color = peer.color;
