@@ -5,10 +5,6 @@ import { EXAMPLES, type ExampleId, DEFAULT_EXAMPLE } from '@examples/registry';
 
 export const prerender = false;
 
-if (!import.meta.env.DEV) {
-  return new Response(null, { status: 404, statusText: 'Not Found' });
-}
-
 const gameParam = Astro.url.searchParams.get('game') as ExampleId | null;
 const game: ExampleId = (gameParam && gameParam in EXAMPLES) ? gameParam : DEFAULT_EXAMPLE;
 
