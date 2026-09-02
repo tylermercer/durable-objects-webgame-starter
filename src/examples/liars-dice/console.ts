@@ -30,7 +30,44 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let lastChallengeResult: ChallengeResult | null = null;
   let winner: { id: string; name: string } | null = null;
 
-  const attachedListeners = new Set<string>();
+  function attachPeerListener(peer: any) {
+    if (peer.pc) {
+      peer.pc.addControlListener((msg: unknown) => {
+        handleControlMessage(peer.id, msg as unknown as LiarsDiceControlMessage);
+      });
+
+      const hand = playerHands.get(peer.id);
+      if (hand) {
+        peer.pc.sendControl({ type: "privateDice", dice: hand } as unknown as LiarsDiceControlMessage);
+      }
+      peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicGameState() });
+    }
+  }
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    attachPeerListener(peer);
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
+    if (phase === "bidding") {
+      const currentTurnPlayerId = turnOrder[turnIndex % Math.max(1, turnOrder.length)];
+      const wasCurrentTurn = (id === currentTurnPlayerId);
+      turnOrder = turnOrder.filter(pId => pId !== id);
+      if (turnOrder.length < 2) {
+        phase = "waiting";
+        broadcastState();
+        persistState();
+      } else if (wasCurrentTurn) {
+        turnIndex = turnIndex % turnOrder.length;
+        broadcastState();
+        persistState();
+      }
+    }
+  });
+
+  for (const peer of ctx.peers.values()) {
+    attachPeerListener(peer);
+  }
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -321,35 +358,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     persistState();
   }
 
-  function syncPeersAndListeners() {
-    for (const id of attachedListeners) {
-      const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || (peer.status ? (peer.status !== "live" && peer.status !== "live-relay") : peer.state !== "connected")) {
-        attachedListeners.delete(id);
-      }
-    }
-
-    for (const [id, peer] of ctx.peers) {
-      const isLive = peer.status ? (peer.status === "live" || peer.status === "live-relay") : (peer.state === "connected");
-      if (peer.pc && isLive && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
-        peer.pc.addControlListener((msg) => {
-          handleControlMessage(id, msg as unknown as LiarsDiceControlMessage);
-        });
-
-        const hand = playerHands.get(id);
-        if (hand) {
-          peer.pc.sendControl({ type: "privateDice", dice: hand } as unknown as LiarsDiceControlMessage);
-        }
-        peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicGameState() });
-      }
-    }
-  }
-
   return {
     tick: (dt: number) => {
-      syncPeersAndListeners();
-
       if (phase === "waiting") {
         for (const [id] of ctx.peers) {
           if (!playerDiceCounts.has(id)) {
@@ -376,6 +386,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     },
 
     destroy: () => {
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },

@@ -81,6 +81,9 @@ describe("UnoConsole integration", () => {
       },
       peers,
       session: null,
+      onPeerJoined: () => () => {},
+      onPeerReady: () => () => {},
+      onPeerLeft: () => () => {},
     };
 
     const instance = createGame(ctx);
@@ -177,6 +180,9 @@ describe("UnoConsole integration", () => {
       },
       peers,
       session: null,
+      onPeerJoined: () => () => {},
+      onPeerReady: () => () => {},
+      onPeerLeft: () => () => {},
     };
 
     const instance = createGame(ctx);
@@ -227,6 +233,8 @@ describe("UnoConsole integration", () => {
       ],
     ]);
 
+    let onPeerReadyCb: ((peer: ControllerPeer) => void) | null = null;
+
     const ctx: ConsoleContext = {
       viewport: {
         container: {} as any,
@@ -235,6 +243,12 @@ describe("UnoConsole integration", () => {
       },
       peers,
       session: null,
+      onPeerJoined: () => () => {},
+      onPeerReady: (cb: (peer: ControllerPeer) => void) => {
+        onPeerReadyCb = cb;
+        return () => {};
+      },
+      onPeerLeft: () => () => {},
     };
 
     const instance = createGame(ctx);
@@ -245,6 +259,7 @@ describe("UnoConsole integration", () => {
     // Simulate peer 1 reconnecting with a new transport instance
     const newP1Transport = createMockTransport();
     peer1.pc = newP1Transport;
+    if (onPeerReadyCb) (onPeerReadyCb as (peer: ControllerPeer) => void)(peer1);
 
     instance.tick?.(0.016);
 

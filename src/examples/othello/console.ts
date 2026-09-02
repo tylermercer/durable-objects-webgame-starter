@@ -23,8 +23,32 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let whiteId: string | null = null;
   let winner: { id: string; name: string; color: "black" | "white" | "tie" } | null = null;
 
-  const attachedListeners = new Set<string>();
-  const knownPlayerIds = new Set<string>();
+  function attachPeerListener(peer: ControllerPeer) {
+    if (peer.pc) {
+      peer.pc.addControlListener(msg => {
+        handleControlMessage(peer.id, msg as unknown as OthelloControlMessage);
+      });
+      peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicOthelloState() });
+    }
+  }
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    attachPeerListener(peer);
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
+    turnOrder.removePlayer(id);
+    if (id === blackId) blackId = null;
+    if (id === whiteId) whiteId = null;
+
+    if (roundFlow.is("playing") && (!blackId || !whiteId)) {
+      finishGame();
+    }
+  });
+
+  for (const peer of ctx.peers.values()) {
+    attachPeerListener(peer);
+  }
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -160,6 +184,28 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     const whitePeer = whiteId ? ctx.peers.get(whiteId) : null;
     const counts = countPieces(board);
 
+    const players = Array.from(ctx.peers.values()).map(peer => {
+      let pieceColor: "black" | "white" | null = null;
+      let count = 0;
+      if (peer.id === blackId) {
+        pieceColor = "black";
+        count = counts.black;
+      } else if (peer.id === whiteId) {
+        pieceColor = "white";
+        count = counts.white;
+      }
+
+      return {
+        id: peer.id,
+        name: peer.name,
+        color: peer.color,
+        pieceColor,
+        isTurn: peer.id === turnPlayerId,
+        connected: isConnected(peer),
+        count,
+      };
+    });
+
     return {
       phase: roundFlow.current(),
       board: board.toJSON(),
@@ -171,6 +217,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       whiteCount: counts.white,
       winner,
       firstPlayerId: getFirstPlayerId(),
+      players,
     };
   }
 
@@ -230,51 +277,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       });
   }
 
-  function syncRemovedPlayers() {
-    for (const id of Array.from(knownPlayerIds)) {
-      if (!ctx.peers.has(id)) {
-        knownPlayerIds.delete(id);
-        turnOrder.removePlayer(id);
-        if (id === blackId) blackId = null;
-        if (id === whiteId) whiteId = null;
-      }
-    }
-    for (const id of ctx.peers.keys()) knownPlayerIds.add(id);
-
-    if (roundFlow.is("playing") && (!blackId || !whiteId)) {
-      finishGame();
-    }
-  }
-
-  function syncPeersAndListeners() {
-    for (const id of attachedListeners) {
-      const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || !isConnected(peer)) {
-        attachedListeners.delete(id);
-      }
-    }
-
-    for (const [id, peer] of ctx.peers) {
-      const isLive = isConnected(peer);
-      if (peer.pc && isLive && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
-        peer.pc.addControlListener(msg => {
-          handleControlMessage(id, msg as unknown as OthelloControlMessage);
-        });
-
-        peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicOthelloState() });
-      }
-    }
-  }
-
   return {
     tick: () => {
-      syncPeersAndListeners();
-      if (roundFlow.is("playing")) syncRemovedPlayers();
       store.set(getPublicOthelloState());
     },
 
     destroy: () => {
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },

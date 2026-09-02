@@ -79,6 +79,7 @@ describe("OthelloController turn state display and interactions", () => {
       whiteCount: 2,
       winner: null,
       firstPlayerId: "p1-id",
+      players: [],
     };
 
     // Render as Alice (Black)
@@ -113,6 +114,7 @@ describe("OthelloController turn state display and interactions", () => {
       whiteCount: 2,
       winner: null,
       firstPlayerId: "p1-id",
+      players: [],
     };
 
     // Simulate component turn resolution logic for Alice (Black)

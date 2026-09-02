@@ -28,6 +28,7 @@ const consoleSrc = `/play/${game}?force_console=1${transportQuery}`;
         <iframe
           id="console-frame"
           src={consoleSrc}
+          allow="fullscreen 'none'"
           sandbox="allow-scripts allow-same-origin allow-forms"
           title="Console Frame"
         ></iframe>
@@ -38,6 +39,7 @@ const consoleSrc = `/play/${game}?force_console=1${transportQuery}`;
       <Zoom scale={scale} class="zoom-box">
         <iframe
           class="ctrl-frame"
+          allow="fullscreen 'none'"
           sandbox="allow-scripts allow-same-origin allow-forms"
           title="Controller Frame"
         ></iframe>

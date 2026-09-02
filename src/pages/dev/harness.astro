@@ -45,6 +45,7 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
           <iframe
             id="console-frame"
             src={consoleSrc}
+            allow="fullscreen 'none'"
             sandbox="allow-scripts allow-same-origin allow-forms"
             title="Console Frame"
           ></iframe>
@@ -62,6 +63,7 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
               <div class="frame-container controller-container">
                 <iframe
                   class="ctrl-frame"
+                  allow="fullscreen 'none'"
                   sandbox="allow-scripts allow-forms"
                   title={`Controller ${index + 1} Frame`}
                 ></iframe>
