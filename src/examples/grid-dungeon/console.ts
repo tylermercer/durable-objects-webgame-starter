@@ -42,8 +42,39 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const grid = createRoomGrid();
   let registry = createInitialEntities();
   const joystickInputs = new Map<string, JoystickState>();
-  const attachedListeners = new Set<string>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    if (peer.pc) {
+      peer.pc.addInputListener((msg) => {
+        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
+          joystickInputs.set(
+            peer.id,
+            (msg as unknown as { state: JoystickState }).state
+          );
+        }
+      });
+    }
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
+    registry.remove(id);
+    joystickInputs.delete(id);
+  });
+
+  // Attach to peers that are already ready
+  for (const peer of ctx.peers.values()) {
+    if (peer.pc) {
+      peer.pc.addInputListener((msg) => {
+        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
+          joystickInputs.set(
+            peer.id,
+            (msg as unknown as { state: JoystickState }).state
+          );
+        }
+      });
+    }
+  }
 
   const camera = new Camera({
     viewportWidth: ROOM_WIDTH * TILE_SIZE,
@@ -103,17 +134,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       const status = (peer.status ?? peer.state) as PlayerConnectionStatus | string;
       if (status === "live" || status === "reconnecting" || status === "connected") {
         activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status as PlayerConnectionStatus, state: peer.state });
-      }
-      if (peer.pc && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
-        peer.pc.addInputListener((msg) => {
-          if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
-            joystickInputs.set(
-              id,
-              (msg as unknown as { state: JoystickState }).state
-            );
-          }
-        });
+      } else if (status === "grace-period") {
+        joystickInputs.delete(id);
       }
     }
     syncPlayers(registry, activePeers);
@@ -272,6 +294,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     destroy: () => {
       loop.stop();
       unsubscribeResize();
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       canvas.remove();
     },
   };

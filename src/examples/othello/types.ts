@@ -26,6 +26,7 @@ export interface PublicOthelloState {
   whiteCount: number;
   winner: { id: string; name: string; color: "black" | "white" | "tie" } | null;
   firstPlayerId: string | null;
+  players: PlayerPublicInfo[];
 }
 
 export interface PersistedOthelloState {
