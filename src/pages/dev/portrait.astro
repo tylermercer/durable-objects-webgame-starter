@@ -51,8 +51,10 @@ const consoleSrc = `/play/${game}?force_console=1${transportQuery}`;
   if (consoleFrame) {
     const gate = setInterval(() => {
       try {
-        const code = consoleFrame.contentWindow?.sessionStorage?.getItem('console_room_code');
-        if (!code) return;
+        const win = consoleFrame.contentWindow;
+        const code = win?.sessionStorage?.getItem('console_room_code');
+        const ready = win?.sessionStorage?.getItem('console_room_ready');
+        if (!code || ready !== 'true') return;
         clearInterval(gate);
         document.querySelectorAll('.ctrl-frame').forEach((frame) => {
           frame.src = `/play/${game}?code=${encodeURIComponent(code)}${transportQuery}`;

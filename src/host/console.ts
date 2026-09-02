@@ -366,6 +366,13 @@ export class ConsoleApp {
           }
           this.updateControllerUI();
         }
+        try {
+          if (typeof sessionStorage !== "undefined") {
+            sessionStorage.setItem("console_room_ready", "true");
+          }
+        } catch {
+          // storage disabled / private browsing
+        }
       }).catch(err => {
         logger.error("Failed to join signaling session as console:", err);
         this.scheduleReconnect();
