@@ -38,7 +38,7 @@ const consoleSrc = `/play/${game}?force_console=1${transportQuery}`;
       <Zoom scale={scale} class="zoom-box">
         <iframe
           class="ctrl-frame"
-          sandbox="allow-scripts allow-forms"
+          sandbox="allow-scripts allow-same-origin allow-forms"
           title="Controller Frame"
         ></iframe>
       </Zoom>
