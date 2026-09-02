@@ -44,7 +44,19 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const joystickInputs = new Map<string, JoystickState>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
-  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+  function handlePeerReady(peer: ControllerPeer) {
+    if (!registry.get(peer.id)) {
+      const player: PlayerEntity = {
+        id: peer.id,
+        kind: "player",
+        name: peer.name,
+        color: peer.color,
+        x: 1.5,
+        y: 1.5,
+      };
+      registry.add(player);
+    }
+
     if (peer.pc) {
       peer.pc.addInputListener((msg) => {
         if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
@@ -55,6 +67,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         }
       });
     }
+  }
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    handlePeerReady(peer);
   });
 
   const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
@@ -65,14 +81,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Attach to peers that are already ready
   for (const peer of ctx.peers.values()) {
     if (peer.pc) {
-      peer.pc.addInputListener((msg) => {
-        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
-          joystickInputs.set(
-            peer.id,
-            (msg as unknown as { state: JoystickState }).state
-          );
-        }
-      });
+      handlePeerReady(peer);
     }
   }
 
