@@ -4,11 +4,11 @@ const getStorageKey = (roomCode?: string) =>
 export function getOrCreateRejoinToken(roomCode?: string): string {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof sessionStorage !== "undefined") {
-      let token = sessionStorage.getItem(key);
+    if (typeof localStorage !== "undefined") {
+      let token = localStorage.getItem(key);
       if (!token) {
         token = crypto.randomUUID();
-        sessionStorage.setItem(key, token);
+        localStorage.setItem(key, token);
       }
       return token;
     }
@@ -24,8 +24,8 @@ export function getOrCreateRejoinToken(roomCode?: string): string {
 export function persistRejoinToken(token: string, roomCode?: string): void {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(key, token);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(key, token);
       return;
     }
   } catch {
@@ -39,8 +39,8 @@ export function persistRejoinToken(token: string, roomCode?: string): void {
 export function clearRejoinToken(roomCode?: string): void {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.removeItem(key);
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(key);
     }
   } catch {
     // Private browsing / storage disabled
@@ -55,8 +55,8 @@ export function clearRejoinToken(roomCode?: string): void {
 export function hasRejoinToken(roomCode?: string): boolean {
   const key = getStorageKey(roomCode);
   try {
-    if (typeof sessionStorage !== "undefined") {
-      return sessionStorage.getItem(key) !== null;
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem(key) !== null;
     }
   } catch {
     // Private browsing / storage disabled: fall back below
@@ -70,15 +70,20 @@ const NAME_KEY = "playerName";
 
 export function getSavedName(): string {
   try {
-    return sessionStorage.getItem(NAME_KEY) ?? "";
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem(NAME_KEY) ?? "";
+    }
   } catch {
     return "";
   }
+  return "";
 }
 
 export function saveName(name: string): void {
   try {
-    sessionStorage.setItem(NAME_KEY, name);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(NAME_KEY, name);
+    }
   } catch {
     // best-effort; a fresh prompt next time is an acceptable fallback
   }

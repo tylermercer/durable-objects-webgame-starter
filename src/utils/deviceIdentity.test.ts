@@ -8,7 +8,7 @@ describe("deviceIdentity", () => {
     mockStorage = {};
     delete (globalThis as any).__sessionRejoinTokens;
 
-    const fakeSessionStorage = {
+    const fakeLocalStorage = {
       getItem: vi.fn((key: string) => mockStorage[key] ?? null),
       setItem: vi.fn((key: string, val: string) => {
         mockStorage[key] = val;
@@ -23,16 +23,25 @@ describe("deviceIdentity", () => {
       key: vi.fn(() => null)
     };
 
-    vi.stubGlobal("sessionStorage", fakeSessionStorage);
+    vi.stubGlobal("localStorage", fakeLocalStorage);
   });
 
-  it("creates and persists a token in sessionStorage", () => {
+  it("creates and persists a token in localStorage", () => {
     const token = getOrCreateRejoinToken("ROOM1");
     expect(token).toBeDefined();
     expect(mockStorage["rejoin_token_ROOM1"]).toBe(token);
 
     const retrieved = getOrCreateRejoinToken("ROOM1");
     expect(retrieved).toBe(token);
+  });
+
+  it("keys rejoin tokens by room code in localStorage", () => {
+    const token1 = getOrCreateRejoinToken("ROOMA");
+    const token2 = getOrCreateRejoinToken("ROOMB");
+
+    expect(token1).not.toBe(token2);
+    expect(mockStorage["rejoin_token_ROOMA"]).toBe(token1);
+    expect(mockStorage["rejoin_token_ROOMB"]).toBe(token2);
   });
 
   it("updates token when persistRejoinToken is called", () => {
@@ -60,8 +69,8 @@ describe("deviceIdentity", () => {
     expect(hasRejoinToken("ROOM1")).toBe(false);
   });
 
-  it("falls back to in-memory storage when sessionStorage throws (private browsing)", () => {
-    vi.stubGlobal("sessionStorage", {
+  it("falls back to in-memory storage when localStorage throws (private browsing)", () => {
+    vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("SecurityError: Access is denied for this document");
       },
@@ -82,14 +91,15 @@ describe("deviceIdentity", () => {
   });
 
   describe("name persistence & sanitization", () => {
-    it("gets and saves name in sessionStorage", () => {
+    it("gets and saves name in localStorage", () => {
       expect(getSavedName()).toBe("");
       saveName("Alice");
       expect(getSavedName()).toBe("Alice");
+      expect(mockStorage["playerName"]).toBe("Alice");
     });
 
-    it("handles sessionStorage errors gracefully for name persistence", () => {
-      vi.stubGlobal("sessionStorage", {
+    it("handles localStorage errors gracefully for name persistence", () => {
+      vi.stubGlobal("localStorage", {
         getItem: () => {
           throw new Error("SecurityError");
         },
