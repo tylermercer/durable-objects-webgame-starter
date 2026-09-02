@@ -4,7 +4,6 @@ import { createRng } from "@utils/rng";
 import { Deck } from "@utils/deck";
 import { TurnOrder } from "@utils/turnOrder";
 import { RoundFlow } from "@utils/roundFlow";
-import { diffDepartedPeers } from "@utils/peerDeparture";
 import { createStore } from "@react/reactStore";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
@@ -29,10 +28,23 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let roundSeed = Math.floor(Math.random() * 2147483647);
   let winner: { id: string; name: string } | null = null;
 
-  const attachedListeners = new Map<string, GameTransport>();
-  const knownPlayerIds = new Set<string>();
+  function attachPeerListener(peer: ControllerPeer) {
+    if (peer.pc) {
+      peer.pc.addControlListener(msg => {
+        handleControlMessage(peer.id, msg as unknown as UnoControlMessage);
+      });
 
-  function handlePeerLeft(id: string) {
+      const hand = hands.get(peer.id);
+      if (hand) sendHand(peer, hand);
+      peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicUnoState() });
+    }
+  }
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    attachPeerListener(peer);
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     turnOrder.removePlayer(id);
     hands.delete(id);
     if (roundFlow.is("playing")) {
@@ -50,9 +62,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         persistState();
       }
     }
-  }
+  });
 
-  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+  for (const peer of ctx.peers.values()) {
+    attachPeerListener(peer);
+  }
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -302,45 +316,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     });
   }
 
-  function syncRemovedPlayers() {
-    if (!ctx.onPeerLeft) {
-      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-      for (const id of departed) handlePeerLeft(id);
-    }
-  }
-
-  function syncPeersAndListeners() {
-    for (const [id, pc] of Array.from(attachedListeners.entries())) {
-      const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || peer.pc !== pc || !isConnected(peer)) {
-        attachedListeners.delete(id);
-      }
-    }
-
-    for (const [id, peer] of ctx.peers) {
-      const isLive = isConnected(peer);
-      if (peer.pc && isLive && attachedListeners.get(id) !== peer.pc) {
-        attachedListeners.set(id, peer.pc);
-        peer.pc.addControlListener(msg => {
-          handleControlMessage(id, msg as unknown as UnoControlMessage);
-        });
-
-        const hand = hands.get(id);
-        if (hand) sendHand(peer, hand);
-        peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicUnoState() });
-      }
-    }
-  }
-
   return {
     tick: () => {
-      syncPeersAndListeners();
-      if (roundFlow.is("playing")) syncRemovedPlayers();
       store.set(getPublicUnoState());
     },
 
     destroy: () => {
-      unsubscribePeerLeft?.();
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },

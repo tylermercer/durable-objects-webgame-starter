@@ -48,6 +48,8 @@ function createMockConsoleContext(): {
   const ctx: ConsoleContext = {
     peers,
     session: null,
+    onPeerJoined: () => () => {},
+    onPeerReady: () => () => {},
     onPeerLeft: (cb) => {
       peerLeftCb = cb;
       return () => { peerLeftCb = null; };

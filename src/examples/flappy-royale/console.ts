@@ -181,7 +181,33 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let prevState: RoundState = currentState;
 
   const pendingFlaps = new Set<string>();
-  const attachedListeners = new Set<string>();
+
+  function attachPeerListener(peer: any) {
+    if (peer.pc) {
+      const handleMsg = (msg: unknown) => {
+        const fMsg = msg as FlappyControlMessage;
+        if (fMsg.type === "flap") {
+          handleFlapInput(peer.id);
+        }
+      };
+      peer.pc.addControlListener(handleMsg);
+      peer.pc.addInputListener(handleMsg);
+    }
+  }
+
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    attachPeerListener(peer);
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
+    if (currentState.phase === "active" && currentState.birds[id]) {
+      currentState.birds[id].alive = false;
+    }
+  });
+
+  for (const peer of ctx.peers.values()) {
+    attachPeerListener(peer);
+  }
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -315,33 +341,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
   }
 
-  // Note on player departure handling: Flappy Royale does not need explicit code to remove
-  // or eliminate departed players on disconnect/kick. Gravity and collision physics continue
-  // stepping every frame; a departed player simply stops sending flap events, causing their
-  // bird to naturally hit a pipe or ground and eliminate itself within seconds.
-  function syncPeers() {
-    for (const [id, peer] of ctx.peers) {
-      if (peer.pc) {
-        if (!attachedListeners.has(id)) {
-          attachedListeners.add(id);
-          const handleMsg = (msg: unknown) => {
-            const fMsg = msg as FlappyControlMessage;
-            if (fMsg.type === "flap") {
-              handleFlapInput(id);
-            }
-          };
-          peer.pc.addControlListener(handleMsg);
-          peer.pc.addInputListener(handleMsg);
-        }
-      }
-    }
-  }
-
   const loop = createFixedTickLoop({
     tickRate: 60,
     onTick: (dt) => {
-      syncPeers();
-
       if (currentState.phase === "waiting") {
         return;
       }
@@ -615,6 +617,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     destroy: () => {
       loop.stop();
       unsubscribeResize();
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       init.then(() => {
         app?.destroy(true, { children: true, texture: true });
         canvas.remove();

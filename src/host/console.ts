@@ -118,7 +118,7 @@ export class ConsoleApp {
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
   pendingKickTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  peerNotifier: PeerNotifier<ControllerPeer> = createPeerNotifier(this.controllers as Map<string, ControllerPeer>);
+  peerNotifier: PeerNotifier<ControllerPeer> = createPeerNotifier();
 
   private resizeSubscribers = new Set<(size: ViewportSize) => void>();
   private resizeObserver: ResizeObserver | null = null;
@@ -198,6 +198,7 @@ export class ConsoleApp {
         session: this.api,
         peers: this.controllers as Map<string, ControllerPeer>,
         onPeerJoined: this.peerNotifier.onPeerJoined,
+        onPeerReady: this.peerNotifier.onPeerReady,
         onPeerLeft: this.peerNotifier.onPeerLeft,
         viewport: {
           container: surface ?? document.createElement("div"),
@@ -407,6 +408,7 @@ export class ConsoleApp {
           onTransportChange: (transport) => {
             logger.info(`Transport changed for controller ${controller.name} (${controller.id}) -> ${transport.mode}`);
             controller.pc = transport;
+            this.peerNotifier.notifyReady(controller);
             this.updateControllerStatus(controller);
             if (transport.mode === "relay") {
               transport.sendControl({

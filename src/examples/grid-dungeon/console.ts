@@ -4,7 +4,6 @@ import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
-import { diffDepartedPeers } from "../../utils/peerDeparture";
 import {
   createRoomGrid,
   createInitialEntities,
@@ -43,17 +42,39 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const grid = createRoomGrid();
   let registry = createInitialEntities();
   const joystickInputs = new Map<string, JoystickState>();
-  const attachedListeners = new Set<string>();
-  const knownPlayerIds = new Set<string>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
-  function handlePeerLeft(id: string) {
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    if (peer.pc) {
+      peer.pc.addInputListener((msg) => {
+        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
+          joystickInputs.set(
+            peer.id,
+            (msg as unknown as { state: JoystickState }).state
+          );
+        }
+      });
+    }
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     registry.remove(id);
     joystickInputs.delete(id);
-    attachedListeners.delete(id);
-  }
+  });
 
-  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+  // Attach to peers that are already ready
+  for (const peer of ctx.peers.values()) {
+    if (peer.pc) {
+      peer.pc.addInputListener((msg) => {
+        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
+          joystickInputs.set(
+            peer.id,
+            (msg as unknown as { state: JoystickState }).state
+          );
+        }
+      });
+    }
+  }
 
   const camera = new Camera({
     viewportWidth: ROOM_WIDTH * TILE_SIZE,
@@ -108,13 +129,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function syncPeers() {
-    if (!ctx.onPeerLeft) {
-      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-      for (const id of departed) {
-        handlePeerLeft(id);
-      }
-    }
-
     const activePeers: Array<{ id: string; name: string; color: string; status?: PlayerConnectionStatus; state?: string }> = [];
     for (const [id, peer] of ctx.peers) {
       const status = (peer.status ?? peer.state) as PlayerConnectionStatus | string;
@@ -122,17 +136,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         activePeers.push({ id, name: peer.name, color: peer.color, status: peer.status as PlayerConnectionStatus, state: peer.state });
       } else if (status === "grace-period") {
         joystickInputs.delete(id);
-      }
-      if (peer.pc && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
-        peer.pc.addInputListener((msg) => {
-          if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
-            joystickInputs.set(
-              id,
-              (msg as unknown as { state: JoystickState }).state
-            );
-          }
-        });
       }
     }
     syncPlayers(registry, activePeers);
@@ -291,7 +294,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     destroy: () => {
       loop.stop();
       unsubscribeResize();
-      unsubscribePeerLeft?.();
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       canvas.remove();
     },
   };

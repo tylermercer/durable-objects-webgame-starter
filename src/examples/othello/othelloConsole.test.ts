@@ -84,6 +84,9 @@ describe("OthelloConsole integration", () => {
       },
       peers,
       session: null,
+      onPeerJoined: () => () => {},
+      onPeerReady: () => () => {},
+      onPeerLeft: () => () => {},
     };
 
     const instance = createGame(ctx);

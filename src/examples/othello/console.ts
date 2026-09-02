@@ -2,7 +2,6 @@ import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contr
 import { TileGrid } from "@utils/tileGrid";
 import { TurnOrder } from "@utils/turnOrder";
 import { RoundFlow } from "@utils/roundFlow";
-import { diffDepartedPeers } from "@utils/peerDeparture";
 import { createStore } from "@react/reactStore";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
@@ -24,10 +23,20 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let whiteId: string | null = null;
   let winner: { id: string; name: string; color: "black" | "white" | "tie" } | null = null;
 
-  const attachedListeners = new Set<string>();
-  const knownPlayerIds = new Set<string>();
+  function attachPeerListener(peer: ControllerPeer) {
+    if (peer.pc) {
+      peer.pc.addControlListener(msg => {
+        handleControlMessage(peer.id, msg as unknown as OthelloControlMessage);
+      });
+      peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicOthelloState() });
+    }
+  }
 
-  function handlePeerLeft(id: string) {
+  const unsubscribePeerReady = ctx.onPeerReady((peer) => {
+    attachPeerListener(peer);
+  });
+
+  const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     turnOrder.removePlayer(id);
     if (id === blackId) blackId = null;
     if (id === whiteId) whiteId = null;
@@ -35,9 +44,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     if (roundFlow.is("playing") && (!blackId || !whiteId)) {
       finishGame();
     }
-  }
+  });
 
-  const unsubscribePeerLeft = ctx.onPeerLeft?.(handlePeerLeft);
+  for (const peer of ctx.peers.values()) {
+    attachPeerListener(peer);
+  }
 
   function getFirstPlayerId(): string | null {
     for (const peer of ctx.peers.values()) {
@@ -266,43 +277,14 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       });
   }
 
-  function syncRemovedPlayers() {
-    if (!ctx.onPeerLeft) {
-      const { departed } = diffDepartedPeers(knownPlayerIds, ctx.peers);
-      for (const id of departed) handlePeerLeft(id);
-    }
-  }
-
-  function syncPeersAndListeners() {
-    for (const id of attachedListeners) {
-      const peer = ctx.peers.get(id);
-      if (!peer || !peer.pc || !isConnected(peer)) {
-        attachedListeners.delete(id);
-      }
-    }
-
-    for (const [id, peer] of ctx.peers) {
-      const isLive = isConnected(peer);
-      if (peer.pc && isLive && !attachedListeners.has(id)) {
-        attachedListeners.add(id);
-        peer.pc.addControlListener(msg => {
-          handleControlMessage(id, msg as unknown as OthelloControlMessage);
-        });
-
-        peer.pc.sendControlCoalesced("gameState", { type: "gameState", state: getPublicOthelloState() });
-      }
-    }
-  }
-
   return {
     tick: () => {
-      syncPeersAndListeners();
-      if (roundFlow.is("playing")) syncRemovedPlayers();
       store.set(getPublicOthelloState());
     },
 
     destroy: () => {
-      unsubscribePeerLeft?.();
+      unsubscribePeerReady();
+      unsubscribePeerLeft();
       root.unmount();
       ctx.viewport.container.innerHTML = "";
     },
