@@ -52,24 +52,6 @@ describe("GameSession Durable Object", () => {
     expect(text).toContain("Invalid role");
   });
 
-  it("saves and loads game state via storage", async () => {
-    const storageMap = new Map<string, any>();
-    const ctx = {
-      storage: {
-        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
-        get: vi.fn(async (key: string) => storageMap.get(key)),
-        setAlarm: vi.fn(async () => {})
-      }
-    };
-    const session = new GameSession(ctx as any, {} as any);
-    const consoleApi = (session as any).makeConsoleApi(createMockWebSocket());
-
-    await consoleApi.saveGameState({ score: 100, seed: 12345 });
-    expect(ctx.storage.put).toHaveBeenCalledWith("gameState", { score: 100, seed: 12345 });
-
-    const loaded = await consoleApi.loadGameState();
-    expect(loaded).toEqual({ score: 100, seed: 12345 });
-  });
 
   it("persists, returns, and validates console token", async () => {
     const storageMap = new Map<string, any>();

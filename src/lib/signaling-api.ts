@@ -38,8 +38,6 @@ export interface ConsoleApi extends RpcTarget {
   sendSignal(to: string, signal: RTCSignal): void;
   relayInput(to: string, payload: unknown): void;
   relayControl(to: string, payload: unknown): void;
-  saveGameState(state: unknown): void;
-  loadGameState(): unknown | Promise<unknown>;
 }
 
 // Exposed by the DO when role=controller.

@@ -397,19 +397,6 @@ export class GameSession extends DurableObject {
         }
       }
 
-      async saveGameState(state: unknown): Promise<void> {
-        if (self.ctx?.storage?.put) {
-          await self.ctx.storage.put("gameState", state);
-        }
-      }
-
-      async loadGameState(): Promise<unknown> {
-        if (self.ctx?.storage?.get) {
-          const state = await self.ctx.storage.get("gameState");
-          return state ?? null;
-        }
-        return null;
-      }
     })();
   }
 
