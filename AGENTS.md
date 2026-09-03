@@ -63,7 +63,8 @@ When extending or building new gameplay features, extend the `control` channel's
 
 Cloudflare Durable Objects bill and count storage writes per key modification. To prevent excessive billable write operations and stay within quota limits:
 
-- **Do NOT persist game state per tick / per frame (e.g. at 60Hz)**: Calling `ctx.session.saveGameState(...)` inside `onTick` of a 60Hz fixed tick loop results in up to 3,600 storage write operations per minute per active room (~100,000 writes/day for brief testing). Instead, throttle game state persistence to at most once every ~2 seconds (e.g. via a wall-clock timestamp check `now - lastSavedTime >= 2000`), while immediately persisting on key discrete lifecycle events (e.g. round start, round over, player elimination, or peer departure).
+- **Use `localStorage` for console simulation state**: The console browser tab is the sole authoritative simulator for a room and simulation state only needs to survive same-device tab refreshes. Game simulation states (`grid-dungeon`, `flappy-royale`, `liars-dice`, `othello`, `uno`) MUST be saved locally via `saveLocalGameState(ctx.roomCode, state)` (`src/utils/localGameState.ts`) rather than sending RPC calls to the Durable Object.
+- **Reserve Durable Object storage for cross-device authoritative data**: `ctx.storage` on `GameSession` should strictly be used for network/session primitives that arbitrate across devices (e.g., rejoin tokens, kicked tokens, player limits, console session tokens).
 - **Consolidate session metadata into compound object keys**: Avoid issuing multiple separate `storage.put()` calls for individual scalar properties (e.g., `rejoinTokens`, `kickedTokens`, `nextPlayerNumber`, `gracePeriodMs`). Batch related session metadata into a single compound storage key (e.g., `"sessionMeta"`) so that updating session state costs only 1 storage write operation instead of N operations.
 
 ## Durable Object Migrations (wrangler.jsonc)

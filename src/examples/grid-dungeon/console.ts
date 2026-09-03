@@ -4,6 +4,7 @@ import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
+import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createRoomGrid,
   createInitialEntities,
@@ -55,16 +56,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         y: 1.5,
       };
       registry.add(player);
-      persistState(true);
     }
 
     if (peer.pc) {
-      peer.pc.addInputListener((msg) => {
-        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
-          joystickInputs.set(
-            peer.id,
-            (msg as unknown as { state: JoystickState }).state
-          );
+      peer.pc.addInputListener((msg: unknown) => {
+        const input = msg as { type?: string; state?: JoystickState };
+        if (input && input.type === "state" && input.state) {
+          joystickInputs.set(peer.id, input.state);
         }
       });
     }
@@ -77,7 +75,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     registry.remove(id);
     joystickInputs.delete(id);
-    persistState(true);
   });
 
   // Attach to peers that are already ready
@@ -96,29 +93,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   });
 
   // Load saved state if available
-  if (ctx.session) {
-    ctx.session
-      .loadGameState()
-      .then((saved) => {
-        if (saved && Array.isArray(saved)) {
-          registry = EntityRegistry.fromJSON<DungeonEntity>(saved as DungeonEntity[]);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load persisted Grid Dungeon state:", err);
-      });
+  const saved = loadLocalGameState<DungeonEntity[]>(ctx.roomCode);
+  if (saved && Array.isArray(saved)) {
+    registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
   }
 
-  let lastSavedTime = 0;
-
-  function persistState(force = false) {
-    if (!ctx.session) return;
-    const now = Date.now();
-    if (!force && now - lastSavedTime < 2000) return;
-    lastSavedTime = now;
-    ctx.session.saveGameState(registry.toJSON()).catch((err) => {
-      console.error("Failed to persist Grid Dungeon state:", err);
-    });
+  function persistState() {
+    saveLocalGameState(ctx.roomCode, registry.toJSON());
   }
 
   function getSnapshot(): RoomStateSnapshot {

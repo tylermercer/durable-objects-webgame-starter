@@ -37,6 +37,7 @@ export interface ControllerPeer {
 
 export interface ConsoleContext {
   session: RpcStub<ConsoleApi> | null;
+  roomCode: string;
   peers: Map<string, ControllerPeer>;
   viewport: GameViewport;
   onPeerJoined: (cb: (peer: ControllerPeer) => void) => () => void;

@@ -196,6 +196,7 @@ export class ConsoleApp {
       const { createGame } = gameMod;
       this.activeGame = createGame({
         session: this.api,
+        roomCode: this.code,
         peers: this.controllers as Map<string, ControllerPeer>,
         onPeerJoined: this.peerNotifier.onPeerJoined,
         onPeerReady: this.peerNotifier.onPeerReady,

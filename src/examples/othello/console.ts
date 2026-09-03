@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { OthelloConsole } from "./OthelloConsole";
 import { applyMove, countPieces, createInitialBoard, hasAnyLegalMove, isValidMove } from "./rules";
+import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   CellState,
   OthelloControlMessage,
@@ -114,9 +115,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function startNextGame() {
     const livePeers = Array.from(ctx.peers.values()).filter(isConnected);
     if (livePeers.length < 2) {
+      clearLocalGameState(ctx.roomCode);
       roundFlow.transition("waiting");
       broadcastState();
-      persistState();
       return;
     }
 
@@ -243,7 +244,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function persistState() {
-    if (!ctx.session) return;
     const stateToSave: PersistedOthelloState = {
       board: board.toJSON(),
       turnOrder: turnOrder.toJSON(),
@@ -252,29 +252,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       whiteId,
       winner,
     };
-    ctx.session.saveGameState(stateToSave).catch(err => {
-      console.error("Failed to persist Othello game state:", err);
-    });
+    saveLocalGameState(ctx.roomCode, stateToSave);
   }
 
-  if (ctx.session) {
-    ctx.session
-      .loadGameState()
-      .then(saved => {
-        if (saved && typeof saved === "object") {
-          const state = saved as PersistedOthelloState;
-          if (state.board) board = TileGrid.fromJSON(state.board);
-          if (state.turnOrder) turnOrder = new TurnOrder([], state.turnOrder);
-          if (state.roundFlow) roundFlow = new RoundFlow<OthelloPhase>("waiting", state.roundFlow);
-          blackId = state.blackId ?? null;
-          whiteId = state.whiteId ?? null;
-          winner = state.winner ?? null;
-          broadcastState();
-        }
-      })
-      .catch(err => {
-        console.error("Failed to load persisted game state:", err);
-      });
+  const saved = loadLocalGameState<PersistedOthelloState>(ctx.roomCode);
+  if (saved && typeof saved === "object") {
+    if (saved.board) board = TileGrid.fromJSON(saved.board);
+    if (saved.turnOrder) turnOrder = new TurnOrder([], saved.turnOrder);
+    if (saved.roundFlow) roundFlow = new RoundFlow<OthelloPhase>("waiting", saved.roundFlow);
+    blackId = saved.blackId ?? null;
+    whiteId = saved.whiteId ?? null;
+    winner = saved.winner ?? null;
   }
 
   return {

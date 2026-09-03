@@ -28,6 +28,7 @@ function createMockConsoleContext(): {
   let peerLeftCb: ((id: string) => void) | null = null;
 
   const ctx: ConsoleContext = {
+    roomCode: "TEST_ROOM",
     peers,
     session: null,
     onPeerJoined: () => () => {},

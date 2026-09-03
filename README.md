@@ -178,11 +178,26 @@ The `control` channel is reliable and ordered — good for state you can't affor
 
 ### Persisting game state
 
-The DO's `sessions` map is in-memory and doesn't survive eviction. For anything that should persist — score, world seed, progress — use `saveGameState`/`loadGameState` on the console's RPC session, backed by the DO's own durable storage (see `src/examples/liars-dice/console.ts`). This is console-only by design: controllers report input, only the console's authoritative simulation writes shared state. Values are capped around 2MB; shard larger state across multiple keys if you need to.
+The console browser tab is the sole authoritative game simulator for a room. Simulation state (world state, player scores, card hands) only needs to survive same-device browser refreshes and belongs in `localStorage` on the console rather than the Durable Object server.
 
-> **Storage Cost & Write Rate Warning**: Cloudflare Durable Objects bill per key modification.
-> - **Never save game state per frame / per tick**: In continuous simulation loops (like `grid-dungeon` or `flappy-royale`), call `saveGameState()` at most once every ~2 seconds or on major game lifecycle events (round over, player disconnect). Calling `saveGameState()` on every 60Hz tick will generate ~216,000 write operations per hour per room!
-> - **Batch session key writes**: When updating room/session metadata in Durable Objects, combine related keys into a single compound object key (e.g. `sessionMeta: { rejoinTokens, kickedTokens, nextPlayerNumber, gracePeriodMs }`) rather than calling `storage.put()` separately for each property.
+Use `saveLocalGameState`, `loadLocalGameState`, and `clearLocalGameState` (`src/utils/localGameState.ts`) to persist console game states namespaced by room code (`game_state_${roomCode}`):
+
+```ts
+import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
+
+// Load saved state on console init
+const saved = loadLocalGameState<MyGameState>(ctx.roomCode);
+
+// Save state on updates
+saveLocalGameState(ctx.roomCode, currentState);
+
+// Clear state when a game genuinely resets or ends
+clearLocalGameState(ctx.roomCode);
+```
+
+> **Durable Object Storage Best Practices**:
+> - **Cross-device data vs. local simulation state**: Durable Object storage (`GameSession`) is reserved for authoritative cross-device network state (rejoin tokens, room membership, player limits). Single-device simulation state belongs in `localStorage`.
+> - **Batch session metadata writes**: When updating room metadata in Durable Objects, combine related keys into a single compound object key (`sessionMeta: { rejoinTokens, kickedTokens, nextPlayerNumber, gracePeriodMs }`) rather than issuing separate `storage.put()` calls.
 
 ### Pixi.js for WebGL Canvas Games
 
