@@ -58,8 +58,11 @@ Here are the possible edge types:
 Simply being there is enough to complete this node.
 
 Inputs: `access`
+
 Output: `item`
+
 Min size: 1x1
+
 Render: Places the item somewhere in the given space.
 
 ### Switch
@@ -67,24 +70,35 @@ Render: Places the item somewhere in the given space.
 Simply being there is enough to complete this node.
 
 Inputs: `access`
+
 Output: `signal_boolean`
+
 Min size: 1x1
+
 Render: occupies the tile (it's a step switch)
 
 ### Wizard
 
 Inputs: `access`
+
 Outputs: `signal_boolean`
+
 Min size: 1x2
-Render: occupies the non-exit tile. Returns the exit tile as the entrance tile.
+
+Render: occupies the non-exit tile.
+
+Returns the exit tile as the entrance tile.
 
 Like a Switch, but requires you to solve a riddle or something.
 
 ### Maze
 
 Inputs: `access`
+
 Outputs: `access`
+
 Min size: 10x10
+
 Render: Fills the room with a maze, with a path winding away from the exit tile and ending at the entrance tile.
 
 Ideas:
@@ -93,14 +107,19 @@ Ideas:
 ### Locked chest
 
 Inputs: `access`, `signal_boolean`
+
 Outputs: `item`
+
 Min size: 1x2
+
 Render: see Wizard
 
-## Locked door
+### Locked door
 
 Inputs: `access`, `signal_boolean`
+
 Outputs: `access`
+
 Render: draws a wall across the box with exit on one side and entrance on the other. Then renders a door in the wall.
 
 ## TODO
