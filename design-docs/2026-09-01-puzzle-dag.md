@@ -14,6 +14,10 @@ DAG requirements:
 * The start node's output type must be and the end node's input type must include `access`.
 * All nodes must have their input requirements satisfied by the incoming edges.
 
+Optional features:
+* Jail cell start node (see below)
+* Bonus item end nodes
+
 The dungeon is laid out by walking the DAG _backwards_: start at the dungeon exit (a node with no outgoing edges), render a room and render the exit in it, then look at the exit node's dependencies and render rooms for those (including generating rooms/hallways/tunnels etc. to connect them to the exit room) and render them in those rooms. Then repeat until you get to the source mode.
 
 ## Puzzle Node Type interface
@@ -65,7 +69,7 @@ Simply being there is enough to complete this node.
 Inputs: `access`
 Output: `signal_boolean`
 Min size: 1x1
-Render: 
+Render: occupies the tile (it's a step switch)
 
 ### Wizard
 
@@ -86,6 +90,27 @@ Render: Fills the room with a maze, with a path winding away from the exit tile 
 Ideas:
 * Could also return some internal usable boxes, e.g. a 1x1 space where an item could be inside the maze.
 
+### Locked chest
+
+Inputs: `access`, `signal_boolean`
+Outputs: `item`
+Min size: 1x2
+Render: see Wizard
+
+## Locked door
+
+Inputs: `access`, `signal_boolean`
+Outputs: `access`
+Render: draws a wall across the box with exit on one side and entrance on the other. Then renders a door in the wall.
+
 ## TODO
 
 More edge types? More examples? Make sure this model is actually flexible enough.
+
+What changes for an open map, e.g. a field with no walls?
+* `access` is irrelevant. So an obstacle type that only outputs `access` is useless, and an obstacle type that only requires `access` has no dependencies.
+
+### Jail cell mechanic 
+
+In some LoZ levels, you have to sneak past spotlights at certain points. We could do something like that.
+* The jail cell would simply be an "extra" source node. Probably should have an `access` obstacle separating it from the rest of the map, or something (and whatever is necessary to satisfy the dependencies of that obstacle, e.g. a switch).
