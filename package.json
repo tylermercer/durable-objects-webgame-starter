@@ -32,6 +32,7 @@
     "web-haptics": "^0.0.6"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "@astrojs/react": "^6.0.4",
     "@cloudflare/workers-types": "^5.20260825.1",
     "@types/qrcode": "^1.5.6",

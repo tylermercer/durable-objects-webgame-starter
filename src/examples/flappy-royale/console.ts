@@ -202,6 +202,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     if (currentState.phase === "active" && currentState.birds[id]) {
       currentState.birds[id].alive = false;
+      persistState(true);
     }
   });
 
@@ -274,12 +275,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     prevState = currentState;
     pendingFlaps.clear();
 
-    persistState();
+    persistState(true);
     broadcastSnapshot();
   }
 
-  function persistState() {
+  let lastSavedTime = 0;
+
+  function persistState(force = false) {
     if (!ctx.session) return;
+    const now = Date.now();
+    if (!force && now - lastSavedTime < 2000) return;
+    lastSavedTime = now;
     const stateToSave: PersistedFlappyState = {
       seed: currentState.seed,
       tickIndex: currentState.tickIndex,
@@ -367,6 +373,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           }
         }
 
+        if (stepRes.events.died.length > 0 || stepRes.events.roundOver) {
+          persistState(true);
+        } else {
+          persistState(false);
+        }
+
         if (stepRes.events.roundOver) {
           for (const peer of ctx.peers.values()) {
             if (peer.pc) {
@@ -374,8 +386,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
             }
           }
         }
-
-        persistState();
         broadcastSnapshot();
       }
     },

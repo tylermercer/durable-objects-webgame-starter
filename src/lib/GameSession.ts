@@ -48,14 +48,29 @@ export class GameSession extends DurableObject {
 
   private async doHydrate() {
     if (this.ctx?.storage?.get) {
-      const storedTokens = await this.ctx.storage.get<[string, ControllerRecord][]>("rejoinTokens");
-      if (storedTokens) this.rejoinTokens = new Map(storedTokens);
-      const storedKicked = await this.ctx.storage.get<string[]>("kickedTokens");
-      if (storedKicked) this.kickedTokens = new Set(storedKicked);
-      const nextNum = await this.ctx.storage.get<number>("nextPlayerNumber");
-      if (nextNum) this.nextPlayerNumber = nextNum;
-      const grace = await this.ctx.storage.get<number>("gracePeriodMs");
-      if (grace) this.gracePeriodMs = grace;
+      const meta = await this.ctx.storage.get<{
+        rejoinTokens?: [string, ControllerRecord][];
+        kickedTokens?: string[];
+        nextPlayerNumber?: number;
+        gracePeriodMs?: number;
+      }>("sessionMeta");
+
+      if (meta) {
+        if (meta.rejoinTokens) this.rejoinTokens = new Map(meta.rejoinTokens);
+        if (meta.kickedTokens) this.kickedTokens = new Set(meta.kickedTokens);
+        if (meta.nextPlayerNumber !== undefined) this.nextPlayerNumber = meta.nextPlayerNumber;
+        if (meta.gracePeriodMs !== undefined) this.gracePeriodMs = meta.gracePeriodMs;
+      } else {
+        const storedTokens = await this.ctx.storage.get<[string, ControllerRecord][]>("rejoinTokens");
+        if (storedTokens) this.rejoinTokens = new Map(storedTokens);
+        const storedKicked = await this.ctx.storage.get<string[]>("kickedTokens");
+        if (storedKicked) this.kickedTokens = new Set(storedKicked);
+        const nextNum = await this.ctx.storage.get<number>("nextPlayerNumber");
+        if (nextNum) this.nextPlayerNumber = nextNum;
+        const grace = await this.ctx.storage.get<number>("gracePeriodMs");
+        if (grace) this.gracePeriodMs = grace;
+      }
+
       const maxP = await this.ctx.storage.get<number>("maxPlayers");
       if (maxP !== undefined) this.maxPlayers = maxP;
       const emptySince = await this.ctx.storage.get<number>("roomEmptySince");
@@ -77,10 +92,12 @@ export class GameSession extends DurableObject {
 
   private async persistRejoinTokens() {
     if (this.ctx?.storage?.put) {
-      await this.ctx.storage.put("rejoinTokens", [...this.rejoinTokens.entries()]);
-      await this.ctx.storage.put("kickedTokens", [...this.kickedTokens]);
-      await this.ctx.storage.put("nextPlayerNumber", this.nextPlayerNumber);
-      await this.ctx.storage.put("gracePeriodMs", this.gracePeriodMs);
+      await this.ctx.storage.put("sessionMeta", {
+        rejoinTokens: [...this.rejoinTokens.entries()],
+        kickedTokens: [...this.kickedTokens],
+        nextPlayerNumber: this.nextPlayerNumber,
+        gracePeriodMs: this.gracePeriodMs,
+      });
     }
   }
 
@@ -228,9 +245,7 @@ export class GameSession extends DurableObject {
 
         if (gracePeriodMs !== undefined && gracePeriodMs > 0) {
           self.gracePeriodMs = gracePeriodMs;
-          if (self.ctx?.storage?.put) {
-            await self.ctx.storage.put("gracePeriodMs", self.gracePeriodMs);
-          }
+          await self.persistRejoinTokens();
         }
 
         if (maxPlayers !== undefined && maxPlayers > 0) {

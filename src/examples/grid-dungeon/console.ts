@@ -1,4 +1,4 @@
-import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
+import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
 import type { PlayerConnectionStatus } from "@host/console";
 import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
@@ -55,6 +55,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         y: 1.5,
       };
       registry.add(player);
+      persistState(true);
     }
 
     if (peer.pc) {
@@ -76,6 +77,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const unsubscribePeerLeft = ctx.onPeerLeft((id) => {
     registry.remove(id);
     joystickInputs.delete(id);
+    persistState(true);
   });
 
   // Attach to peers that are already ready
@@ -107,8 +109,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       });
   }
 
-  function persistState() {
+  let lastSavedTime = 0;
+
+  function persistState(force = false) {
     if (!ctx.session) return;
+    const now = Date.now();
+    if (!force && now - lastSavedTime < 2000) return;
+    lastSavedTime = now;
     ctx.session.saveGameState(registry.toJSON()).catch((err) => {
       console.error("Failed to persist Grid Dungeon state:", err);
     });

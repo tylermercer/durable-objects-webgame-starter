@@ -180,6 +180,10 @@ The `control` channel is reliable and ordered — good for state you can't affor
 
 The DO's `sessions` map is in-memory and doesn't survive eviction. For anything that should persist — score, world seed, progress — use `saveGameState`/`loadGameState` on the console's RPC session, backed by the DO's own durable storage (see `src/examples/liars-dice/console.ts`). This is console-only by design: controllers report input, only the console's authoritative simulation writes shared state. Values are capped around 2MB; shard larger state across multiple keys if you need to.
 
+> **Storage Cost & Write Rate Warning**: Cloudflare Durable Objects bill per key modification.
+> - **Never save game state per frame / per tick**: In continuous simulation loops (like `grid-dungeon` or `flappy-royale`), call `saveGameState()` at most once every ~2 seconds or on major game lifecycle events (round over, player disconnect). Calling `saveGameState()` on every 60Hz tick will generate ~216,000 write operations per hour per room!
+> - **Batch session key writes**: When updating room/session metadata in Durable Objects, combine related keys into a single compound object key (e.g. `sessionMeta: { rejoinTokens, kickedTokens, nextPlayerNumber, gracePeriodMs }`) rather than calling `storage.put()` separately for each property.
+
 ### Pixi.js for WebGL Canvas Games
 
 For continuous-simulation games with complex visual effects (such as `flappy-royale`), Pixi.js provides a WebGL-accelerated retained scene graph backend as an alternative to hand-rolled Canvas2D. Note on bundle size trade-off: in the multi-example starter, example games are dynamic imports so Pixi is only fetched if `flappy-royale` is loaded. If you adapt this pattern into a single-game project (State 2), Pixi will be part of your main bundle — a worthwhile trade-off for a real-time, effects-heavy game, but likely unnecessary for simpler games.
