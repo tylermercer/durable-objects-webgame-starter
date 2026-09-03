@@ -77,6 +77,7 @@ describe("OthelloConsole integration", () => {
     ]);
 
     const ctx: ConsoleContext = {
+      roomCode: "TEST_ROOM",
       viewport: {
         container,
         initialSize: { width: 800, height: 600 },

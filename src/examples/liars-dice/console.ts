@@ -5,6 +5,7 @@ import { isValidBid, resolveChallenge } from "./rules";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { LiarsDiceConsole } from "./LiarsDiceConsole";
+import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   Bid,
   ChallengeResult,
@@ -132,6 +133,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       ctx,
       onStartRound: (keepRoundNumber) => startNextRound(keepRoundNumber),
       onNewGame: () => {
+        clearLocalGameState(ctx.roomCode);
         playerDiceCounts.clear();
         roundNumber = 0;
         lastChallengeResult = null;
@@ -142,29 +144,22 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   );
 
   // Load persisted state if available
-  if (ctx.session) {
-    ctx.session.loadGameState().then(saved => {
-      if (saved && typeof saved === "object") {
-        const state = saved as PersistedGameState;
-        if (state.roundNumber) roundNumber = state.roundNumber;
-        if (state.roundSeed) roundSeed = state.roundSeed;
-        if (state.phase) phase = state.phase;
-        if (state.currentBid !== undefined) currentBid = state.currentBid;
-        if (state.turnIndex !== undefined) turnIndex = state.turnIndex;
-        if (state.lastChallengeResult !== undefined) lastChallengeResult = state.lastChallengeResult;
-        if (state.winner !== undefined) winner = state.winner;
+  const saved = loadLocalGameState<PersistedGameState>(ctx.roomCode);
+  if (saved && typeof saved === "object") {
+    if (saved.roundNumber) roundNumber = saved.roundNumber;
+    if (saved.roundSeed) roundSeed = saved.roundSeed;
+    if (saved.phase) phase = saved.phase;
+    if (saved.currentBid !== undefined) currentBid = saved.currentBid;
+    if (saved.turnIndex !== undefined) turnIndex = saved.turnIndex;
+    if (saved.lastChallengeResult !== undefined) lastChallengeResult = saved.lastChallengeResult;
+    if (saved.winner !== undefined) winner = saved.winner;
 
-        if (state.playerDiceCounts) {
-          playerDiceCounts = new Map(Object.entries(state.playerDiceCounts));
-        }
-        if (phase === "bidding" || phase === "revealing") {
-          rollHands();
-        }
-        broadcastState();
-      }
-    }).catch(err => {
-      console.error("Failed to load persisted game state:", err);
-    });
+    if (saved.playerDiceCounts) {
+      playerDiceCounts = new Map(Object.entries(saved.playerDiceCounts));
+    }
+    if (phase === "bidding" || phase === "revealing") {
+      rollHands();
+    }
   }
 
   function getActivePlayerIds(): string[] {
@@ -255,7 +250,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function persistState() {
-    if (!ctx.session) return;
     const diceCountsObj: Record<string, number> = {};
     for (const [id, count] of playerDiceCounts) {
       diceCountsObj[id] = count;
@@ -272,9 +266,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       winner
     };
 
-    ctx.session.saveGameState(stateToSave).catch(err => {
-      console.error("Failed to persist game state:", err);
-    });
+    saveLocalGameState(ctx.roomCode, stateToSave);
   }
 
   function handleControlMessage(fromId: string, msg: LiarsDiceControlMessage) {

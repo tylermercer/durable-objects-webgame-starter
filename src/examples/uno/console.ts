@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { UnoConsole } from "./UnoConsole";
 import { CARD_COLORS, createUnoDeck, drawPenaltyOf, hasPlayableCard, isPlayable, isWild } from "./rules";
+import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   CardColor,
   PersistedUnoState,
@@ -91,9 +92,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function startNextGame() {
     const activePlayerIds = Array.from(ctx.peers.keys());
     if (activePlayerIds.length < 2) {
+      clearLocalGameState(ctx.roomCode);
       roundFlow.transition("waiting");
       broadcastState();
-      persistState();
       return;
     }
 
@@ -283,7 +284,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function persistState() {
-    if (!ctx.session) return;
     const stateToSave: PersistedUnoState = {
       deck: deck.toJSON(),
       hands: Object.fromEntries(hands),
@@ -293,27 +293,18 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       roundSeed,
       winner,
     };
-    ctx.session.saveGameState(stateToSave).catch(err => {
-      console.error("Failed to persist game state:", err);
-    });
+    saveLocalGameState(ctx.roomCode, stateToSave);
   }
 
-  if (ctx.session) {
-    ctx.session.loadGameState().then(saved => {
-      if (saved && typeof saved === "object") {
-        const state = saved as PersistedUnoState;
-        roundSeed = state.roundSeed ?? roundSeed;
-        deck = Deck.fromJSON(state.deck ?? { drawPile: [], discardPile: [] }, createRng(roundSeed));
-        hands = new Map(Object.entries(state.hands ?? {}));
-        turnOrder = new TurnOrder([], state.turnOrder);
-        roundFlow = new RoundFlow<UnoPhase>("waiting", state.roundFlow);
-        activeColor = state.activeColor ?? null;
-        winner = state.winner ?? null;
-        broadcastState();
-      }
-    }).catch(err => {
-      console.error("Failed to load persisted game state:", err);
-    });
+  const saved = loadLocalGameState<PersistedUnoState>(ctx.roomCode);
+  if (saved && typeof saved === "object") {
+    roundSeed = saved.roundSeed ?? roundSeed;
+    deck = Deck.fromJSON(saved.deck ?? { drawPile: [], discardPile: [] }, createRng(roundSeed));
+    hands = new Map(Object.entries(saved.hands ?? {}));
+    turnOrder = new TurnOrder([], saved.turnOrder);
+    roundFlow = new RoundFlow<UnoPhase>("waiting", saved.roundFlow);
+    activeColor = saved.activeColor ?? null;
+    winner = saved.winner ?? null;
   }
 
   return {

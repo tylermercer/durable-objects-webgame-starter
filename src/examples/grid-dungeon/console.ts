@@ -1,9 +1,10 @@
-import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
+import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
 import type { PlayerConnectionStatus } from "@host/console";
 import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
+import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createRoomGrid,
   createInitialEntities,
@@ -58,12 +59,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
 
     if (peer.pc) {
-      peer.pc.addInputListener((msg) => {
-        if (msg.type === "state" && (msg as unknown as { state?: JoystickState }).state) {
-          joystickInputs.set(
-            peer.id,
-            (msg as unknown as { state: JoystickState }).state
-          );
+      peer.pc.addInputListener((msg: unknown) => {
+        const input = msg as { type?: string; state?: JoystickState };
+        if (input && input.type === "state" && input.state) {
+          joystickInputs.set(peer.id, input.state);
         }
       });
     }
@@ -94,24 +93,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   });
 
   // Load saved state if available
-  if (ctx.session) {
-    ctx.session
-      .loadGameState()
-      .then((saved) => {
-        if (saved && Array.isArray(saved)) {
-          registry = EntityRegistry.fromJSON<DungeonEntity>(saved as DungeonEntity[]);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load persisted Grid Dungeon state:", err);
-      });
+  const saved = loadLocalGameState<DungeonEntity[]>(ctx.roomCode);
+  if (saved && Array.isArray(saved)) {
+    registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
   }
 
   function persistState() {
-    if (!ctx.session) return;
-    ctx.session.saveGameState(registry.toJSON()).catch((err) => {
-      console.error("Failed to persist Grid Dungeon state:", err);
-    });
+    saveLocalGameState(ctx.roomCode, registry.toJSON());
   }
 
   function getSnapshot(): RoomStateSnapshot {

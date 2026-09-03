@@ -74,6 +74,7 @@ describe("UnoConsole integration", () => {
     ]);
 
     const ctx: ConsoleContext = {
+      roomCode: "TEST_ROOM",
       viewport: {
         container,
         initialSize: { width: 800, height: 600 },
@@ -173,6 +174,7 @@ describe("UnoConsole integration", () => {
     ]);
 
     const ctx: ConsoleContext = {
+      roomCode: "TEST_ROOM",
       viewport: {
         container: {} as any,
         initialSize: { width: 800, height: 600 },
@@ -236,6 +238,7 @@ describe("UnoConsole integration", () => {
     let onPeerReadyCb: ((peer: ControllerPeer) => void) | null = null;
 
     const ctx: ConsoleContext = {
+      roomCode: "TEST_ROOM",
       viewport: {
         container: {} as any,
         initialSize: { width: 800, height: 600 },

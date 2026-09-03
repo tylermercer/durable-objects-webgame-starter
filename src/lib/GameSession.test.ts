@@ -52,24 +52,6 @@ describe("GameSession Durable Object", () => {
     expect(text).toContain("Invalid role");
   });
 
-  it("saves and loads game state via storage", async () => {
-    const storageMap = new Map<string, any>();
-    const ctx = {
-      storage: {
-        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
-        get: vi.fn(async (key: string) => storageMap.get(key)),
-        setAlarm: vi.fn(async () => {})
-      }
-    };
-    const session = new GameSession(ctx as any, {} as any);
-    const consoleApi = (session as any).makeConsoleApi(createMockWebSocket());
-
-    await consoleApi.saveGameState({ score: 100, seed: 12345 });
-    expect(ctx.storage.put).toHaveBeenCalledWith("gameState", { score: 100, seed: 12345 });
-
-    const loaded = await consoleApi.loadGameState();
-    expect(loaded).toEqual({ score: 100, seed: 12345 });
-  });
 
   it("persists, returns, and validates console token", async () => {
     const storageMap = new Map<string, any>();
@@ -320,13 +302,15 @@ describe("GameSession Durable Object", () => {
     expect(consoleCallbacks.onFirstPlayerChanged).toHaveBeenLastCalledWith(p1.id);
   });
 
-  it("hydrates rejoin tokens and nextPlayerNumber from storage upon cold start", async () => {
+  it("hydrates session metadata from 'sessionMeta' key upon cold start (with fallback to legacy keys)", async () => {
     const storageMap = new Map<string, any>();
-    storageMap.set("rejoinTokens", [
-      ["existing-token", { id: "p1-id", name: "Player 1", disconnectedAt: null }]
-    ]);
-    storageMap.set("nextPlayerNumber", 5);
-    storageMap.set("gracePeriodMs", 20000);
+    storageMap.set("sessionMeta", {
+      rejoinTokens: [
+        ["existing-token", { id: "p1-id", name: "Player 1", disconnectedAt: null }]
+      ],
+      nextPlayerNumber: 5,
+      gracePeriodMs: 20000
+    });
 
     const ctx = {
       storage: {
@@ -362,6 +346,37 @@ describe("GameSession Durable Object", () => {
 
     const newJoinRes = await controllerApi.join(cb);
     expect(newJoinRes.name).toBe("Player 5");
+
+    expect(ctx.storage.put).toHaveBeenCalledWith(
+      "sessionMeta",
+      expect.objectContaining({
+        nextPlayerNumber: 6,
+        gracePeriodMs: 20000
+      })
+    );
+  });
+
+  it("falls back to legacy individual keys during hydration when sessionMeta is missing", async () => {
+    const storageMap = new Map<string, any>();
+    storageMap.set("rejoinTokens", [
+      ["legacy-token", { id: "p2-id", name: "Legacy Player", disconnectedAt: null }]
+    ]);
+    storageMap.set("nextPlayerNumber", 3);
+    storageMap.set("gracePeriodMs", 15000);
+
+    const ctx = {
+      storage: {
+        get: vi.fn(async (key: string) => storageMap.get(key)),
+        put: vi.fn(async (key: string, val: any) => storageMap.set(key, val)),
+        setAlarm: vi.fn(async () => {})
+      }
+    };
+
+    const session = new GameSession(ctx as any, {} as any);
+    await (session as any).hydrateIfNeeded();
+
+    expect(session.rejoinTokens.get("legacy-token")).toEqual({ id: "p2-id", name: "Legacy Player", disconnectedAt: null });
+    expect(session.gracePeriodMs).toBe(15000);
   });
 
   it("enforces maxPlayers limit for new controllers but permits rejoining", async () => {

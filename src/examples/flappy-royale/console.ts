@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import { createFixedTickLoop } from "../../utils/gameLoop";
+import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createInitialRoundState,
   stepRound,
@@ -227,35 +228,23 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   // Load persisted game state if available
-  if (ctx.session) {
-    ctx.session
-      .loadGameState()
-      .then((saved) => {
-        if (saved && typeof saved === "object") {
-          const state = saved as PersistedFlappyState;
-          if (state.seed && state.phase) {
-            roundSeed = state.seed;
-            const players = Object.values(state.birds).map((b) => ({
-              id: b.id,
-              name: b.name,
-              color: b.color,
-            }));
-            let simState = createInitialRoundState(roundSeed, players);
+  const saved = loadLocalGameState<PersistedFlappyState>(ctx.roomCode);
+  if (saved && typeof saved === "object" && saved.seed && saved.phase) {
+    roundSeed = saved.seed;
+    const players = Object.values(saved.birds).map((b) => ({
+      id: b.id,
+      name: b.name,
+      color: b.color,
+    }));
+    let simState = createInitialRoundState(roundSeed, players);
 
-            simState.birds = { ...state.birds };
-            simState.phase = state.phase;
-            simState.tickIndex = state.tickIndex;
-            simState.winner = state.winner;
+    simState.birds = { ...saved.birds };
+    simState.phase = saved.phase;
+    simState.tickIndex = saved.tickIndex;
+    simState.winner = saved.winner;
 
-            currentState = simState;
-            prevState = simState;
-            broadcastSnapshot();
-          }
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load persisted Flappy Royale state:", err);
-      });
+    currentState = simState;
+    prevState = simState;
   }
 
   function startNewRound() {
@@ -279,7 +268,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   function persistState() {
-    if (!ctx.session) return;
     const stateToSave: PersistedFlappyState = {
       seed: currentState.seed,
       tickIndex: currentState.tickIndex,
@@ -287,9 +275,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       birds: currentState.birds,
       winner: currentState.winner,
     };
-    ctx.session.saveGameState(stateToSave).catch((err) => {
-      console.error("Failed to persist Flappy Royale state:", err);
-    });
+    saveLocalGameState(ctx.roomCode, stateToSave);
   }
 
   function getSnapshot(): RoundStateSnapshot {

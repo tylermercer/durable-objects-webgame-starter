@@ -59,6 +59,14 @@ The project uses two WebRTC data channels between the console and each controlle
 
 When extending or building new gameplay features, extend the `control` channel's message protocol rather than modifying the signaling layer.
 
+## Durable Object Storage Best Practices & Write Reduction
+
+Cloudflare Durable Objects bill and count storage writes per key modification. To prevent excessive billable write operations and stay within quota limits:
+
+- **Use `localStorage` for console simulation state**: The console browser tab is the sole authoritative simulator for a room and simulation state only needs to survive same-device tab refreshes. Game simulation states (`grid-dungeon`, `flappy-royale`, `liars-dice`, `othello`, `uno`) MUST be saved locally via `saveLocalGameState(ctx.roomCode, state)` (`src/utils/localGameState.ts`) rather than sending RPC calls to the Durable Object.
+- **Reserve Durable Object storage for cross-device authoritative data**: `ctx.storage` on `GameSession` should strictly be used for network/session primitives that arbitrate across devices (e.g., rejoin tokens, kicked tokens, player limits, console session tokens).
+- **Consolidate session metadata into compound object keys**: Avoid issuing multiple separate `storage.put()` calls for individual scalar properties (e.g., `rejoinTokens`, `kickedTokens`, `nextPlayerNumber`, `gracePeriodMs`). Batch related session metadata into a single compound storage key (e.g., `"sessionMeta"`) so that updating session state costs only 1 storage write operation instead of N operations.
+
 ## Durable Object Migrations (wrangler.jsonc)
 
 `wrangler.jsonc`'s `migrations` array currently has a single entry (`"tag": "v1"`, `"new_sqlite_classes": ["GameSession"]`) that registers `GameSession` as a SQLite-backed Durable Object class. Cloudflare tracks migration state per-tag across deployments, so this array is **append-only**: never edit or remove an existing entry, only add new ones with a new, higher `tag` (e.g. `"v2"`).
