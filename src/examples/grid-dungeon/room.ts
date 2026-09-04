@@ -3,7 +3,7 @@ import { EntityRegistry } from "@utils/entityRegistry";
 import { moveCircleAgainstGrid, steerToward } from "@utils/circleMovement";
 import { simplifyPath } from "@utils/pathSmoothing";
 import type { PlayerConnectionStatus } from "@host/console";
-import type { DungeonEntity, GridCell, JoystickState, NpcEntity, PlayerEntity } from "./types";
+import type { DungeonEntity, GamePhase, GridCell, JoystickState, NpcEntity, PlayerEntity, StartZone } from "./types";
 
 export const ROOM_WIDTH = 20;
 export const ROOM_HEIGHT = 15;
@@ -11,8 +11,27 @@ export const TILE_SIZE = 40; // Pixels per tile in world space
 export const PLAYER_SPEED = 4.0; // Tiles per second
 export const NPC_SPEED = 2.0; // Tiles per second
 
-// 20x15 hand-authored grid layout (1 = wall, 0 = walkable floor)
-export const RAW_LAYOUT: number[][] = [
+// 20x15 hand-authored grid layout for the Lobby (1 = wall, 0 = walkable floor)
+export const LOBBY_LAYOUT: number[][] = [
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+];
+
+// 20x15 hand-authored grid layout for the Dungeon
+export const DUNGEON_LAYOUT: number[][] = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -30,16 +49,33 @@ export const RAW_LAYOUT: number[][] = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
-export function createRoomGrid(): TileGrid<GridCell> {
+export const RAW_LAYOUT = DUNGEON_LAYOUT;
+
+export const START_ZONE: StartZone = {
+  minX: 8,
+  maxX: 11,
+  minY: 6,
+  maxY: 8,
+};
+
+export function createLobbyGrid(): TileGrid<GridCell> {
   return new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
-    walkable: RAW_LAYOUT[pos.y][pos.x] === 0,
+    walkable: LOBBY_LAYOUT[pos.y][pos.x] === 0,
   }));
 }
 
-export function createInitialEntities(): EntityRegistry<DungeonEntity> {
-  const registry = new EntityRegistry<DungeonEntity>();
+export function createDungeonGrid(): TileGrid<GridCell> {
+  return new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
+    walkable: DUNGEON_LAYOUT[pos.y][pos.x] === 0,
+  }));
+}
 
-  const npcs: NpcEntity[] = [
+export function createRoomGrid(): TileGrid<GridCell> {
+  return createDungeonGrid();
+}
+
+export function createDungeonNpcs(): NpcEntity[] {
+  return [
     {
       id: "npc-goblin",
       kind: "npc",
@@ -61,12 +97,60 @@ export function createInitialEntities(): EntityRegistry<DungeonEntity> {
       wanderTimer: 2.0,
     },
   ];
+}
 
-  for (const npc of npcs) {
-    registry.add(npc);
+export function createInitialEntities(phase: GamePhase = "lobby"): EntityRegistry<DungeonEntity> {
+  const registry = new EntityRegistry<DungeonEntity>();
+
+  if (phase === "dungeon") {
+    const npcs = createDungeonNpcs();
+    for (const npc of npcs) {
+      registry.add(npc);
+    }
   }
 
   return registry;
+}
+
+export function isPlayerInStartZone(player: PlayerEntity): boolean {
+  const tileX = Math.floor(player.x);
+  const tileY = Math.floor(player.y);
+  return (
+    tileX >= START_ZONE.minX &&
+    tileX <= START_ZONE.maxX &&
+    tileY >= START_ZONE.minY &&
+    tileY <= START_ZONE.maxY
+  );
+}
+
+export interface LobbyCountdownResult {
+  nextCountdown: number | null;
+  shouldTransition: boolean;
+}
+
+export function stepLobbyCountdown(
+  players: PlayerEntity[],
+  currentCountdown: number | null,
+  dt: number
+): LobbyCountdownResult {
+  if (players.length === 0) {
+    return { nextCountdown: null, shouldTransition: false };
+  }
+
+  const allStanding = players.every(isPlayerInStartZone);
+
+  if (!allStanding) {
+    return { nextCountdown: null, shouldTransition: false };
+  }
+
+  const startValue = currentCountdown ?? 5.0;
+  const nextCountdown = Math.max(0, startValue - dt);
+
+  if (nextCountdown <= 0) {
+    return { nextCountdown: 0, shouldTransition: true };
+  }
+
+  return { nextCountdown, shouldTransition: false };
 }
 
 export function syncPlayers(
@@ -90,6 +174,30 @@ export function syncPlayers(
 export function isWalkablePos(grid: TileGrid<GridCell>, tileX: number, tileY: number): boolean {
   const cell = grid.get({ x: tileX, y: tileY });
   return cell !== undefined && cell.walkable;
+}
+
+export function findWalkableSpawnPos(
+  grid: TileGrid<GridCell>,
+  preferredX: number = 2.5,
+  preferredY: number = 2.5
+): { x: number; y: number } {
+  const tileX = Math.floor(preferredX);
+  const tileY = Math.floor(preferredY);
+  if (grid.get({ x: tileX, y: tileY })?.walkable) {
+    return { x: preferredX, y: preferredY };
+  }
+  for (let r = 1; r < Math.max(grid.width, grid.height); r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = tileX + dx;
+        const y = tileY + dy;
+        if (grid.get({ x, y })?.walkable) {
+          return { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+  }
+  return { x: 1.5, y: 1.5 };
 }
 
 export function movePlayer(

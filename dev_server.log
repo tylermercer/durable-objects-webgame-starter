@@ -1,0 +1,44 @@
+
+> astro-cloudflare-starter@0.0.1 dev /app
+> astro dev
+
+▶ Astro collects anonymous usage data.
+  This information helps us improve Astro.
+  Run "astro telemetry disable" to opt-out.
+  https://astro.build/telemetry
+
+(node:63633) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+02:59:56 [@astrojs/cloudflare] Enabling image processing with Cloudflare Images for production with the "IMAGES" Images binding.
+02:59:58 [vite] connected.
+02:59:58 [vite] [optimizer] bundling dependencies...
+03:00:03 [vite] [optimizer] bundling dependencies...
+03:00:04 [vite] dependency optimized: astro/app/manifest
+03:00:04 [vite] optimized dependencies changed. reloading
+03:00:04 [vite] [vite] program reload
+03:00:08 [types] Generated 1ms
+03:00:09 [vite] [optimizer] bundling dependencies...
+03:00:09 [vite] [optimizer] bundling dependencies...
+ astro  v7.2.6 ready in 17656 ms
+┃ Local    http://localhost:4321/
+┃ Network  use --host to expose
+03:00:10 watching for file changes...
+
+ update  ▶ New version of Astro available: 7.3.1
+  Run pnpm dlx @astrojs/upgrade to update
+
+03:02:30 [vite] dependencies optimized: capnweb, qrcode
+03:02:30 [vite] [GameSession] WebSocket connection upgrade requested for role: console
+03:02:30 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
+03:02:31 [vite] [GameSession] WebSocket closed for role: console, id: console
+03:02:56 [vite] [GameSession] WebSocket connection upgrade requested for role: console
+03:02:56 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
+03:02:59 [vite] [GameSession] WebSocket closed for role: console, id: console
+03:03:18 [vite] [GameSession] WebSocket connection upgrade requested for role: console
+03:03:18 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
+03:03:22 [vite] [GameSession] WebSocket closed for role: console, id: console
+20:28:55 [watch] src/examples/grid-dungeon/room.ts
+20:29:04 [watch] src/examples/grid-dungeon/console.ts
+20:30:15 [vite] [GameSession] WebSocket connection upgrade requested for role: console
+20:30:15 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
+20:30:19 [vite] [GameSession] WebSocket closed for role: console, id: console
