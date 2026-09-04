@@ -124,7 +124,7 @@ const { game } = Astro.props;
   <div class="join-form-card">
     <div class="join-game-card l-box l-stack l-space-s">
       <h1 class="u-step-2">Join Game</h1>
-      <p class="u-step--1 u-color-muted">Enter a room code to join an existing session as a controller.</p>
+      <p class="u-step--1 u-color-muted">Enter a room code or scan a QR code to join an existing session as a controller.</p>
       <form id="join-game-form" method="GET" action="/" class="l-stack l-space-xs">
         <label for="join-code-input" class="u-step--1 u-bold">Room Code</label>
         <input
@@ -139,10 +139,34 @@ const { game } = Astro.props;
           autocapitalize="characters"
           required
         />
-        <button type="submit" class="btn-join-game">Join Game</button>
+        <div class="join-actions">
+          <button type="submit" class="btn-join-game">Join Game</button>
+          <button type="button" id="scan-code-btn" class="btn-scan-code">Scan Code 📷</button>
+        </div>
       </form>
     </div>
   </div>
+
+  <!-- QR Scanner Dialog Modal -->
+  <dialog id="qr-scanner-modal" class="room-modal qr-scanner-modal">
+    <div class="modal-content l-stack l-space-m">
+      <div class="modal-header l-stack l-space-xs">
+        <h2 class="u-step-2">Scan QR Code</h2>
+        <p id="qr-scan-status" class="u-step--1 u-color-muted">
+          Position the room QR code in front of your camera.
+        </p>
+      </div>
+
+      <div class="qr-video-container">
+        <video id="qr-video" playsinline muted autoplay></video>
+        <canvas id="qr-canvas-hidden" style="display: none;"></canvas>
+      </div>
+
+      <div class="modal-actions">
+        <button id="qr-modal-close-btn" class="btn-copy-link" type="button">Cancel</button>
+      </div>
+    </div>
+  </dialog>
 </div>
 
 <style>
@@ -352,6 +376,48 @@ const { game } = Astro.props;
     width: 100%;
   }
 
+  .join-actions {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .btn-scan-code {
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 6px;
+    background-color: var(--gray-3, #eee);
+    color: var(--gray-12, #111);
+    border: 1px solid var(--gray-6, #ccc);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+  }
+
+  .btn-scan-code:hover {
+    background-color: var(--gray-4, #ddd);
+  }
+
+  /* QR Scanner Modal Styling */
+  .qr-video-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .qr-video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   .player-name-input {
     font-size: 1.25rem;
     padding: 0.75rem;
@@ -362,6 +428,7 @@ const { game } = Astro.props;
   }
 
   .btn-join-game {
+    flex: 1;
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
     font-weight: bold;
@@ -370,7 +437,6 @@ const { game } = Astro.props;
     color: #ffffff;
     border: none;
     cursor: pointer;
-    width: 100%;
   }
 
   .btn-join-game:hover {
