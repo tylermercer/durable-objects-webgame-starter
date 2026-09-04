@@ -244,6 +244,40 @@ describe("ConsoleApp start screen and add-players button behavior", () => {
     expect(window.location.href).toBe("http://localhost:4321/play/liars-dice?code=2A3B4");
   });
 
+  it("scan-code-btn initializes QRScannerController and triggers start on click", () => {
+    let scanClickHandler: (() => void) | null = null;
+    const mockScanBtn = {
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        if (event === "click") scanClickHandler = cb;
+      })
+    };
+
+    const elements: Record<string, any> = {
+      "scan-code-btn": mockScanBtn,
+      "qr-scanner-modal": createMockElement("qr-scanner-modal"),
+      "qr-video": createMockElement("qr-video"),
+      "qr-canvas-hidden": createMockElement("qr-canvas-hidden"),
+      "qr-scan-status": createMockElement("qr-scan-status"),
+      "qr-modal-close-btn": createMockElement("qr-modal-close-btn")
+    };
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => elements[id] ?? null,
+      createElement: () => createMockElement("div")
+    });
+
+    const app = new ConsoleApp();
+    app.setupUIHandlers();
+
+    expect(app.qrScanner).not.toBeNull();
+    expect(scanClickHandler).not.toBeNull();
+
+    const startSpy = vi.spyOn(app.qrScanner!, "start").mockResolvedValue(undefined);
+    scanClickHandler!();
+
+    expect(startSpy).toHaveBeenCalled();
+  });
+
   it("initGame() hides start screen and unhides add-players-btn", async () => {
     const elements: Record<string, ReturnType<typeof createMockElement>> = {
       "start-screen": createMockElement("start-screen"),

@@ -11,6 +11,7 @@ import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
 import { createPeerNotifier, type PeerNotifier } from "../utils/peerDeparture";
 import { createLogger } from "@utils/logger";
+import { QRScannerController } from "@utils/qrScannerController";
 
 const logger = createLogger("ConsoleHost");
 
@@ -115,6 +116,7 @@ export class ConsoleApp {
   private reconnectAttempt = 0;
   maxPlayers: number | null = null;
   modal: HTMLDialogElement | null = null;
+  qrScanner: QRScannerController | null = null;
   gameLoop: { stop: () => void } | null = null;
   activeGame: ConsoleGameInstance | null = null;
   pendingKickTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -280,6 +282,26 @@ export class ConsoleApp {
       });
     }
 
+    const scanBtn = document.getElementById("scan-code-btn");
+    const qrModal = document.getElementById("qr-scanner-modal") as HTMLDialogElement | null;
+    const qrVideo = document.getElementById("qr-video") as HTMLVideoElement | null;
+    const qrCanvas = document.getElementById("qr-canvas-hidden") as HTMLCanvasElement | null;
+    const qrStatus = document.getElementById("qr-scan-status");
+    const qrCloseBtn = document.getElementById("qr-modal-close-btn");
+
+    if (scanBtn && qrModal && qrVideo && qrCanvas && qrStatus && qrCloseBtn) {
+      this.qrScanner = new QRScannerController({
+        modalEl: qrModal,
+        videoEl: qrVideo,
+        canvasEl: qrCanvas,
+        statusEl: qrStatus,
+        closeBtnEl: qrCloseBtn,
+      });
+
+      scanBtn.addEventListener("click", () => {
+        this.qrScanner?.start();
+      });
+    }
   }
 
   openModal() {
