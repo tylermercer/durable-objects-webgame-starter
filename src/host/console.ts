@@ -5,10 +5,11 @@ import { generateRoomCode } from "../utils/generateRoomCode";
 import { createFixedTickLoop } from "../utils/gameLoop";
 import type { GameTransport, TouchMessage, TransportMode } from "../transport/transport";
 import { ConnectionOrchestrator } from "../transport/connectionOrchestrator";
-import { loadConsoleGame, getGameMaxPlayers } from "../contract/gameSource";
+import { loadConsoleGame, getGameControllerTypes } from "../contract/gameSource";
+import { LocalGamepadTransport } from "../transport/gamepad-transport";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
-import type { ConsoleGameInstance, ControllerPeer, ViewportSize } from "../contract/gameTypes";
+import type { ConsoleGameInstance, ConsoleGameModule, ControllerPeer, ViewportSize } from "../contract/gameTypes";
 import { createPeerNotifier, type PeerNotifier } from "../utils/peerDeparture";
 import { createLogger } from "@utils/logger";
 import { QRScannerController } from "@utils/qrScannerController";
@@ -114,7 +115,7 @@ export class ConsoleApp {
   api: RpcStub<ConsoleApi> | null = null;
   reconnectTimer: number | null = null;
   private reconnectAttempt = 0;
-  maxPlayers: number | null = null;
+  controllerTypes: ConsoleGameModule["controllerTypes"] = null;
   modal: HTMLDialogElement | null = null;
   qrScanner: QRScannerController | null = null;
   gameLoop: { stop: () => void } | null = null;
@@ -145,14 +146,53 @@ export class ConsoleApp {
       }
     }
     this.code = code.toUpperCase();
-    this.maxPlayers = getGameMaxPlayers() ?? null;
-    logger.info(`ConsoleApp initialized with room code: ${this.code}, maxPlayers: ${this.maxPlayers ?? "unlimited"}`);
+    this.controllerTypes = getGameControllerTypes() ?? null;
+    logger.info(`ConsoleApp initialized with room code: ${this.code}, phoneMax: ${this.phoneMax ?? "unlimited"}, acceptsGamepads: ${this.acceptsGamepads()}`);
+  }
+
+  private get phoneMax(): number | null {
+    return this.controllerTypes?.phone?.max ?? null;
+  }
+
+  private acceptsGamepads(): boolean {
+    return !!this.controllerTypes?.gamepad;
   }
 
   async init() {
     this.setupUIHandlers();
+    this.setupGamepadListeners();
     this.renderHeader();
     this.connectSignaling();
+  }
+
+  private setupGamepadListeners() {
+    if (typeof window === "undefined") return;
+
+    window.addEventListener("gamepadconnected", (e: GamepadEvent) => {
+      if (!this.acceptsGamepads()) return;
+      const id = `gamepad-${e.gamepad.index}`;
+      if (this.controllers.has(id)) return;
+
+      const controller: ControllerState = {
+        id,
+        name: `Gamepad ${e.gamepad.index + 1}`,
+        color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
+        isFirstPlayer: false,
+        pc: new LocalGamepadTransport(e.gamepad.index),
+        orchestrator: null,
+        state: "live",
+        status: "live",
+        signalingConnected: true,
+      };
+      this.controllers.set(id, controller);
+      this.peerNotifier.notifyJoined(controller);
+      this.peerNotifier.notifyReady(controller);
+      this.updateControllerUI();
+    });
+
+    window.addEventListener("gamepaddisconnected", (e: GamepadEvent) => {
+      this.removeController(`gamepad-${e.gamepad.index}`);
+    });
   }
 
   private ensureResizeObserver() {
@@ -192,8 +232,15 @@ export class ConsoleApp {
       const rect = surface ? surface.getBoundingClientRect() : { width: 800, height: 600 };
 
       const gameMod = await loadConsoleGame();
-      if (gameMod && typeof (gameMod as any).maxPlayers === "number") {
-        this.maxPlayers = (gameMod as any).maxPlayers;
+      if (gameMod && gameMod.controllerTypes !== undefined) {
+        this.controllerTypes = gameMod.controllerTypes;
+      }
+      if (!this.acceptsGamepads()) {
+        for (const [id] of Array.from(this.controllers.entries())) {
+          if (id.startsWith("gamepad-")) {
+            this.removeController(id);
+          }
+        }
       }
       const { createGame } = gameMod;
       this.activeGame = createGame({
@@ -377,7 +424,7 @@ export class ConsoleApp {
 
       const callbacks = new ConsoleCallbacksHandler(this);
       const token = this.getConsoleToken();
-      this.api.join(callbacks, token, undefined, this.maxPlayers ?? undefined).then(res => {
+      this.api.join(callbacks, token, undefined, this.phoneMax ?? undefined).then(res => {
         this.reconnectAttempt = 0;
         logger.info(`Console joined signaling session for room ${this.code}. Controllers connected: ${res?.controllers?.length ?? 0}`);
         if (res) {
@@ -604,8 +651,8 @@ export class ConsoleApp {
     const noticeEl = document.getElementById("room-full-notice");
 
     if (badgeEl) {
-      if (this.maxPlayers !== null) {
-        badgeEl.textContent = `Limit: ${this.controllers.size}/${this.maxPlayers}`;
+      if (this.phoneMax !== null) {
+        badgeEl.textContent = `Limit: ${this.controllers.size}/${this.phoneMax}`;
         badgeEl.classList.remove("u-hidden");
       } else {
         badgeEl.classList.add("u-hidden");
@@ -613,8 +660,8 @@ export class ConsoleApp {
     }
 
     if (noticeEl) {
-      if (this.maxPlayers !== null && this.controllers.size >= this.maxPlayers) {
-        noticeEl.textContent = `Player limit reached (${this.controllers.size}/${this.maxPlayers})`;
+      if (this.phoneMax !== null && this.controllers.size >= this.phoneMax) {
+        noticeEl.textContent = `Player limit reached (${this.controllers.size}/${this.phoneMax})`;
         noticeEl.classList.remove("u-hidden");
       } else {
         noticeEl.classList.add("u-hidden");
@@ -658,7 +705,7 @@ export class ConsoleApp {
 
       const badge = document.createElement("span");
       badge.className = `status-badge status-${controller.status}`;
-      badge.textContent = controller.status === "live-relay" ? "relay" : controller.status;
+      badge.textContent = controller.pc?.mode === "local" ? "local" : controller.status === "live-relay" ? "relay" : controller.status;
 
       const kickBtn = document.createElement("button");
       kickBtn.className = "btn-kick-controller";
