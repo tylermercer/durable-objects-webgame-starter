@@ -11,12 +11,18 @@ import {
   isPlayerInStartZone,
   stepLobbyCountdown,
   findWalkableSpawnPos,
+  handlePlayerFiring,
+  stepProjectiles,
+  checkPlayerMonsterCollisions,
+  spawnPlayersInBottom,
+  spawnWaveMonsters,
+  stepRoom,
   START_ZONE,
   ROOM_WIDTH,
   ROOM_HEIGHT,
 } from "./room";
 import { EntityRegistry } from "@utils/entityRegistry";
-import type { DungeonEntity, NpcEntity, PlayerEntity } from "./types";
+import type { DungeonEntity, NpcEntity, PlayerEntity, ProjectileEntity } from "./types";
 import { createRng } from "@utils/rng";
 
 describe("Grid Dungeon room simulation", () => {
@@ -212,6 +218,8 @@ describe("Grid Dungeon room simulation", () => {
       y: 1.5,
       currentPath: [],
       wanderTimer: 0, // Trigger path search immediately
+      hp: 5,
+      maxHp: 5,
     };
 
     stepNpcWander(npc, grid, 0.1, rng);
@@ -237,6 +245,8 @@ describe("Grid Dungeon room simulation", () => {
       y: 1.5,
       currentPath: [],
       wanderTimer: 0,
+      hp: 5,
+      maxHp: 5,
     };
 
     stepNpcWanderFree(npc, grid, 0.1, rng);
@@ -261,6 +271,8 @@ describe("Grid Dungeon room simulation", () => {
       y: 1.5,
       currentPath: [],
       wanderTimer: 0,
+      hp: 5,
+      maxHp: 5,
     };
 
     // Run multiple wander cycles to sample various generated paths
@@ -284,5 +296,126 @@ describe("Grid Dungeon room simulation", () => {
         }
       }
     }
+  });
+
+  it("fires projectiles towards the nearest monster every 500ms when firing is held", () => {
+    const registry = new EntityRegistry<DungeonEntity>();
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "P1", color: "#f00", x: 2.5, y: 12.5 };
+    const npcNear: NpcEntity = { id: "npc1", kind: "npc", name: "Near", color: "#0f0", x: 2.5, y: 2.5, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+    const npcFar: NpcEntity = { id: "npc2", kind: "npc", name: "Far", color: "#00f", x: 18.5, y: 2.5, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+
+    registry.add(player);
+    registry.add(npcNear);
+    registry.add(npcFar);
+
+    // Initial press fires first projectile immediately towards nearest monster (npcNear)
+    handlePlayerFiring(player, true, registry, [npcNear, npcFar], 0.1);
+    let projectiles = registry.query((e) => e.kind === "projectile") as ProjectileEntity[];
+    expect(projectiles.length).toBe(1);
+    expect(player.fireCooldown).toBe(0.5);
+
+    // Direction should point upwards towards npcNear (y: 2.5)
+    const proj1 = projectiles[0];
+    expect(proj1.vy).toBeLessThan(0); // Moving up towards y=2.5
+
+    // Second tick within 500ms cooldown should NOT fire
+    handlePlayerFiring(player, true, registry, [npcNear, npcFar], 0.2);
+    projectiles = registry.query((e) => e.kind === "projectile") as ProjectileEntity[];
+    expect(projectiles.length).toBe(1);
+
+    // Advance remaining cooldown time (0.3s)
+    handlePlayerFiring(player, true, registry, [npcNear, npcFar], 0.3);
+    projectiles = registry.query((e) => e.kind === "projectile") as ProjectileEntity[];
+    expect(projectiles.length).toBe(2);
+  });
+
+  it("causes monster to disappear after receiving 5 projectile hits", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const monster: NpcEntity = { id: "m1", kind: "npc", name: "Goblin", color: "#2ecc40", x: 5.5, y: 5.5, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+    registry.add(monster);
+
+    for (let hit = 1; hit <= 5; hit++) {
+      const proj: ProjectileEntity = { id: `p${hit}`, kind: "projectile", x: 5.5, y: 5.5, vx: 0, vy: 0, playerId: "p1" };
+      registry.add(proj);
+      stepProjectiles(registry, grid, 0.01);
+
+      if (hit < 5) {
+        expect(monster.hp).toBe(5 - hit);
+        expect(registry.get("m1")).toBeDefined();
+      } else {
+        expect(registry.get("m1")).toBeUndefined(); // Monster removed after 5th hit!
+      }
+    }
+  });
+
+  it("deducts a life when player touches monster and gives temporary invulnerability", () => {
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 5.0 };
+    const monster: NpcEntity = { id: "m1", kind: "npc", name: "Orc", color: "#0f0", x: 5.2, y: 5.0, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+
+    let isHit = checkPlayerMonsterCollisions([player], [monster], 0.1);
+    expect(isHit).toBe(true);
+    expect(player.damageCooldown).toBe(1.5);
+
+    // Second check while damageCooldown > 0 should not trigger hit
+    isHit = checkPlayerMonsterCollisions([player], [monster], 0.1);
+    expect(isHit).toBe(false);
+  });
+
+  it("handles Game Over transition to lobby when lives reach 0, recording survived waves", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(999);
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 5.0 };
+    const monster: NpcEntity = { id: "m1", kind: "npc", name: "Orc", color: "#0f0", x: 5.2, y: 5.0, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+    registry.add(player);
+    registry.add(monster);
+
+    const inputs = new Map();
+    inputs.set("p1", { x: 0, y: 0 });
+
+    const result = stepRoom(grid, registry, inputs, 0.1, rng, {
+      phase: "dungeon",
+      wave: 3,
+      lives: 1,
+      gameOverSurvivedWaves: null,
+    });
+
+    expect(result.phase).toBe("lobby");
+    expect(result.gameOverSurvivedWaves).toBe(2); // Wave 3 failed -> Survived 2 waves
+    expect(registry.get("m1")).toBeUndefined(); // Monster cleared on game over
+  });
+
+  it("advances to new wave with +1 monster when all monsters are defeated, spawning players at bottom and monsters at top", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(777);
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 12.0 };
+    registry.add(player);
+
+    const inputs = new Map();
+
+    // Step room when no monsters remain -> triggers Wave 1 completion -> Wave 2 start
+    const result = stepRoom(grid, registry, inputs, 0.1, rng, {
+      phase: "dungeon",
+      wave: 1,
+      lives: 3,
+      gameOverSurvivedWaves: null,
+    });
+
+    expect(result.wave).toBe(2);
+    const spawnedMonsters = registry.query((e) => e.kind === "npc") as NpcEntity[];
+    expect(spawnedMonsters.length).toBe(3); // Wave 2 has 2 + 1 = 3 monsters
+
+    // Verify monsters spawned in top half (y < 7.5)
+    for (const m of spawnedMonsters) {
+      expect(m.y).toBeLessThan(7.5);
+      expect(m.hp).toBe(5);
+    }
+
+    // Verify player spawned in bottom half (y >= 7.5)
+    expect(player.y).toBeGreaterThanOrEqual(7.5);
   });
 });
