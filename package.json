@@ -7,11 +7,14 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "vitest run"
+    "test": "vitest run",
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.4",
     "@astrojs/markdown-remark": "^7.2.4",
+    "@capacitor/core": "^8.5.1",
     "@radix-ui/colors": "^3.0.0",
     "astro": "^7.2.6",
     "bezier-easing": "^2.1.0",
@@ -34,6 +37,8 @@
   },
   "devDependencies": {
     "@astrojs/react": "^6.0.4",
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
     "@cloudflare/workers-types": "^5.20260825.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",

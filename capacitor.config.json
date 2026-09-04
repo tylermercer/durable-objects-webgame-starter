@@ -1,0 +1,9 @@
+{
+  "appId": "com.webgame.controller",
+  "appName": "WebGame Controller",
+  "webDir": "dist/client",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
