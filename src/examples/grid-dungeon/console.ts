@@ -8,13 +8,14 @@ import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createLobbyGrid,
   createDungeonGrid,
-  createDungeonNpcs,
   createInitialEntities,
   syncPlayers,
   stepRoom,
   movePlayer,
   stepLobbyCountdown,
   findWalkableSpawnPos,
+  spawnPlayersInBottom,
+  spawnWaveMonsters,
   ROOM_WIDTH,
   ROOM_HEIGHT,
   TILE_SIZE,
@@ -22,7 +23,15 @@ import {
   DUNGEON_LAYOUT,
   START_ZONE,
 } from "./room";
-import type { DungeonEntity, GamePhase, JoystickState, NpcEntity, PlayerEntity, RoomStateSnapshot } from "./types";
+import type {
+  DungeonEntity,
+  GamePhase,
+  JoystickState,
+  NpcEntity,
+  PlayerEntity,
+  ProjectileEntity,
+  RoomStateSnapshot,
+} from "./types";
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Create dedicated canvas
@@ -49,6 +58,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   let phase: GamePhase = "lobby";
   let countdown: number | null = null;
+  let wave = 1;
+  let lives = 3;
+  let gameOverSurvivedWaves: number | null = null;
 
   const lobbyGrid = createLobbyGrid();
   const dungeonGrid = createDungeonGrid();
@@ -61,7 +73,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function handlePeerReady(peer: ControllerPeer) {
     if (!registry.get(peer.id)) {
       const preferredX = phase === "lobby" ? 2.5 : 1.5;
-      const preferredY = phase === "lobby" ? 2.5 : 1.5;
+      const preferredY = phase === "lobby" ? 2.5 : 12.5;
       const spawnPos = findWalkableSpawnPos(activeGrid, preferredX, preferredY);
       const player: PlayerEntity = {
         id: peer.id,
@@ -111,6 +123,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Load saved state if available
   interface SavedState {
     phase?: GamePhase;
+    wave?: number;
+    lives?: number;
+    gameOverSurvivedWaves?: number | null;
     entities?: DungeonEntity[];
   }
   const saved = loadLocalGameState<SavedState | DungeonEntity[]>(ctx.roomCode);
@@ -119,6 +134,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
     } else if (saved.entities) {
       if (saved.phase) phase = saved.phase;
+      if (saved.wave) wave = saved.wave;
+      if (saved.lives) lives = saved.lives;
+      if (saved.gameOverSurvivedWaves !== undefined) gameOverSurvivedWaves = saved.gameOverSurvivedWaves;
       registry = EntityRegistry.fromJSON<DungeonEntity>(saved.entities);
     }
   }
@@ -127,6 +145,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function persistState() {
     saveLocalGameState(ctx.roomCode, {
       phase,
+      wave,
+      lives,
+      gameOverSurvivedWaves,
       entities: registry.toJSON(),
     });
   }
@@ -137,9 +158,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       countdown,
       players: registry.query((e) => e.kind === "player") as PlayerEntity[],
       npcs: registry.query((e) => e.kind === "npc") as NpcEntity[],
+      projectiles: registry.query((e) => e.kind === "projectile") as ProjectileEntity[],
       gridWidth: ROOM_WIDTH,
       gridHeight: ROOM_HEIGHT,
       tileSize: TILE_SIZE,
+      wave,
+      lives,
+      gameOverSurvivedWaves,
     };
   }
 
@@ -188,28 +213,47 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           phase = "dungeon";
           countdown = null;
           activeGrid = dungeonGrid;
+          wave = 1;
+          lives = 3;
+          gameOverSurvivedWaves = null;
 
-          // Teleport players to dungeon spawn points
+          // Teleport players along bottom of screen
+          spawnPlayersInBottom(players, dungeonGrid);
+
+          // Clear old npcs & projectiles, then spawn wave 1 monsters in top half
+          const toRemove = registry.query((e) => e.kind === "npc" || e.kind === "projectile");
+          for (const entity of toRemove) {
+            registry.remove(entity.id);
+          }
+          spawnWaveMonsters(1, dungeonGrid, registry, rng);
+        }
+      } else {
+        const newState = stepRoom(activeGrid, registry, joystickInputs, dt, rng, {
+          phase,
+          wave,
+          lives,
+          gameOverSurvivedWaves,
+        });
+
+        if (phase === "dungeon" && newState.phase === "lobby") {
+          // Game Over return to lobby
+          activeGrid = lobbyGrid;
+          const dungeonPlayers = registry.query((e) => e.kind === "player") as PlayerEntity[];
           let idx = 0;
-          for (const player of players) {
-            const targetX = 1.5 + (idx % 3) * 0.5;
-            const targetY = 1.5 + Math.floor(idx / 3) * 0.5;
-            const spawnPos = findWalkableSpawnPos(dungeonGrid, targetX, targetY);
+          for (const player of dungeonPlayers) {
+            const targetX = 2.5 + (idx % 3) * 0.5;
+            const targetY = 2.5 + Math.floor(idx / 3) * 0.5;
+            const spawnPos = findWalkableSpawnPos(lobbyGrid, targetX, targetY);
             player.x = spawnPos.x;
             player.y = spawnPos.y;
             idx++;
           }
-
-          // Spawn dungeon NPCs if needed
-          if (!registry.get("npc-goblin") && !registry.get("npc-skeleton")) {
-            const npcs = createDungeonNpcs();
-            for (const npc of npcs) {
-              registry.add(npc);
-            }
-          }
         }
-      } else {
-        stepRoom(activeGrid, registry, joystickInputs, dt, rng);
+
+        phase = newState.phase;
+        wave = newState.wave;
+        lives = newState.lives;
+        gameOverSurvivedWaves = newState.gameOverSurvivedWaves;
       }
 
       // Camera follow target: average position of all active players
@@ -315,6 +359,28 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     const viewport = camera.getViewport();
 
+    // Render Projectiles
+    const projectiles = registry.query((e) => e.kind === "projectile") as ProjectileEntity[];
+    for (const proj of projectiles) {
+      const projWorldX = proj.x * TILE_SIZE;
+      const projWorldY = proj.y * TILE_SIZE;
+
+      if (
+        projWorldX >= viewport.x - 10 &&
+        projWorldX <= viewport.x + viewport.width + 10 &&
+        projWorldY >= viewport.y - 10 &&
+        projWorldY <= viewport.y + viewport.height + 10
+      ) {
+        canvasCtx.fillStyle = "#ffdc00";
+        canvasCtx.beginPath();
+        canvasCtx.arc(projWorldX, projWorldY, 5, 0, Math.PI * 2);
+        canvasCtx.fill();
+        canvasCtx.strokeStyle = "#ffffff";
+        canvasCtx.lineWidth = 1.5;
+        canvasCtx.stroke();
+      }
+    }
+
     // Render NPCs (only if inside viewport)
     const npcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
     for (const npc of npcs) {
@@ -350,10 +416,27 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         canvasCtx.lineWidth = 2;
         canvasCtx.stroke();
 
+        // Render HP Bar
+        const barW = TILE_SIZE * 0.8;
+        const barH = 5;
+        const barX = npcWorldX - barW / 2;
+        const barY = npcWorldY - radius - 16;
+
+        canvasCtx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        canvasCtx.fillRect(barX, barY, barW, barH);
+
+        const hpRatio = Math.max(0, npc.hp / npc.maxHp);
+        canvasCtx.fillStyle = hpRatio > 0.4 ? "#2ecc40" : "#ff4136";
+        canvasCtx.fillRect(barX, barY, barW * hpRatio, barH);
+
+        canvasCtx.strokeStyle = "#000000";
+        canvasCtx.lineWidth = 1;
+        canvasCtx.strokeRect(barX, barY, barW, barH);
+
         canvasCtx.fillStyle = "#ffffff";
         canvasCtx.font = "bold 12px sans-serif";
         canvasCtx.textAlign = "center";
-        canvasCtx.fillText(npc.name, npcWorldX, npcWorldY - radius - 4);
+        canvasCtx.fillText(npc.name, npcWorldX, barY - 4);
       }
     }
 
@@ -364,13 +447,16 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       const pWorldY = player.y * TILE_SIZE;
       const radius = TILE_SIZE * 0.35;
 
-      canvasCtx.fillStyle = player.color;
-      canvasCtx.beginPath();
-      canvasCtx.arc(pWorldX, pWorldY, radius, 0, Math.PI * 2);
-      canvasCtx.fill();
-      canvasCtx.strokeStyle = "#ffffff";
-      canvasCtx.lineWidth = 3;
-      canvasCtx.stroke();
+      const isInvulnerable = player.damageCooldown && player.damageCooldown > 0;
+      if (!isInvulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
+        canvasCtx.fillStyle = player.color;
+        canvasCtx.beginPath();
+        canvasCtx.arc(pWorldX, pWorldY, radius, 0, Math.PI * 2);
+        canvasCtx.fill();
+        canvasCtx.strokeStyle = isInvulnerable ? "#ffdc00" : "#ffffff";
+        canvasCtx.lineWidth = 3;
+        canvasCtx.stroke();
+      }
 
       canvasCtx.fillStyle = "#ffffff";
       canvasCtx.font = "bold 14px sans-serif";
@@ -385,14 +471,18 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     canvasCtx.save();
     canvasCtx.scale(hudScale, hudScale);
     canvasCtx.fillStyle = "#000000";
-    canvasCtx.globalAlpha = 0.6;
-    canvasCtx.fillRect(10, 10, 240, 36);
+    canvasCtx.globalAlpha = 0.65;
+    canvasCtx.fillRect(10, 10, 300, 36);
     canvasCtx.globalAlpha = 1.0;
     canvasCtx.fillStyle = "#ffdc00";
     canvasCtx.font = "bold 14px sans-serif";
     canvasCtx.textAlign = "left";
-    const modeLabel = phase === "lobby" ? "Lobby" : "Dungeon";
-    canvasCtx.fillText(`${modeLabel} | Players: ${players.length}`, 20, 33);
+
+    if (phase === "dungeon") {
+      canvasCtx.fillText(`Wave ${wave} | Lives: ${lives} | Players: ${players.length}`, 20, 33);
+    } else {
+      canvasCtx.fillText(`Lobby | Players: ${players.length}`, 20, 33);
+    }
 
     // Render Countdown Overlay if counting down in lobby
     if (phase === "lobby" && countdown !== null) {
@@ -416,6 +506,29 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       canvasCtx.fillStyle = "#ffffff";
       canvasCtx.font = "bold 26px sans-serif";
       canvasCtx.fillText(`${secondsLeft}`, currentViewportSize.width / 2, boxY + 54);
+    }
+
+    // Render Game Over Banner in Lobby
+    if (phase === "lobby" && gameOverSurvivedWaves !== null && countdown === null) {
+      const boxW = 380;
+      const boxH = 54;
+      const boxX = (currentViewportSize.width - boxW) / 2;
+      const boxY = 20;
+
+      canvasCtx.fillStyle = "rgba(200, 30, 30, 0.9)";
+      canvasCtx.fillRect(boxX, boxY, boxW, boxH);
+      canvasCtx.strokeStyle = "#ffdc00";
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeRect(boxX, boxY, boxW, boxH);
+
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 18px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.fillText(
+        `GAME OVER - SURVIVED ${gameOverSurvivedWaves} WAVE${gameOverSurvivedWaves === 1 ? "" : "S"}`,
+        currentViewportSize.width / 2,
+        boxY + 33
+      );
     }
 
     canvasCtx.restore();
