@@ -77,7 +77,16 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
   const unsubscribeControl = ctx.peerConnection?.addControlListener((msg) => {
     const dMsg = msg as unknown as DungeonControlMessage;
     if (dMsg.type === "roomState" && dMsg.snapshot) {
-      statusText.textContent = `Dungeon Explorer (${dMsg.snapshot.players.length} active)`;
+      const snap = dMsg.snapshot;
+      if (snap.phase === "lobby") {
+        if (snap.countdown !== null) {
+          statusText.textContent = `Starting in ${Math.ceil(snap.countdown)}...`;
+        } else {
+          statusText.textContent = `Lobby - Stand in start area (${snap.players.length} active)`;
+        }
+      } else {
+        statusText.textContent = `Dungeon Explorer (${snap.players.length} active)`;
+      }
     }
   });
 

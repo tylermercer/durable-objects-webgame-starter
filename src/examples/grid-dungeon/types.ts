@@ -29,7 +29,18 @@ export interface JoystickState {
   y: number;
 }
 
+export type GamePhase = "lobby" | "dungeon";
+
+export interface StartZone {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 export interface RoomStateSnapshot {
+  phase: GamePhase;
+  countdown: number | null;
   players: PlayerEntity[];
   npcs: NpcEntity[];
   gridWidth: number;

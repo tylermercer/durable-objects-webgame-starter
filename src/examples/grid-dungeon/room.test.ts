@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
+  createLobbyGrid,
+  createDungeonGrid,
   createRoomGrid,
   createInitialEntities,
   syncPlayers,
   movePlayer,
   stepNpcWander,
   stepNpcWanderFree,
+  isPlayerInStartZone,
+  stepLobbyCountdown,
+  START_ZONE,
   ROOM_WIDTH,
   ROOM_HEIGHT,
 } from "./room";
@@ -27,6 +32,54 @@ describe("Grid Dungeon room simulation", () => {
 
     // Check interior cell (1, 1) is walkable
     expect(grid.get({ x: 1, y: 1 })?.walkable).toBe(true);
+  });
+
+  it("identifies when player is standing inside or outside START_ZONE", () => {
+    const player: PlayerEntity = {
+      id: "p1",
+      kind: "player",
+      name: "Alice",
+      color: "#ff0000",
+      x: START_ZONE.minX + 0.5,
+      y: START_ZONE.minY + 0.5,
+    };
+
+    expect(isPlayerInStartZone(player)).toBe(true);
+
+    player.x = START_ZONE.minX - 1.0;
+    expect(isPlayerInStartZone(player)).toBe(false);
+  });
+
+  it("handles lobby countdown: starts when all stand, decrements, triggers transition at 0", () => {
+    const p1: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 8.5, y: 6.5 };
+    const p2: PlayerEntity = { id: "p2", kind: "player", name: "Bob", color: "#0f0", x: 9.5, y: 7.5 };
+
+    // Initially both in start zone
+    let result = stepLobbyCountdown([p1, p2], null, 0.1);
+    expect(result.nextCountdown).toBeCloseTo(4.9);
+    expect(result.shouldTransition).toBe(false);
+
+    // Continue tick to 0
+    result = stepLobbyCountdown([p1, p2], 0.1, 0.1);
+    expect(result.nextCountdown).toBe(0);
+    expect(result.shouldTransition).toBe(true);
+  });
+
+  it("stops and resets lobby countdown when a player steps off start zone", () => {
+    const p1: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 8.5, y: 6.5 };
+    const p2: PlayerEntity = { id: "p2", kind: "player", name: "Bob", color: "#0f0", x: 9.5, y: 7.5 };
+
+    // Countdown active at 3.0
+    let result = stepLobbyCountdown([p1, p2], 3.0, 0.1);
+    expect(result.nextCountdown).toBeCloseTo(2.9);
+
+    // p2 steps off start zone
+    p2.x = 2.5;
+    p2.y = 2.5;
+
+    result = stepLobbyCountdown([p1, p2], 2.9, 0.1);
+    expect(result.nextCountdown).toBeNull();
+    expect(result.shouldTransition).toBe(false);
   });
 
   it("retains player entities across rejoin and updates player metadata in syncPlayers", () => {

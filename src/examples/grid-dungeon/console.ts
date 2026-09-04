@@ -6,16 +6,22 @@ import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
 import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
-  createRoomGrid,
+  createLobbyGrid,
+  createDungeonGrid,
+  createDungeonNpcs,
   createInitialEntities,
   syncPlayers,
   stepRoom,
+  movePlayer,
+  stepLobbyCountdown,
   ROOM_WIDTH,
   ROOM_HEIGHT,
   TILE_SIZE,
-  RAW_LAYOUT,
+  LOBBY_LAYOUT,
+  DUNGEON_LAYOUT,
+  START_ZONE,
 } from "./room";
-import type { DungeonEntity, JoystickState, NpcEntity, PlayerEntity, RoomStateSnapshot } from "./types";
+import type { DungeonEntity, GamePhase, JoystickState, NpcEntity, PlayerEntity, RoomStateSnapshot } from "./types";
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Create dedicated canvas
@@ -40,20 +46,28 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   resizeCanvas(ctx.viewport.initialSize);
   const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
-  const grid = createRoomGrid();
-  let registry = createInitialEntities();
+  let phase: GamePhase = "lobby";
+  let countdown: number | null = null;
+
+  const lobbyGrid = createLobbyGrid();
+  const dungeonGrid = createDungeonGrid();
+  let activeGrid = lobbyGrid;
+
+  let registry = createInitialEntities(phase);
   const joystickInputs = new Map<string, JoystickState>();
   const rng = createRng(Math.floor(Math.random() * 2147483647));
 
   function handlePeerReady(peer: ControllerPeer) {
     if (!registry.get(peer.id)) {
+      const spawnX = phase === "lobby" ? 3.5 : 1.5;
+      const spawnY = phase === "lobby" ? 3.5 : 1.5;
       const player: PlayerEntity = {
         id: peer.id,
         kind: "player",
         name: peer.name,
         color: peer.color,
-        x: 1.5,
-        y: 1.5,
+        x: spawnX,
+        y: spawnY,
       };
       registry.add(player);
     }
@@ -93,17 +107,32 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   });
 
   // Load saved state if available
-  const saved = loadLocalGameState<DungeonEntity[]>(ctx.roomCode);
-  if (saved && Array.isArray(saved)) {
-    registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
+  interface SavedState {
+    phase?: GamePhase;
+    entities?: DungeonEntity[];
   }
+  const saved = loadLocalGameState<SavedState | DungeonEntity[]>(ctx.roomCode);
+  if (saved) {
+    if (Array.isArray(saved)) {
+      registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
+    } else if (saved.entities) {
+      if (saved.phase) phase = saved.phase;
+      registry = EntityRegistry.fromJSON<DungeonEntity>(saved.entities);
+    }
+  }
+  activeGrid = phase === "lobby" ? lobbyGrid : dungeonGrid;
 
   function persistState() {
-    saveLocalGameState(ctx.roomCode, registry.toJSON());
+    saveLocalGameState(ctx.roomCode, {
+      phase,
+      entities: registry.toJSON(),
+    });
   }
 
   function getSnapshot(): RoomStateSnapshot {
     return {
+      phase,
+      countdown,
       players: registry.query((e) => e.kind === "player") as PlayerEntity[],
       npcs: registry.query((e) => e.kind === "npc") as NpcEntity[],
       gridWidth: ROOM_WIDTH,
@@ -142,7 +171,41 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     tickRate: 60,
     onTick: (dt) => {
       syncPeers();
-      stepRoom(grid, registry, joystickInputs, dt, rng);
+
+      if (phase === "lobby") {
+        const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
+        for (const player of players) {
+          const input = joystickInputs.get(player.id) ?? { x: 0, y: 0 };
+          movePlayer(player, activeGrid, input, dt);
+        }
+
+        const result = stepLobbyCountdown(players, countdown, dt);
+        countdown = result.nextCountdown;
+
+        if (result.shouldTransition) {
+          phase = "dungeon";
+          countdown = null;
+          activeGrid = dungeonGrid;
+
+          // Teleport players to dungeon spawn points
+          let idx = 0;
+          for (const player of players) {
+            player.x = 1.5 + (idx % 3) * 0.5;
+            player.y = 1.5 + Math.floor(idx / 3) * 0.5;
+            idx++;
+          }
+
+          // Spawn dungeon NPCs if needed
+          if (!registry.get("npc-goblin") && !registry.get("npc-skeleton")) {
+            const npcs = createDungeonNpcs();
+            for (const npc of npcs) {
+              registry.add(npc);
+            }
+          }
+        }
+      } else {
+        stepRoom(activeGrid, registry, joystickInputs, dt, rng);
+      }
 
       // Camera follow target: average position of all active players
       const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
@@ -181,10 +244,12 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     canvasCtx.scale(scale, scale);
     canvasCtx.translate(-camera.x, -camera.y);
 
+    const currentLayout = phase === "lobby" ? LOBBY_LAYOUT : DUNGEON_LAYOUT;
+
     // Render floor & wall tiles
     for (let y = 0; y < ROOM_HEIGHT; y++) {
       for (let x = 0; x < ROOM_WIDTH; x++) {
-        const isWall = RAW_LAYOUT[y][x] === 1;
+        const isWall = currentLayout[y][x] === 1;
         const screenX = x * TILE_SIZE;
         const screenY = y * TILE_SIZE;
 
@@ -195,10 +260,52 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           canvasCtx.lineWidth = 2;
           canvasCtx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
         } else {
-          canvasCtx.fillStyle = (x + y) % 2 === 0 ? "#3a3a48" : "#424252";
-          canvasCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          const isStartZoneTile =
+            phase === "lobby" &&
+            x >= START_ZONE.minX &&
+            x <= START_ZONE.maxX &&
+            y >= START_ZONE.minY &&
+            y <= START_ZONE.maxY;
+
+          if (isStartZoneTile) {
+            canvasCtx.fillStyle = "#5a4d20";
+            canvasCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          } else {
+            canvasCtx.fillStyle = (x + y) % 2 === 0 ? "#3a3a48" : "#424252";
+            canvasCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          }
         }
       }
+    }
+
+    // Render Start Zone floor outline and text label in Lobby
+    if (phase === "lobby") {
+      const szX = START_ZONE.minX * TILE_SIZE;
+      const szY = START_ZONE.minY * TILE_SIZE;
+      const szW = (START_ZONE.maxX - START_ZONE.minX + 1) * TILE_SIZE;
+      const szH = (START_ZONE.maxY - START_ZONE.minY + 1) * TILE_SIZE;
+
+      canvasCtx.strokeStyle = "#ffdc00";
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeRect(szX + 2, szY + 2, szW - 4, szH - 4);
+
+      const labelW = szW - 20;
+      const labelH = 28;
+      const labelX = szX + 10;
+      const labelY = szY + (szH - labelH) / 2;
+
+      canvasCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      canvasCtx.fillRect(labelX, labelY, labelW, labelH);
+      canvasCtx.strokeStyle = "#ffdc00";
+      canvasCtx.lineWidth = 1.5;
+      canvasCtx.strokeRect(labelX, labelY, labelW, labelH);
+
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 13px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.textBaseline = "middle";
+      canvasCtx.fillText("STAND HERE TO START", szX + szW / 2, labelY + labelH / 2);
+      canvasCtx.textBaseline = "alphabetic";
     }
 
     const viewport = camera.getViewport();
@@ -268,18 +375,44 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     canvasCtx.restore();
 
-    // Render HUD overlay (connected players count)
+    // Render HUD overlay
     const hudScale = Math.max(1, dpr);
     canvasCtx.save();
     canvasCtx.scale(hudScale, hudScale);
     canvasCtx.fillStyle = "#000000";
-    canvasCtx.globalAlpha = 0.5;
-    canvasCtx.fillRect(10, 10, 220, 36);
+    canvasCtx.globalAlpha = 0.6;
+    canvasCtx.fillRect(10, 10, 240, 36);
     canvasCtx.globalAlpha = 1.0;
     canvasCtx.fillStyle = "#ffdc00";
     canvasCtx.font = "bold 14px sans-serif";
     canvasCtx.textAlign = "left";
-    canvasCtx.fillText(`Players: ${players.length}`, 20, 33);
+    const modeLabel = phase === "lobby" ? "Lobby" : "Dungeon";
+    canvasCtx.fillText(`${modeLabel} | Players: ${players.length}`, 20, 33);
+
+    // Render Countdown Overlay if counting down in lobby
+    if (phase === "lobby" && countdown !== null) {
+      const secondsLeft = Math.ceil(countdown);
+      const boxW = 280;
+      const boxH = 64;
+      const boxX = (currentViewportSize.width - boxW) / 2;
+      const boxY = 20;
+
+      canvasCtx.fillStyle = "rgba(0, 0, 0, 0.85)";
+      canvasCtx.fillRect(boxX, boxY, boxW, boxH);
+      canvasCtx.strokeStyle = "#ffdc00";
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeRect(boxX, boxY, boxW, boxH);
+
+      canvasCtx.fillStyle = "#ffdc00";
+      canvasCtx.font = "bold 16px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.fillText("GAME STARTING IN", currentViewportSize.width / 2, boxY + 26);
+
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 26px sans-serif";
+      canvasCtx.fillText(`${secondsLeft}`, currentViewportSize.width / 2, boxY + 54);
+    }
+
     canvasCtx.restore();
   }
 
