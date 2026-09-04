@@ -15,6 +15,8 @@ on:
       - opened
       - synchronize
       - closed
+    paths-ignore:
+      - 'design-docs/**'
   workflow_dispatch: # Allows running this workflow manually
 
 jobs:
@@ -65,7 +67,7 @@ jobs:
       - name: Build site
         id: build_site
         env:
-          PUBLIC_COMMIT_HASH: ${{ github.sha }}
+          PUBLIC_COMMIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pnpm install --frozen-lockfile
           pnpm test
@@ -84,9 +86,10 @@ jobs:
           if [[ "${truncated_slugified_branch: -1}" == "-" ]]; then
             truncated_slugified_branch=${truncated_slugified_branch::-1}
           fi
+          commit_sha="${{ github.event.pull_request.head.sha || github.sha }}"
           echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "slugified_branch=${truncated_slugified_branch}" >> $GITHUB_OUTPUT
-          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "sha_short=${commit_sha:0:7}" >> $GITHUB_OUTPUT
           echo "datetime=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
 
       - name: Deploy to Cloudflare (main)
