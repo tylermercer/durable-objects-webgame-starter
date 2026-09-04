@@ -14,6 +14,7 @@ import {
   stepRoom,
   movePlayer,
   stepLobbyCountdown,
+  findWalkableSpawnPos,
   ROOM_WIDTH,
   ROOM_HEIGHT,
   TILE_SIZE,
@@ -59,15 +60,16 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function handlePeerReady(peer: ControllerPeer) {
     if (!registry.get(peer.id)) {
-      const spawnX = phase === "lobby" ? 3.5 : 1.5;
-      const spawnY = phase === "lobby" ? 3.5 : 1.5;
+      const preferredX = phase === "lobby" ? 2.5 : 1.5;
+      const preferredY = phase === "lobby" ? 2.5 : 1.5;
+      const spawnPos = findWalkableSpawnPos(activeGrid, preferredX, preferredY);
       const player: PlayerEntity = {
         id: peer.id,
         kind: "player",
         name: peer.name,
         color: peer.color,
-        x: spawnX,
-        y: spawnY,
+        x: spawnPos.x,
+        y: spawnPos.y,
       };
       registry.add(player);
     }
@@ -190,8 +192,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           // Teleport players to dungeon spawn points
           let idx = 0;
           for (const player of players) {
-            player.x = 1.5 + (idx % 3) * 0.5;
-            player.y = 1.5 + Math.floor(idx / 3) * 0.5;
+            const targetX = 1.5 + (idx % 3) * 0.5;
+            const targetY = 1.5 + Math.floor(idx / 3) * 0.5;
+            const spawnPos = findWalkableSpawnPos(dungeonGrid, targetX, targetY);
+            player.x = spawnPos.x;
+            player.y = spawnPos.y;
             idx++;
           }
 

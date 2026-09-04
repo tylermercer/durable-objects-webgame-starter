@@ -10,6 +10,7 @@ import {
   stepNpcWanderFree,
   isPlayerInStartZone,
   stepLobbyCountdown,
+  findWalkableSpawnPos,
   START_ZONE,
   ROOM_WIDTH,
   ROOM_HEIGHT,
@@ -32,6 +33,26 @@ describe("Grid Dungeon room simulation", () => {
 
     // Check interior cell (1, 1) is walkable
     expect(grid.get({ x: 1, y: 1 })?.walkable).toBe(true);
+  });
+
+  it("finds walkable spawn positions that do not land on wall tiles", () => {
+    const lobbyGrid = createLobbyGrid();
+    const dungeonGrid = createDungeonGrid();
+
+    // Default lobby spawn
+    const lobbySpawn = findWalkableSpawnPos(lobbyGrid, 2.5, 2.5);
+    const lobbyTile = { x: Math.floor(lobbySpawn.x), y: Math.floor(lobbySpawn.y) };
+    expect(lobbyGrid.get(lobbyTile)?.walkable).toBe(true);
+
+    // Default dungeon spawn
+    const dungeonSpawn = findWalkableSpawnPos(dungeonGrid, 1.5, 1.5);
+    const dungeonTile = { x: Math.floor(dungeonSpawn.x), y: Math.floor(dungeonSpawn.y) };
+    expect(dungeonGrid.get(dungeonTile)?.walkable).toBe(true);
+
+    // If preferred spawn is on a wall (e.g. tile (3, 3) in lobby grid), it redirects to walkable neighbor
+    const wallSpawn = findWalkableSpawnPos(lobbyGrid, 3.5, 3.5);
+    const wallTile = { x: Math.floor(wallSpawn.x), y: Math.floor(wallSpawn.y) };
+    expect(lobbyGrid.get(wallTile)?.walkable).toBe(true);
   });
 
   it("identifies when player is standing inside or outside START_ZONE", () => {

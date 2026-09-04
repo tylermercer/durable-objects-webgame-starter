@@ -176,6 +176,30 @@ export function isWalkablePos(grid: TileGrid<GridCell>, tileX: number, tileY: nu
   return cell !== undefined && cell.walkable;
 }
 
+export function findWalkableSpawnPos(
+  grid: TileGrid<GridCell>,
+  preferredX: number = 2.5,
+  preferredY: number = 2.5
+): { x: number; y: number } {
+  const tileX = Math.floor(preferredX);
+  const tileY = Math.floor(preferredY);
+  if (grid.get({ x: tileX, y: tileY })?.walkable) {
+    return { x: preferredX, y: preferredY };
+  }
+  for (let r = 1; r < Math.max(grid.width, grid.height); r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = tileX + dx;
+        const y = tileY + dy;
+        if (grid.get({ x, y })?.walkable) {
+          return { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+  }
+  return { x: 1.5, y: 1.5 };
+}
+
 export function movePlayer(
   player: PlayerEntity,
   grid: TileGrid<GridCell>,

@@ -37,3 +37,8 @@
 03:03:18 [vite] [GameSession] WebSocket connection upgrade requested for role: console
 03:03:18 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
 03:03:22 [vite] [GameSession] WebSocket closed for role: console, id: console
+20:28:55 [watch] src/examples/grid-dungeon/room.ts
+20:29:04 [watch] src/examples/grid-dungeon/console.ts
+20:30:15 [vite] [GameSession] WebSocket connection upgrade requested for role: console
+20:30:15 [vite] [GameSession] Console joined signaling session. Connected controllers count: 0
+20:30:19 [vite] [GameSession] WebSocket closed for role: console, id: console
