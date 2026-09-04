@@ -10,12 +10,16 @@ on:
   push: # Run on pushes to main
     branches:
       - main
+    paths-ignore:
+      - 'README.md'
+      - 'design-docs/**'
   pull_request: # Run on pull requests
     types:
       - opened
       - synchronize
       - closed
     paths-ignore:
+      - 'README.md'
       - 'design-docs/**'
   workflow_dispatch: # Allows running this workflow manually
 
@@ -89,6 +93,7 @@ jobs:
           commit_sha="${{ github.event.pull_request.head.sha || github.sha }}"
           echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "slugified_branch=${truncated_slugified_branch}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${commit_sha}" >> $GITHUB_OUTPUT
           echo "sha_short=${commit_sha:0:7}" >> $GITHUB_OUTPUT
           echo "datetime=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
 
@@ -120,7 +125,7 @@ jobs:
             | Name                    | Result |
             | ----------------------- | - |
             | **Preview URL**:        | https://${{ steps.extract_vars.outputs.slugified_branch }}-durable-objects-webgame-starter.tmercer.workers.dev |
-            | **Last commit:**        | `${{ steps.extract_vars.outputs.sha_short }}` |
+            | **Last commit:**        | [`${{ steps.extract_vars.outputs.sha_short }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ steps.extract_vars.outputs.commit_sha }}) |
             | **Deployed at**:        | `${{ steps.extract_vars.outputs.datetime }}` |
 
   cleanup-pr:
