@@ -55,9 +55,17 @@ export interface ControllerGameInstance {
   destroy?: () => void;
 }
 
+export interface ControllerTypeRange {
+  min?: number;
+  max?: number;
+}
+
 export interface ConsoleGameModule {
   createGame(ctx: ConsoleContext): ConsoleGameInstance;
-  maxPlayers?: number;
+  controllerTypes?: {
+    phone?: ControllerTypeRange;
+    gamepad?: ControllerTypeRange;
+  };
 }
 
 export interface ControllerGameModule {

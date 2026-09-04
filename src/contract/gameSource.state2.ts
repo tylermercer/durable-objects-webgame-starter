@@ -10,6 +10,6 @@ export function loadControllerGame() {
   return import("@logic/controller");
 }
 
-export function getGameMaxPlayers(): number | undefined {
+export function getGameControllerTypes() {
   return undefined;
 }

@@ -32,7 +32,7 @@ export class GameSession extends DurableObject {
   kickedTokens = new Set<string>();
   consoleToken: string | null = null;
   gracePeriodMs: number = DISCONNECT_GRACE_PERIOD_MS;
-  maxPlayers: number | null = null;
+  phoneMax: number | null = null;
   roomEmptySince: number | null = null;
   private nextPlayerNumber = 1;
   private currentFirstPlayerId: string | null = null;
@@ -71,8 +71,8 @@ export class GameSession extends DurableObject {
         if (grace) this.gracePeriodMs = grace;
       }
 
-      const maxP = await this.ctx.storage.get<number>("maxPlayers");
-      if (maxP !== undefined) this.maxPlayers = maxP;
+      const phoneM = await this.ctx.storage.get<number>("phoneMax") ?? await this.ctx.storage.get<number>("maxPlayers");
+      if (phoneM !== undefined) this.phoneMax = phoneM;
       const emptySince = await this.ctx.storage.get<number>("roomEmptySince");
       if (emptySince !== undefined) this.roomEmptySince = emptySince;
     }
@@ -207,7 +207,7 @@ export class GameSession extends DurableObject {
         this.kickedTokens = new Set();
         this.consoleToken = null;
         this.gracePeriodMs = DISCONNECT_GRACE_PERIOD_MS;
-        this.maxPlayers = null;
+        this.phoneMax = null;
         this.nextPlayerNumber = 1;
         this.currentFirstPlayerId = null;
         this.roomEmptySince = null;
@@ -226,7 +226,7 @@ export class GameSession extends DurableObject {
   private makeConsoleApi(ws: WebSocket): ConsoleApi {
     const self = this;
     return new (class extends RpcTarget implements ConsoleApi {
-      async join(callbacks: ConsoleCallbacks, consoleToken?: string, gracePeriodMs?: number, maxPlayers?: number) {
+      async join(callbacks: ConsoleCallbacks, consoleToken?: string, gracePeriodMs?: number, phoneMax?: number) {
         if (!self.consoleToken && self.ctx?.storage?.get) {
           self.consoleToken = (await self.ctx.storage.get<string>("consoleToken")) ?? null;
         }
@@ -248,14 +248,15 @@ export class GameSession extends DurableObject {
           await self.persistRejoinTokens();
         }
 
-        if (maxPlayers !== undefined && maxPlayers > 0) {
-          self.maxPlayers = maxPlayers;
+        if (phoneMax !== undefined && phoneMax > 0) {
+          self.phoneMax = phoneMax;
           if (self.ctx?.storage?.put) {
-            await self.ctx.storage.put("maxPlayers", self.maxPlayers);
+            await self.ctx.storage.put("phoneMax", self.phoneMax);
           }
-        } else if (maxPlayers === null || maxPlayers === 0) {
-          self.maxPlayers = null;
+        } else if (phoneMax === null || phoneMax === 0) {
+          self.phoneMax = null;
           if (self.ctx?.storage?.delete) {
+            await self.ctx.storage.delete("phoneMax");
             await self.ctx.storage.delete("maxPlayers");
           }
         }
@@ -427,9 +428,9 @@ export class GameSession extends DurableObject {
             logger.warn("Rejected join attempt from previously-kicked token");
             throw new Error("You have been removed from this session.");
           }
-          if (self.maxPlayers !== null && self.rejoinTokens.size >= self.maxPlayers) {
-            logger.warn(`Controller join rejected: player limit of ${self.maxPlayers} reached`);
-            throw new Error(`Room is full. Maximum limit of ${self.maxPlayers} players reached.`);
+          if (self.phoneMax !== null && self.rejoinTokens.size >= self.phoneMax) {
+            logger.warn(`Controller join rejected: phone limit of ${self.phoneMax} reached`);
+            throw new Error(`Room is full. Maximum limit of ${self.phoneMax} players reached.`);
           }
           id = crypto.randomUUID();
           name_ = cleanName ?? self.nextPlayerName();
