@@ -38,9 +38,18 @@ export type GamepadStateMessage = {
   t: number;
 };
 
+export type JoystickInputMessage = {
+  type: "joystick";
+  x: number;        // normalized -1 to 1
+  y: number;        // normalized -1 to 1
+  buttons?: number[];
+  firing?: boolean;
+  t: number;
+};
+
 export type UnknownInputMessage = { type: string } & Record<string, unknown>;
 
-export type InputMessage = TouchMessage | GamepadStateMessage | UnknownInputMessage;
+export type InputMessage = TouchMessage | GamepadStateMessage | JoystickInputMessage | UnknownInputMessage;
 
 export type TransportMode = "p2p" | "relay" | "local";
 

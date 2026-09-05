@@ -127,9 +127,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     if (peer.pc) {
       peer.pc.addInputListener((msg: unknown) => {
-        const input = msg as { type?: string; state?: JoystickState; buttons?: number[]; axes?: number[] };
+        const input = msg as { type?: string; x?: number; y?: number; firing?: boolean; state?: JoystickState; buttons?: number[]; axes?: number[] };
         if (input) {
-          if (input.type === "state" && input.state) {
+          if (input.type === "joystick" && typeof input.x === "number" && typeof input.y === "number") {
+            joystickInputs.set(peer.id, { x: input.x, y: input.y, firing: !!input.firing });
+          } else if (input.type === "state" && input.state) {
             joystickInputs.set(peer.id, input.state);
           } else if (input.type === "gamepad-state" && Array.isArray(input.buttons) && Array.isArray(input.axes)) {
             joystickInputs.set(peer.id, gamepadStateToJoystick(input as { buttons: number[]; axes: number[] }));

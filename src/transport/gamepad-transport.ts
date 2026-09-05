@@ -26,8 +26,14 @@ export class LocalGamepadTransport implements GameTransport {
           if (changed(buttons, this.lastButtons) || changed(axes, this.lastAxes)) {
             this.lastButtons = buttons;
             this.lastAxes = axes;
-            const msg: InputMessage = { type: "gamepad-state", buttons, axes, t: performance.now() };
-            for (const l of this.inputListeners) l(msg);
+            const now = performance.now();
+            const { x, y, firing } = gamepadToJoystick(buttons, axes);
+            const stateMsg: InputMessage = { type: "gamepad-state", buttons, axes, t: now };
+            const joystickMsg: InputMessage = { type: "joystick", x, y, buttons, firing, t: now };
+            for (const l of this.inputListeners) {
+              l(stateMsg);
+              l(joystickMsg);
+            }
           }
         }
       }
@@ -63,6 +69,32 @@ export class LocalGamepadTransport implements GameTransport {
     }
     this.inputListeners.clear();
   }
+}
+
+export function gamepadToJoystick(buttons: number[], axes: number[]): { x: number; y: number; firing: boolean } {
+  let x = 0;
+  let y = 0;
+
+  const rawX = axes[0] ?? 0;
+  const rawY = axes[1] ?? 0;
+  const deadzone = 0.15;
+  if (Math.abs(rawX) > deadzone) x += rawX;
+  if (Math.abs(rawY) > deadzone) y += rawY;
+
+  if ((buttons[12] ?? 0) > 0.5) y -= 1;
+  if ((buttons[13] ?? 0) > 0.5) y += 1;
+  if ((buttons[14] ?? 0) > 0.5) x -= 1;
+  if ((buttons[15] ?? 0) > 0.5) x += 1;
+
+  const mag = Math.sqrt(x * x + y * y);
+  if (mag > 1.0) {
+    x /= mag;
+    y /= mag;
+  }
+
+  const firing = buttons.slice(0, 8).some((b) => (b ?? 0) > 0.5);
+
+  return { x, y, firing };
 }
 
 function changed(a: number[], b: number[]) {

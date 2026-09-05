@@ -7,6 +7,7 @@ import type { GameTransport, TouchMessage, TransportMode } from "../transport/tr
 import { ConnectionOrchestrator } from "../transport/connectionOrchestrator";
 import { loadConsoleGame, getGameControllerTypes } from "../contract/gameSource";
 import { LocalGamepadTransport } from "../transport/gamepad-transport";
+import { LocalKeyboardTransport } from "../transport/keyboard-transport";
 import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ConsoleGameModule, ControllerPeer, ViewportSize } from "../contract/gameTypes";
@@ -177,8 +178,37 @@ export class ConsoleApp {
   async init() {
     this.setupUIHandlers();
     this.setupGamepadListeners();
+    this.syncGamepadControllers();
     this.renderHeader();
     this.connectSignaling();
+  }
+
+  syncGamepadControllers() {
+    if (this.acceptsGamepads()) {
+      if (!this.controllers.has("gamepad-keyboard")) {
+        const controller: ControllerState = {
+          id: "gamepad-keyboard",
+          name: "Keyboard",
+          color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
+          isFirstPlayer: false,
+          pc: new LocalKeyboardTransport(),
+          orchestrator: null,
+          state: "live",
+          status: "live",
+          signalingConnected: true,
+        };
+        this.controllers.set("gamepad-keyboard", controller);
+        this.peerNotifier.notifyJoined(controller);
+        this.peerNotifier.notifyReady(controller);
+        this.updateControllerUI();
+      }
+    } else {
+      for (const [id] of Array.from(this.controllers.entries())) {
+        if (id.startsWith("gamepad-")) {
+          this.removeController(id);
+        }
+      }
+    }
   }
 
   private setupGamepadListeners() {
@@ -251,13 +281,7 @@ export class ConsoleApp {
       if (gameMod && gameMod.controllerTypes !== undefined) {
         this.controllerTypes = gameMod.controllerTypes;
       }
-      if (!this.acceptsGamepads()) {
-        for (const [id] of Array.from(this.controllers.entries())) {
-          if (id.startsWith("gamepad-")) {
-            this.removeController(id);
-          }
-        }
-      }
+      this.syncGamepadControllers();
       const { createGame } = gameMod;
       this.activeGame = createGame({
         session: this.api,

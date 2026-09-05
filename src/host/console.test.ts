@@ -639,4 +639,17 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
     nameInput.triggerInput("Super Controller");
     expect(controllerState.name).toBe("Super Controller");
   });
+
+  it("syncGamepadControllers creates gamepad-keyboard when acceptsGamepads is true and removes it when false", () => {
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+
+    app.syncGamepadControllers();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(true);
+    expect(app.controllers.get("gamepad-keyboard")?.name).toBe("Keyboard");
+
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(false);
+    app.syncGamepadControllers();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+  });
 });

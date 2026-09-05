@@ -82,9 +82,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   resizeCanvas(ctx.viewport.initialSize);
   const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
-  const padStateMap = new Map<string, { buttons: number[]; axes: number[] }>();
+  const padStateMap = new Map<string, { x: number; y: number; firing: boolean; buttons: number[]; axes: number[] }>();
   const cardElementsMap = new Map<string, {
     card: HTMLDivElement;
+    joystickEl: HTMLDivElement;
     axisEls: HTMLSpanElement[];
     btnEls: HTMLSpanElement[];
   }>();
@@ -93,8 +94,25 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function setupPeer(peer: any) {
     if (peer.pc) {
       const unsub = peer.pc.addInputListener((msg: any) => {
-        if (msg.type === "gamepad-state") {
-          padStateMap.set(peer.id, { buttons: msg.buttons, axes: msg.axes });
+        if (msg.type === "joystick") {
+          padStateMap.set(peer.id, {
+            x: msg.x ?? 0,
+            y: msg.y ?? 0,
+            firing: !!msg.firing,
+            buttons: msg.buttons ?? [],
+            axes: [msg.x ?? 0, msg.y ?? 0],
+          });
+        } else if (msg.type === "gamepad-state") {
+          const rawX = msg.axes[0] ?? 0;
+          const rawY = msg.axes[1] ?? 0;
+          const firing = Array.isArray(msg.buttons) && msg.buttons.slice(0, 8).some((b: number) => b > 0.5);
+          padStateMap.set(peer.id, {
+            x: rawX,
+            y: rawY,
+            firing,
+            buttons: msg.buttons ?? [],
+            axes: msg.axes ?? [],
+          });
         }
       });
       unsubscribes.add(unsub);
@@ -177,7 +195,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
 
       for (const peer of gamepadPeers) {
-        const state = padStateMap.get(peer.id) ?? { buttons: [], axes: [] };
+        const state = padStateMap.get(peer.id) ?? { x: 0, y: 0, firing: false, buttons: [], axes: [] };
         let cardObj = cardElementsMap.get(peer.id);
 
         if (!cardObj) {
@@ -196,6 +214,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           title.textContent = peer.name;
           title.style.margin = "0 0 12px 0";
           card.appendChild(title);
+
+          const joystickEl = document.createElement("div");
+          joystickEl.style.cssText = "font-family: monospace; font-size: 13px; font-weight: bold; margin-bottom: 12px; color: #7fdbff;";
+          card.appendChild(joystickEl);
 
           const axesHeader = document.createElement("div");
           axesHeader.textContent = `Axes (${state.axes.length}):`;
@@ -219,12 +241,15 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
           padsContainer.appendChild(card);
 
-          cardObj = { card, axisEls: [], btnEls: [] };
+          cardObj = { card, joystickEl, axisEls: [], btnEls: [] };
           cardElementsMap.set(peer.id, cardObj);
         }
 
+        // Update joystick state display
+        cardObj.joystickEl.textContent = `Joystick: X=${state.x.toFixed(2)}, Y=${state.y.toFixed(2)}${state.firing ? " [FIRE]" : ""}`;
+
         // Efficiently update axis elements
-        const axesList = cardObj.card.children[2] as HTMLDivElement;
+        const axesList = cardObj.card.children[3] as HTMLDivElement;
         while (cardObj.axisEls.length < state.axes.length) {
           const idx = cardObj.axisEls.length;
           const axisEl = document.createElement("span");
@@ -238,7 +263,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         });
 
         // Efficiently update button elements
-        const buttonsGrid = cardObj.card.children[4] as HTMLDivElement;
+        const buttonsGrid = cardObj.card.children[5] as HTMLDivElement;
         while (cardObj.btnEls.length < state.buttons.length) {
           const idx = cardObj.btnEls.length;
           const btnEl = document.createElement("span");
