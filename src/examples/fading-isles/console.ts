@@ -16,6 +16,36 @@ import type {
 
 const TILE_SIZE = 60; // Pixels per tile in Canvas world space
 
+export const controllerTypes = {
+  phone: {},
+  gamepad: {},
+};
+
+export function gamepadStateToJoystick(msg: { buttons: number[]; axes: number[] }): JoystickState {
+  let x = 0;
+  let y = 0;
+
+  const rawX = msg.axes[0] ?? 0;
+  const rawY = msg.axes[1] ?? 0;
+  const deadzone = 0.15;
+  if (Math.abs(rawX) > deadzone) x += rawX;
+  if (Math.abs(rawY) > deadzone) y += rawY;
+
+  const buttons = msg.buttons ?? [];
+  if ((buttons[12] ?? 0) > 0.5) y -= 1;
+  if ((buttons[13] ?? 0) > 0.5) y += 1;
+  if ((buttons[14] ?? 0) > 0.5) x -= 1;
+  if ((buttons[15] ?? 0) > 0.5) x += 1;
+
+  const mag = Math.sqrt(x * x + y * y);
+  if (mag > 1.0) {
+    x /= mag;
+    y /= mag;
+  }
+
+  return { x, y };
+}
+
 interface SavedFadingIslesState {
   grid: TileGridState<Cell | null>;
   players: EntityRegistryState<PlayerEntity>;
@@ -122,9 +152,15 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     if (peer.pc) {
       peer.pc.addInputListener((msg: unknown) => {
-        const input = msg as unknown as JoystickState;
-        if (typeof input?.x === "number" && typeof input?.y === "number") {
-          joystickInputs.set(peer.id, input);
+        const input = msg as { type?: string; state?: JoystickState; buttons?: number[]; axes?: number[] };
+        if (input) {
+          if (input.type === "state" && input.state) {
+            joystickInputs.set(peer.id, input.state);
+          } else if (input.type === "gamepad-state" && Array.isArray(input.buttons) && Array.isArray(input.axes)) {
+            joystickInputs.set(peer.id, gamepadStateToJoystick(input as { buttons: number[]; axes: number[] }));
+          } else if (typeof (input as JoystickState)?.x === "number" && typeof (input as JoystickState)?.y === "number") {
+            joystickInputs.set(peer.id, input as unknown as JoystickState);
+          }
         }
       });
 

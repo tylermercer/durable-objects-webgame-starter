@@ -16,7 +16,7 @@ export const EXAMPLES: Record<string, GameEntry> = {
   },
   "fading-isles": {
     label: "Fading Isles",
-    controllerTypes: { phone: {} },
+    controllerTypes: { phone: {}, gamepad: {} },
     console: () => import("@examples/fading-isles/console"),
     controller: () => import("@examples/fading-isles/controller"),
   },
