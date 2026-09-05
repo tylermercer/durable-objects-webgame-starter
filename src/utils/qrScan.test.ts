@@ -5,12 +5,12 @@ describe("parseAndValidateJoinUrl", () => {
   const currentOrigin = "https://example.com";
 
   it("validates a well-formed join URL from the same origin", () => {
-    const input = "https://example.com/play/touch-demo?code=2A3B4";
+    const input = "https://example.com/play/input-demo?code=2A3B4";
     const res = parseAndValidateJoinUrl(input, currentOrigin);
 
     expect(res.valid).toBe(true);
     expect(res.code).toBe("2A3B4");
-    expect(res.targetUrl).toBe("https://example.com/play/touch-demo?code=2A3B4");
+    expect(res.targetUrl).toBe("https://example.com/play/input-demo?code=2A3B4");
   });
 
   it("handles uppercase/lowercase code normalization", () => {
@@ -22,7 +22,7 @@ describe("parseAndValidateJoinUrl", () => {
   });
 
   it("rejects relative URLs without room code", () => {
-    const input = "https://example.com/play/touch-demo";
+    const input = "https://example.com/play/input-demo";
     const res = parseAndValidateJoinUrl(input, currentOrigin);
 
     expect(res.valid).toBe(false);

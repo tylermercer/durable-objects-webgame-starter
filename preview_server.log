@@ -1,0 +1,27 @@
+
+> astro-cloudflare-starter@0.0.1 preview /app
+> astro preview
+
+Another astro preview server is already running.
+
+  URL:  http://localhost:4321
+  PID:  491718
+
+Run `astro preview stop` to stop it, or use `astro preview --force` to replace it.
+  Location:
+    /app/node_modules/.pnpm/astro@7.2.6_@astrojs+markdown-remark@7.2.4_@emnapi+core@1.11.1_@emnapi+runtime@1.11.3_@types+node@26.2.0_sass@1.103.1/node_modules/astro/dist/cli/preview/index.js:82:11
+  Stack trace:
+    at preview (file:///app/node_modules/.pnpm/astro@7.2.6GET /play/input-demo 307 Temporary Redirect (9ms)
+GET /play/input-demo/ 200 OK (4ms)
+GET /_astro/registry.rJeaAOtD.css 200 OK (3ms)
+GET /_astro/GameShell.astro_astro_type_script_index_1_lang.Dtk_VvxG.js 200 OK (2ms)
+GET /_astro/_game_.MjZbm0-D.css 200 OK (2ms)
+GET /_astro/GameShell.astro_astro_type_script_index_0_lang.z5X_rL_k.js 200 OK (2ms)
+GET /_astro/connectionOrchestrator.W7oU3ALR.js 200 OK (4ms)
+GET /_astro/rolldown-runtime.BzAQb71D.js 200 OK (2ms)
+[GameSession] WebSocket connection upgrade requested for role: console
+GET /api/signaling 101 Switching Protocols (33ms)
+[GameSession] Console joined signaling session. Connected controllers count: 0
+GET /_astro/console.DDU7s4yP.js 200 OK (3ms)
+[GameSession] WebSocket closed for role: console, id: console
+ ELIFECYCLE  Command failed with exit code 143.

@@ -90,7 +90,7 @@ The dev-only route `/dev/harness` (`src/pages/dev/harness.astro`) embeds one con
 ### Route & Query Parameters
 - **URL**: `http://localhost:4321/dev/harness` (Only accessible in `DEV` mode; returns 404 when `!import.meta.env.DEV`).
 - **Query Params**:
-  - `game` (default `touch-demo`): Example game key matching `EXAMPLES` in `@examples/registry`.
+  - `game` (default `input-demo`): Example game key matching `EXAMPLES` in `@examples/registry`.
   - `players` (default `2`): Number of controller iframes to render.
   - `transport` (default `relay`): Transport override (`relay`, `rtc`, or `auto`).
 
@@ -110,7 +110,7 @@ def run():
         page = browser.new_page(viewport={"width": 1280, "height": 960})
 
         # 1. Navigate to dev harness
-        page.goto("http://localhost:4321/dev/harness?game=touch-demo&players=2&transport=relay")
+        page.goto("http://localhost:4321/dev/harness?game=input-demo&players=2&transport=relay")
 
         # 2. Access frame locators
         console = page.frame_locator("#console-frame")

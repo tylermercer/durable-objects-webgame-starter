@@ -94,9 +94,9 @@ describe("QRScannerController", () => {
     });
 
     const currentOrigin = "https://example.com";
-    controller.handleScannedCode(`${currentOrigin}/play/touch-demo?code=2A3B4`);
+    controller.handleScannedCode(`${currentOrigin}/play/input-demo?code=2A3B4`);
 
-    expect(onSuccess).toHaveBeenCalledWith(`${currentOrigin}/play/touch-demo?code=2A3B4`);
+    expect(onSuccess).toHaveBeenCalledWith(`${currentOrigin}/play/input-demo?code=2A3B4`);
     expect(modalEl.close).toHaveBeenCalled();
   });
 
