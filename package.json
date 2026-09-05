@@ -13,6 +13,7 @@
     "@astrojs/cloudflare": "^14.2.4",
     "@astrojs/markdown-remark": "^7.2.4",
     "@radix-ui/colors": "^3.0.0",
+    "@types/three": "^0.185.4",
     "astro": "^7.2.6",
     "bezier-easing": "^2.1.0",
     "capnweb": "^0.12.0",
@@ -28,6 +29,7 @@
     "satori": "^0.12.1",
     "satori-html": "^0.3.2",
     "sharp": "^0.33.5",
+    "three": "^0.185.1",
     "unist-util-visit": "^5.1.0",
     "utopia-core-scss": "^1.3.1",
     "web-haptics": "^0.0.6"
