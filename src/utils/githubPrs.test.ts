@@ -57,7 +57,7 @@ The preview worker for branch \`feat/test\` (https://feat-test.tmercer.workers.d
   });
 
   describe('fetchOpenPrsWithDeployments', () => {
-    it('fetches open PRs and extracts deployed environment information', async () => {
+    it('fetches open PRs and extracts deployed environment information including draft status', async () => {
       const mockFetch = vi.fn().mockImplementation((url: string) => {
         if (url.endsWith('/pulls?state=open')) {
           return Promise.resolve({
@@ -69,13 +69,15 @@ The preview worker for branch \`feat/test\` (https://feat-test.tmercer.workers.d
                 body: '## Feature description\nImplementation of game mode',
                 html_url: 'https://github.com/test/repo/pull/10',
                 comments_url: 'https://api.github.com/repos/test/repo/issues/10/comments',
+                draft: false,
               },
               {
                 number: 11,
-                title: 'Refactor transport',
-                body: 'No deployment for this one yet',
+                title: 'Draft PR for new UI',
+                body: 'Work in progress draft PR',
                 html_url: 'https://github.com/test/repo/pull/11',
                 comments_url: 'https://api.github.com/repos/test/repo/issues/11/comments',
+                draft: true,
               },
             ],
           });
@@ -95,7 +97,7 @@ The preview worker for branch \`feat/test\` (https://feat-test.tmercer.workers.d
             ok: true,
             json: async () => [
               {
-                body: 'Standard code review comment without environment URL',
+                body: '## Deployed to Cloudflare Workers!\n| **Preview URL**: | https://pr-11-webgame.tmercer.workers.dev |',
               },
             ],
           });
@@ -105,13 +107,22 @@ The preview worker for branch \`feat/test\` (https://feat-test.tmercer.workers.d
 
       const results = await fetchOpenPrsWithDeployments('test/repo', mockFetch as unknown as typeof fetch);
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(2);
       expect(results[0]).toEqual({
         number: 10,
         title: 'Add New Game Mode',
         description: 'Feature description',
         environmentUrl: 'https://pr-10-webgame.tmercer.workers.dev',
         prUrl: 'https://github.com/test/repo/pull/10',
+        isDraft: false,
+      });
+      expect(results[1]).toEqual({
+        number: 11,
+        title: 'Draft PR for new UI',
+        description: 'Work in progress draft PR',
+        environmentUrl: 'https://pr-11-webgame.tmercer.workers.dev',
+        prUrl: 'https://github.com/test/repo/pull/11',
+        isDraft: true,
       });
     });
 

@@ -4,6 +4,7 @@ export interface PRDeployedEnvironment {
   description: string;
   environmentUrl: string;
   prUrl: string;
+  isDraft: boolean;
 }
 
 /**
@@ -86,6 +87,7 @@ export async function fetchOpenPrsWithDeployments(
           description: extractFirstLine(pr.body),
           environmentUrl,
           prUrl: pr.html_url || `https://github.com/${repo}/pull/${pr.number}`,
+          isDraft: Boolean(pr.draft),
         });
       }
     }
