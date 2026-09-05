@@ -90,13 +90,16 @@ export function createLobbyGrid(): TileGrid<GridCell> {
   return grid;
 }
 
-export function createDungeonGrid(rng: () => number = Math.random): TileGrid<GridCell> {
-  const grid = new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
-    walkable: DUNGEON_LAYOUT[pos.y][pos.x] === 0,
-    destructible: false,
-  }));
+export function resetDungeonGrid(grid: TileGrid<GridCell>, rng: () => number = Math.random): void {
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      grid.set({ x, y }, {
+        walkable: DUNGEON_LAYOUT[y][x] === 0,
+        destructible: false,
+      });
+    }
+  }
 
-  // Candidate lines connecting permanent wall chunks
   const candidateLines: Array<Array<{ x: number; y: number }>> = [
     [{ x: 6, y: 3 }, { x: 7, y: 3 }],
     [{ x: 12, y: 3 }, { x: 13, y: 3 }],
@@ -123,7 +126,14 @@ export function createDungeonGrid(rng: () => number = Math.random): TileGrid<Gri
       }
     }
   }
+}
 
+export function createDungeonGrid(rng: () => number = Math.random): TileGrid<GridCell> {
+  const grid = new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
+    walkable: DUNGEON_LAYOUT[pos.y][pos.x] === 0,
+    destructible: false,
+  }));
+  resetDungeonGrid(grid, rng);
   return grid;
 }
 
@@ -142,8 +152,9 @@ export function createDungeonNpcs(): NpcEntity[] {
       y: 2.5,
       currentPath: [],
       wanderTimer: 1.0,
-      hp: 5,
-      maxHp: 5,
+      hp: 3,
+      maxHp: 3,
+      speed: 2.5,
     },
     {
       id: "npc-skeleton",
@@ -156,6 +167,7 @@ export function createDungeonNpcs(): NpcEntity[] {
       wanderTimer: 2.0,
       hp: 5,
       maxHp: 5,
+      speed: 2.0,
     },
   ];
 }
@@ -300,12 +312,12 @@ export function getTopSpawnPositions(grid: TileGrid<GridCell>): Array<{ x: numbe
 }
 
 const MONSTER_TEMPLATES = [
-  { name: "Goblin", color: "#2ecc40" },
-  { name: "Skeleton", color: "#b10dc9" },
-  { name: "Orc", color: "#ff851b" },
-  { name: "Demon", color: "#ff4136" },
-  { name: "Ghost", color: "#7fdbff" },
-  { name: "Slime", color: "#01ff70" },
+  { name: "Goblin", color: "#2ecc40", speed: 2.5, hp: 3, maxHp: 3 },
+  { name: "Skeleton", color: "#b10dc9", speed: 2.0, hp: 5, maxHp: 5 },
+  { name: "Orc", color: "#ff851b", speed: 1.4, hp: 8, maxHp: 8 },
+  { name: "Demon", color: "#ff4136", speed: 2.2, hp: 7, maxHp: 7 },
+  { name: "Ghost", color: "#7fdbff", speed: 3.0, hp: 4, maxHp: 4 },
+  { name: "Slime", color: "#01ff70", speed: 1.2, hp: 6, maxHp: 6 },
 ];
 
 export function spawnWaveMonsters(
@@ -330,9 +342,10 @@ export function spawnWaveMonsters(
       x: pos.x,
       y: pos.y,
       currentPath: [],
-      wanderTimer: 1.0 + rng() * 2.0,
-      hp: 5,
-      maxHp: 5,
+      wanderTimer: rng() < 0.35 ? 0 : rng() * 2.5,
+      hp: template.hp,
+      maxHp: template.maxHp,
+      speed: template.speed,
     };
     registry.add(npc);
   }
@@ -442,6 +455,7 @@ export function handlePlayerFiring(
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= 1.2) {
           npc.hp -= 2;
+          npc.targetPlayerId = player.id;
           if (npc.hp <= 0) {
             registry.remove(npc.id);
           }
@@ -552,6 +566,7 @@ export function stepProjectiles(
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < 0.45) {
         npc.hp -= 1;
+        npc.targetPlayerId = proj.playerId;
         registry.remove(proj.id);
         hitNpc = true;
         if (npc.hp <= 0) {
@@ -597,8 +612,32 @@ export function stepNpcWander(
   npc: NpcEntity,
   grid: TileGrid<GridCell>,
   dt: number,
-  rng: () => number
+  rng: () => number,
+  players: PlayerEntity[] = []
 ): void {
+  const speed = npc.speed ?? NPC_SPEED;
+  const targetPlayer = npc.targetPlayerId
+    ? players.find((p) => p.id === npc.targetPlayerId)
+    : null;
+
+  if (targetPlayer) {
+    npc.wanderTimer -= dt;
+    if (npc.wanderTimer <= 0 || npc.currentPath.length === 0) {
+      npc.wanderTimer = 0.25; // Re-path every 0.25s toward chased player
+      const startPos: GridPos = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
+      const goalPos: GridPos = { x: Math.floor(targetPlayer.x), y: Math.floor(targetPlayer.y) };
+      const path = grid.findPath(
+        startPos,
+        goalPos,
+        (_pos, cell) => (cell.walkable ? 1 : Infinity),
+        { diagonals: true }
+      );
+      if (path && path.length > 1) {
+        npc.currentPath = path.slice(1);
+      }
+    }
+  }
+
   if (npc.currentPath.length > 0) {
     const targetCell = npc.currentPath[0];
     const targetX = targetCell.x + 0.5;
@@ -607,7 +646,7 @@ export function stepNpcWander(
     const dx = targetX - npc.x;
     const dy = targetY - npc.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const moveDist = NPC_SPEED * dt;
+    const moveDist = speed * dt;
 
     if (dist <= moveDist) {
       npc.x = targetX;
@@ -617,10 +656,10 @@ export function stepNpcWander(
       npc.x += (dx / dist) * moveDist;
       npc.y += (dy / dist) * moveDist;
     }
-  } else {
+  } else if (!targetPlayer) {
     npc.wanderTimer -= dt;
     if (npc.wanderTimer <= 0) {
-      npc.wanderTimer = 2.0 + rng() * 3.0;
+      npc.wanderTimer = rng() < 0.35 ? 0 : rng() * 2.5;
 
       const startPos: GridPos = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
 
@@ -656,17 +695,40 @@ export function stepNpcWanderFree(
   npc: NpcEntity,
   grid: TileGrid<GridCell>,
   dt: number,
-  rng: () => number
+  rng: () => number,
+  players: PlayerEntity[] = []
 ): void {
+  const speed = npc.speed ?? NPC_SPEED;
   const npcRadius = 0.35;
   const CLEARANCE_MARGIN = 0.05;
   const cost = (_pos: GridPos, cell: GridCell) => (cell.walkable ? 1 : Infinity);
+
+  const targetPlayer = npc.targetPlayerId
+    ? players.find((p) => p.id === npc.targetPlayerId)
+    : null;
+
+  if (targetPlayer) {
+    npc.wanderTimer -= dt;
+    if (npc.wanderTimer <= 0 || npc.currentPath.length === 0) {
+      npc.wanderTimer = 0.25; // Re-path every 0.25s toward chased player
+      const startPos: GridPos = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
+      const goalPos: GridPos = { x: Math.floor(targetPlayer.x), y: Math.floor(targetPlayer.y) };
+      const path = grid.findPath(startPos, goalPos, cost, { diagonals: true });
+
+      if (path && path.length > 1) {
+        const simplified = simplifyPath(grid, path, cost, {
+          radius: npcRadius + CLEARANCE_MARGIN,
+        });
+        npc.currentPath = simplified.slice(1);
+      }
+    }
+  }
 
   if (npc.currentPath.length > 0) {
     const targetCell = npc.currentPath[0];
     const targetPos = { x: targetCell.x + 0.5, y: targetCell.y + 0.5 };
 
-    const { dx, dy } = steerToward(npc, targetPos, NPC_SPEED, dt, 0.05);
+    const { dx, dy } = steerToward(npc, targetPos, speed, dt, 0.05);
 
     if (dx === 0 && dy === 0) {
       npc.currentPath.shift();
@@ -682,10 +744,10 @@ export function stepNpcWanderFree(
       npc.x = result.x;
       npc.y = result.y;
     }
-  } else {
+  } else if (!targetPlayer) {
     npc.wanderTimer -= dt;
     if (npc.wanderTimer <= 0) {
-      npc.wanderTimer = 2.0 + rng() * 3.0;
+      npc.wanderTimer = rng() < 0.35 ? 0 : rng() * 2.5;
 
       const startPos: GridPos = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
 
@@ -780,9 +842,9 @@ export function stepRoom(
   const currentNpcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
   for (const npc of currentNpcs) {
     if (npc.id.includes("skeleton")) {
-      stepNpcWanderFree(npc, grid, dt, rng);
+      stepNpcWanderFree(npc, grid, dt, rng, players);
     } else {
-      stepNpcWander(npc, grid, dt, rng);
+      stepNpcWander(npc, grid, dt, rng, players);
     }
   }
 
@@ -818,6 +880,8 @@ export function stepRoom(
     for (const proj of remainingProjs) {
       registry.remove(proj.id);
     }
+    // Reset random brown walls in the dungeon grid for the new wave
+    resetDungeonGrid(grid, rng);
     // Spawn players along bottom of screen
     spawnPlayersInBottom(players, grid);
     // Spawn monsters in top half of screen

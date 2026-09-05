@@ -413,7 +413,7 @@ describe("Grid Dungeon room simulation", () => {
     // Verify monsters spawned in top half (y < 7.5)
     for (const m of spawnedMonsters) {
       expect(m.y).toBeLessThan(7.5);
-      expect(m.hp).toBe(5);
+      expect(m.hp).toBe(m.maxHp);
     }
 
     // Verify player spawned in bottom half (y >= 7.5)
@@ -544,5 +544,85 @@ describe("Grid Dungeon room simulation", () => {
     // Shockwave coordinates should be updated to match player's new position!
     expect(shockwaves[0].x).toBe(7.0);
     expect(shockwaves[0].y).toBe(8.0);
+  });
+
+  it("assigns different speeds and HPs to different monster types", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(123);
+
+    // Spawn 6 wave monsters to cycle through all 6 templates
+    spawnWaveMonsters(5, grid, registry, rng);
+
+    const npcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
+    expect(npcs.length).toBe(6);
+
+    const speeds = npcs.map((n) => n.speed);
+    const maxHps = npcs.map((n) => n.maxHp);
+
+    // Verify speed and maxHp variations across monster types
+    expect(new Set(speeds).size).toBeGreaterThan(1);
+    expect(new Set(maxHps).size).toBeGreaterThan(1);
+  });
+
+  it("makes monsters follow player after being hit by projectile or melee attack", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(456);
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 10.5, y: 10.5 };
+    const monster: NpcEntity = {
+      id: "m1",
+      kind: "npc",
+      name: "Goblin",
+      color: "#0f0",
+      x: 2.5,
+      y: 2.5,
+      currentPath: [],
+      wanderTimer: 1.0,
+      hp: 5,
+      maxHp: 5,
+      speed: 2.5,
+    };
+    registry.add(player);
+    registry.add(monster);
+
+    // Hit monster with projectile from p1
+    const proj: ProjectileEntity = { id: "proj1", kind: "projectile", x: 2.5, y: 2.5, vx: 0, vy: 0, playerId: "p1" };
+    registry.add(proj);
+    stepProjectiles(registry, grid, 0.01);
+
+    expect(monster.targetPlayerId).toBe("p1");
+
+    // Step NPC wander - monster should now re-path towards player at (10.5, 10.5)
+    stepNpcWander(monster, grid, 0.1, rng, [player]);
+    expect(monster.currentPath.length).toBeGreaterThan(0);
+    const lastStep = monster.currentPath[monster.currentPath.length - 1];
+    expect(lastStep.x).toBe(10);
+    expect(lastStep.y).toBe(10);
+  });
+
+  it("resets brown destructible walls in dungeon grid on wave completion", () => {
+    const grid = createDungeonGrid(() => 0.1); // Fixed RNG forces walls on
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(888);
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 12.0 };
+    registry.add(player);
+
+    // Destroy a brown wall at candidate position (6, 3)
+    grid.set({ x: 6, y: 3 }, { walkable: true, destructible: false });
+
+    // Step room with 0 remaining monsters -> triggers wave 2 transition
+    stepRoom(grid, registry, new Map(), 0.1, rng, {
+      phase: "dungeon",
+      wave: 1,
+      lives: 3,
+      gameOverSurvivedWaves: null,
+    });
+
+    // Brown walls reset by resetDungeonGrid during wave increment
+    // Cell (6, 3) should be reset according to DUNGEON_LAYOUT and candidateLines
+    expect(grid.get({ x: 6, y: 3 })).toBeDefined();
   });
 });

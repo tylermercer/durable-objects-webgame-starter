@@ -40,6 +40,8 @@ export interface NpcEntity {
   wanderTimer: number;
   hp: number;
   maxHp: number;
+  speed?: number;
+  targetPlayerId?: string;
 }
 
 export interface ProjectileEntity {

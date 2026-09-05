@@ -158,6 +158,22 @@ export class ConsoleApp {
     return !!this.controllerTypes?.gamepad;
   }
 
+  async requestFullscreen(element: HTMLElement = document.documentElement): Promise<void> {
+    try {
+      if (element.requestFullscreen) {
+        await element.requestFullscreen();
+      } else if ((element as any).webkitRequestFullscreen) {
+        await (element as any).webkitRequestFullscreen();
+      } else if ((element as any).mozRequestFullScreen) {
+        await (element as any).mozRequestFullScreen();
+      } else if ((element as any).msRequestFullscreen) {
+        await (element as any).msRequestFullscreen();
+      }
+    } catch (err) {
+      logger.warn("Request fullscreen failed:", err);
+    }
+  }
+
   async init() {
     this.setupUIHandlers();
     this.setupGamepadListeners();
@@ -286,7 +302,10 @@ export class ConsoleApp {
 
     const modalCloseBtn = document.getElementById("modal-close-btn");
     if (modalCloseBtn) {
-      modalCloseBtn.addEventListener("click", () => this.closeModal());
+      modalCloseBtn.addEventListener("click", () => {
+        this.requestFullscreen();
+        this.closeModal();
+      });
     }
 
     const copyLinkBtn = document.getElementById("copy-link-btn");
@@ -668,6 +687,15 @@ export class ConsoleApp {
       }
     }
 
+    const gamepadNoticeEl = document.getElementById("gamepad-support-notice");
+    if (gamepadNoticeEl) {
+      if (this.acceptsGamepads()) {
+        gamepadNoticeEl.classList.remove("u-hidden");
+      } else {
+        gamepadNoticeEl.classList.add("u-hidden");
+      }
+    }
+
     listEl.innerHTML = "";
 
     if (this.controllers.size === 0) {
@@ -685,9 +713,24 @@ export class ConsoleApp {
       row.style.paddingLeft = "8px";
       row.style.marginBottom = "8px";
 
-      const nameEl = document.createElement("span");
-      nameEl.className = "u-weight-bold";
-      nameEl.textContent = controller.name;
+      if (controller.id.startsWith("gamepad-")) {
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.className = "gamepad-name-input";
+        nameInput.value = controller.name;
+        nameInput.placeholder = "Gamepad Name";
+        nameInput.addEventListener("input", (e) => {
+          const newName = (e.target as HTMLInputElement).value;
+          controller.name = newName;
+          this.peerNotifier.notifyJoined(controller);
+        });
+        row.appendChild(nameInput);
+      } else {
+        const nameEl = document.createElement("span");
+        nameEl.className = "u-weight-bold";
+        nameEl.textContent = controller.name;
+        row.appendChild(nameEl);
+      }
 
       if (controller.isFirstPlayer) {
         const hostBadge = document.createElement("span");
@@ -697,10 +740,7 @@ export class ConsoleApp {
         hostBadge.style.fontWeight = "bold";
         hostBadge.style.marginLeft = "4px";
         hostBadge.textContent = "Host";
-        row.appendChild(nameEl);
         row.appendChild(hostBadge);
-      } else {
-        row.appendChild(nameEl);
       }
 
       const badge = document.createElement("span");
