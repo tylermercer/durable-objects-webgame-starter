@@ -1,11 +1,9 @@
 import { TileGrid, type GridPos } from "@utils/tileGrid";
 import { EntityRegistry } from "@utils/entityRegistry";
-import { moveCircleAgainstGrid } from "@utils/circleMovement";
 import type { PlayerConnectionStatus } from "@host/console";
 import type { Cell, JoystickState, PlayerEntity } from "./types";
 
 export const PLAYER_SPEED = 3.5; // Tiles per second
-export const PLAYER_RADIUS = 0.35; // Tile units
 
 export function capacityColor(remaining: number, maxCapacity = 5): string {
   if (remaining <= 0) return "#475569"; // slate dark
@@ -31,8 +29,7 @@ export function syncPlayers(
     status?: PlayerConnectionStatus | string;
     state?: string;
   }>,
-  startPos: GridPos,
-  grid?: TileGrid<Cell | null>
+  startPos: GridPos
 ): void {
   for (const peer of activePeers) {
     const status = peer.status ?? peer.state;
@@ -58,14 +55,6 @@ export function syncPlayers(
         x: startPos.x + 0.5,
         y: startPos.y + 0.5,
       });
-
-      // Initial spawn counts as an arrival/occupancy on startPos
-      if (grid) {
-        const startCell = grid.get(startPos);
-        if (startCell) {
-          startCell.remaining = Math.max(0, startCell.remaining - 1);
-        }
-      }
     }
   }
 }
@@ -81,6 +70,36 @@ export function isTileOccupiedByOtherPlayer(
       Math.floor(p.x) === pos.x &&
       Math.floor(p.y) === pos.y
   );
+}
+
+export function movePointAgainstGrid<T>(
+  pos: { x: number; y: number },
+  dx: number,
+  dy: number,
+  grid: TileGrid<T>,
+  isWalkable: (pos: GridPos, cell: T) => boolean
+): { x: number; y: number } {
+  let { x, y } = pos;
+
+  // Try X axis move
+  const targetX = x + dx;
+  const tileX = Math.floor(targetX);
+  const curTileY = Math.floor(y);
+  const cellX = grid.get({ x: tileX, y: curTileY });
+  if (cellX !== undefined && isWalkable({ x: tileX, y: curTileY }, cellX)) {
+    x = targetX;
+  }
+
+  // Try Y axis move
+  const targetY = y + dy;
+  const curTileX = Math.floor(x);
+  const tileY = Math.floor(targetY);
+  const cellY = grid.get({ x: curTileX, y: tileY });
+  if (cellY !== undefined && isWalkable({ x: curTileX, y: tileY }, cellY)) {
+    y = targetY;
+  }
+
+  return { x, y };
 }
 
 export function stepRoom(
@@ -106,9 +125,8 @@ export function stepRoom(
     const dx = input.x * PLAYER_SPEED * dt;
     const dy = input.y * PLAYER_SPEED * dt;
 
-    const result = moveCircleAgainstGrid(
+    const result = movePointAgainstGrid(
       player,
-      PLAYER_RADIUS,
       dx,
       dy,
       grid,
