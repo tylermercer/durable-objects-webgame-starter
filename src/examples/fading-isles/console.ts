@@ -107,6 +107,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     grid = levelData.grid;
     startPos = levelData.startPos;
     endPos = levelData.endPos;
+    // Initial spawn on S tile decrements remaining once
+    const startCell = grid.get(startPos);
+    if (startCell) {
+      startCell.remaining = Math.max(0, startCell.remaining - 1);
+    }
   }
 
   function startOrRestartLevel(sameSeed: boolean) {
@@ -119,17 +124,15 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     startPos = levelData.startPos;
     endPos = levelData.endPos;
 
-    // Reset player positions to startPos and decrement start tile capacity once
+    // Reset player positions to startPos
     const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
     for (const p of players) {
       p.x = startPos.x + 0.5;
       p.y = startPos.y + 0.5;
     }
-    if (players.length > 0) {
-      const startCell = grid.get(startPos);
-      if (startCell) {
-        startCell.remaining = Math.max(0, startCell.remaining - 1);
-      }
+    const startCell = grid.get(startPos);
+    if (startCell) {
+      startCell.remaining = Math.max(0, startCell.remaining - 1);
     }
   }
 
@@ -145,18 +148,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         x: startPos.x + 0.5,
         y: startPos.y + 0.5,
       });
-
-      const startCell = grid.get(startPos);
-      if (startCell) {
-        startCell.remaining = Math.max(0, startCell.remaining - 1);
-      }
     }
 
     if (peer.pc) {
       peer.pc.addInputListener((msg: unknown) => {
         const input = msg as { type?: string; state?: JoystickState; buttons?: number[]; axes?: number[] };
         if (input) {
-          if (input.type === "state" && input.state) {
+          if ((input.type === "input" || input.type === "state") && input.state) {
             joystickInputs.set(peer.id, input.state);
           } else if (input.type === "gamepad-state" && Array.isArray(input.buttons) && Array.isArray(input.axes)) {
             joystickInputs.set(peer.id, gamepadStateToJoystick(input as { buttons: number[]; axes: number[] }));
@@ -330,7 +328,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         }
       }
 
-      syncPlayers(registry, activePeers, startPos, grid);
+      syncPlayers(registry, activePeers, startPos);
 
       if (!won) {
         const stepRes = stepRoom(grid, registry, joystickInputs, dt);
