@@ -46,6 +46,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     box-sizing: border-box;
     overflow-y: auto;
   `;
+  wrapper.appendChild(uiOverlay);
 
   const header = document.createElement("h2");
   header.textContent = "Input Demo";
@@ -82,6 +83,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
   const padStateMap = new Map<string, { buttons: number[]; axes: number[] }>();
+  const cardElementsMap = new Map<string, {
+    card: HTMLDivElement;
+    axisEls: HTMLSpanElement[];
+    btnEls: HTMLSpanElement[];
+  }>();
   const unsubscribes = new Set<() => void>();
 
   function setupPeer(peer: any) {
@@ -105,6 +111,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   const unsubLeft = ctx.onPeerLeft((id) => {
     padStateMap.delete(id);
+    const existing = cardElementsMap.get(id);
+    if (existing) {
+      existing.card.remove();
+      cardElementsMap.delete(id);
+    }
   });
 
   return {
@@ -145,67 +156,108 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         }
       }
 
-      // 2. Render gamepad status cards
-      padsContainer.innerHTML = "";
-      const gamepadPeers = Array.from(ctx.peers.values()).filter((p) => padStateMap.has(p.id));
+      // 2. Render gamepad status cards for connected gamepad peers
+      const gamepadPeers = Array.from(ctx.peers.values()).filter(
+        (p) => p.id.startsWith("gamepad-") || p.pc?.mode === "local" || padStateMap.has(p.id)
+      );
+
+      if (gamepadPeers.length === 0) {
+        status.textContent = "Touch phone screen to track dots, or connect a gamepad to test inputs.";
+      } else {
+        status.textContent = `${gamepadPeers.length} gamepad(s) connected. Touch phone screen to track dots.`;
+      }
+
+      // Clean up cards for peers no longer present
+      const currentIds = new Set(gamepadPeers.map((p) => p.id));
+      for (const [id, el] of cardElementsMap.entries()) {
+        if (!currentIds.has(id)) {
+          el.card.remove();
+          cardElementsMap.delete(id);
+        }
+      }
 
       for (const peer of gamepadPeers) {
-        const card = document.createElement("div");
-        card.style.cssText = `
-          background: rgba(30, 34, 48, 0.85);
-          backdrop-filter: blur(4px);
-          border: 2px solid ${peer.color};
-          border-radius: 8px;
-          padding: 16px;
-          width: 280px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-        `;
-
-        const title = document.createElement("h3");
-        title.textContent = peer.name;
-        title.style.margin = "0 0 12px 0";
-        card.appendChild(title);
-
         const state = padStateMap.get(peer.id) ?? { buttons: [], axes: [] };
+        let cardObj = cardElementsMap.get(peer.id);
 
-        const axesHeader = document.createElement("div");
-        axesHeader.textContent = `Axes (${state.axes.length}):`;
-        axesHeader.style.fontWeight = "bold";
-        axesHeader.style.fontSize = "12px";
-        card.appendChild(axesHeader);
-
-        const axesList = document.createElement("div");
-        axesList.style.cssText = "display: flex; gap: 8px; font-family: monospace; font-size: 12px; margin-bottom: 12px;";
-        state.axes.forEach((val, idx) => {
-          const axisEl = document.createElement("span");
-          axisEl.textContent = `A${idx}: ${val.toFixed(2)}`;
-          axesList.appendChild(axisEl);
-        });
-        card.appendChild(axesList);
-
-        const buttonsHeader = document.createElement("div");
-        buttonsHeader.textContent = `Buttons (${state.buttons.length}):`;
-        buttonsHeader.style.fontWeight = "bold";
-        buttonsHeader.style.fontSize = "12px";
-        card.appendChild(buttonsHeader);
-
-        const buttonsGrid = document.createElement("div");
-        buttonsGrid.style.cssText = "display: flex; flex-wrap: wrap; gap: 4px; font-family: monospace; font-size: 11px;";
-        state.buttons.forEach((val, idx) => {
-          const btnEl = document.createElement("span");
-          btnEl.style.cssText = `
-            padding: 2px 6px;
-            border-radius: 4px;
-            background: ${val > 0.1 ? peer.color : "#2d3348"};
-            color: ${val > 0.1 ? "#000000" : "#ffffff"};
-            font-weight: ${val > 0.1 ? "bold" : "normal"};
+        if (!cardObj) {
+          const card = document.createElement("div");
+          card.style.cssText = `
+            background: rgba(30, 34, 48, 0.85);
+            backdrop-filter: blur(4px);
+            border: 2px solid ${peer.color};
+            border-radius: 8px;
+            padding: 16px;
+            width: 280px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
           `;
-          btnEl.textContent = `B${idx}: ${val.toFixed(1)}`;
-          buttonsGrid.appendChild(btnEl);
-        });
-        card.appendChild(buttonsGrid);
 
-        padsContainer.appendChild(card);
+          const title = document.createElement("h3");
+          title.textContent = peer.name;
+          title.style.margin = "0 0 12px 0";
+          card.appendChild(title);
+
+          const axesHeader = document.createElement("div");
+          axesHeader.textContent = `Axes (${state.axes.length}):`;
+          axesHeader.style.fontWeight = "bold";
+          axesHeader.style.fontSize = "12px";
+          card.appendChild(axesHeader);
+
+          const axesList = document.createElement("div");
+          axesList.style.cssText = "display: flex; gap: 8px; font-family: monospace; font-size: 12px; margin-bottom: 12px;";
+          card.appendChild(axesList);
+
+          const buttonsHeader = document.createElement("div");
+          buttonsHeader.textContent = `Buttons (${state.buttons.length}):`;
+          buttonsHeader.style.fontWeight = "bold";
+          buttonsHeader.style.fontSize = "12px";
+          card.appendChild(buttonsHeader);
+
+          const buttonsGrid = document.createElement("div");
+          buttonsGrid.style.cssText = "display: flex; flex-wrap: wrap; gap: 4px; font-family: monospace; font-size: 11px;";
+          card.appendChild(buttonsGrid);
+
+          padsContainer.appendChild(card);
+
+          cardObj = { card, axisEls: [], btnEls: [] };
+          cardElementsMap.set(peer.id, cardObj);
+        }
+
+        // Efficiently update axis elements
+        const axesList = cardObj.card.children[2] as HTMLDivElement;
+        while (cardObj.axisEls.length < state.axes.length) {
+          const idx = cardObj.axisEls.length;
+          const axisEl = document.createElement("span");
+          axesList.appendChild(axisEl);
+          cardObj.axisEls.push(axisEl);
+        }
+        state.axes.forEach((val, idx) => {
+          if (cardObj.axisEls[idx]) {
+            cardObj.axisEls[idx].textContent = `A${idx}: ${val.toFixed(2)}`;
+          }
+        });
+
+        // Efficiently update button elements
+        const buttonsGrid = cardObj.card.children[4] as HTMLDivElement;
+        while (cardObj.btnEls.length < state.buttons.length) {
+          const idx = cardObj.btnEls.length;
+          const btnEl = document.createElement("span");
+          buttonsGrid.appendChild(btnEl);
+          cardObj.btnEls.push(btnEl);
+        }
+        state.buttons.forEach((val, idx) => {
+          const btnEl = cardObj.btnEls[idx];
+          if (btnEl) {
+            btnEl.style.cssText = `
+              padding: 2px 6px;
+              border-radius: 4px;
+              background: ${val > 0.1 ? peer.color : "#2d3348"};
+              color: ${val > 0.1 ? "#000000" : "#ffffff"};
+              font-weight: ${val > 0.1 ? "bold" : "normal"};
+            `;
+            btnEl.textContent = `B${idx}: ${val.toFixed(1)}`;
+          }
+        });
       }
     },
     destroy: () => {
