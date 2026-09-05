@@ -1,5 +1,6 @@
 export interface GridCell {
   walkable: boolean;
+  destructible?: boolean;
 }
 
 export interface PlayerEntity {
@@ -11,6 +12,20 @@ export interface PlayerEntity {
   y: number;
   fireCooldown?: number;
   damageCooldown?: number;
+  prevFiring?: boolean;
+  attackType?: "ranged" | "melee";
+}
+
+export interface ShockwaveEntity {
+  id: string;
+  kind: "shockwave";
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  color: string;
+  duration: number;
+  maxDuration: number;
 }
 
 export interface NpcEntity {
@@ -36,7 +51,7 @@ export interface ProjectileEntity {
   playerId: string;
 }
 
-export type DungeonEntity = PlayerEntity | NpcEntity | ProjectileEntity;
+export type DungeonEntity = PlayerEntity | NpcEntity | ProjectileEntity | ShockwaveEntity;
 
 export interface JoystickState {
   x: number;
@@ -59,6 +74,7 @@ export interface RoomStateSnapshot {
   players: PlayerEntity[];
   npcs: NpcEntity[];
   projectiles?: ProjectileEntity[];
+  shockwaves?: ShockwaveEntity[];
   gridWidth: number;
   gridHeight: number;
   tileSize: number;
