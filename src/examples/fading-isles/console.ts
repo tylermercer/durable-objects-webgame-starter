@@ -188,6 +188,120 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
   }
 
+  function draw() {
+    if (!canvasCtx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const viewWidth = currentViewportSize.width * dpr;
+    const viewHeight = currentViewportSize.height * dpr;
+
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (viewWidth <= 0 || viewHeight <= 0) return;
+
+    canvasCtx.save();
+    canvasCtx.scale(dpr, dpr);
+
+    // Board rendering offset to center
+    const boardPixelWidth = grid.width * TILE_SIZE;
+    const boardPixelHeight = grid.height * TILE_SIZE;
+    const offsetX = Math.floor((currentViewportSize.width - boardPixelWidth) / 2);
+    const offsetY = Math.floor((currentViewportSize.height - boardPixelHeight) / 2);
+
+    // Draw Header Text
+    canvasCtx.fillStyle = "#ffffff";
+    canvasCtx.font = "bold 22px sans-serif";
+    canvasCtx.textAlign = "left";
+    canvasCtx.textBaseline = "top";
+    canvasCtx.fillText(
+      won
+        ? `Level ${levelNumber} Complete!`
+        : `Level ${levelNumber} - Deplete all tiles`,
+      20,
+      20
+    );
+
+    // Draw Grid
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
+        const cell = grid.get({ x, y });
+        if (!cell) continue; // Crumbled hole - skip drawing
+
+        const tileX = offsetX + x * TILE_SIZE;
+        const tileY = offsetY + y * TILE_SIZE;
+        const padding = 3;
+        const radius = 8;
+
+        canvasCtx.fillStyle = capacityColor(cell.remaining);
+
+        // Rounded tile rect
+        canvasCtx.beginPath();
+        canvasCtx.roundRect(
+          tileX + padding,
+          tileY + padding,
+          TILE_SIZE - padding * 2,
+          TILE_SIZE - padding * 2,
+          radius
+        );
+        canvasCtx.fill();
+
+        // Stroke end or start tile
+        if (cell.kind === "end") {
+          canvasCtx.strokeStyle = "#f59e0b"; // gold/amber
+          canvasCtx.lineWidth = 3;
+          canvasCtx.stroke();
+        } else if (cell.kind === "start") {
+          canvasCtx.strokeStyle = "#10b981"; // green
+          canvasCtx.lineWidth = 2;
+          canvasCtx.stroke();
+        }
+
+        // Draw remaining uses text
+        canvasCtx.fillStyle = "#ffffff";
+        canvasCtx.font = "bold 20px sans-serif";
+        canvasCtx.textAlign = "center";
+        canvasCtx.textBaseline = "middle";
+        canvasCtx.fillText(
+          cell.kind === "end" ? `E (${cell.remaining})` : `${cell.remaining}`,
+          tileX + TILE_SIZE / 2,
+          tileY + TILE_SIZE / 2
+        );
+      }
+    }
+
+    // Draw Players
+    const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
+    for (const p of players) {
+      const px = offsetX + p.x * TILE_SIZE;
+      const py = offsetY + p.y * TILE_SIZE;
+      const radius = TILE_SIZE * 0.35;
+
+      // Shadow
+      canvasCtx.beginPath();
+      canvasCtx.arc(px, py + 3, radius, 0, Math.PI * 2);
+      canvasCtx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      canvasCtx.fill();
+
+      // Circle
+      canvasCtx.beginPath();
+      canvasCtx.arc(px, py, radius, 0, Math.PI * 2);
+      canvasCtx.fillStyle = p.color || "#ffffff";
+      canvasCtx.fill();
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeStyle = "#ffffff";
+      canvasCtx.stroke();
+
+      // Name label above player
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 13px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.textBaseline = "bottom";
+      canvasCtx.fillText(p.name, px, py - radius - 4);
+    }
+
+    canvasCtx.restore();
+  }
+
   const loop = createFixedTickLoop({
     tickRate: 60,
     onTick: (dt) => {
@@ -266,124 +380,13 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         }
       }
     },
-    onRender: () => {
-      if (!canvasCtx) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const viewWidth = currentViewportSize.width * dpr;
-      const viewHeight = currentViewportSize.height * dpr;
-
-      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (viewWidth <= 0 || viewHeight <= 0) return;
-
-      canvasCtx.save();
-      canvasCtx.scale(dpr, dpr);
-
-      // Board rendering offset to center
-      const boardPixelWidth = grid.width * TILE_SIZE;
-      const boardPixelHeight = grid.height * TILE_SIZE;
-      const offsetX = Math.floor((currentViewportSize.width - boardPixelWidth) / 2);
-      const offsetY = Math.floor((currentViewportSize.height - boardPixelHeight) / 2);
-
-      // Draw Header Text
-      canvasCtx.fillStyle = "#ffffff";
-      canvasCtx.font = "bold 22px sans-serif";
-      canvasCtx.textAlign = "left";
-      canvasCtx.textBaseline = "top";
-      canvasCtx.fillText(
-        won
-          ? `Level ${levelNumber} Complete!`
-          : `Level ${levelNumber} - Deplete all tiles`,
-        20,
-        20
-      );
-
-      // Draw Grid
-      for (let y = 0; y < grid.height; y++) {
-        for (let x = 0; x < grid.width; x++) {
-          const cell = grid.get({ x, y });
-          if (!cell) continue; // Crumbled hole - skip drawing
-
-          const tileX = offsetX + x * TILE_SIZE;
-          const tileY = offsetY + y * TILE_SIZE;
-          const padding = 3;
-          const radius = 8;
-
-          canvasCtx.fillStyle = capacityColor(cell.remaining);
-
-          // Rounded tile rect
-          canvasCtx.beginPath();
-          canvasCtx.roundRect(
-            tileX + padding,
-            tileY + padding,
-            TILE_SIZE - padding * 2,
-            TILE_SIZE - padding * 2,
-            radius
-          );
-          canvasCtx.fill();
-
-          // Stroke end or start tile
-          if (cell.kind === "end") {
-            canvasCtx.strokeStyle = "#f59e0b"; // gold/amber
-            canvasCtx.lineWidth = 3;
-            canvasCtx.stroke();
-          } else if (cell.kind === "start") {
-            canvasCtx.strokeStyle = "#10b981"; // green
-            canvasCtx.lineWidth = 2;
-            canvasCtx.stroke();
-          }
-
-          // Draw remaining uses text
-          canvasCtx.fillStyle = "#ffffff";
-          canvasCtx.font = "bold 20px sans-serif";
-          canvasCtx.textAlign = "center";
-          canvasCtx.textBaseline = "middle";
-          canvasCtx.fillText(
-            cell.kind === "end" ? `E (${cell.remaining})` : `${cell.remaining}`,
-            tileX + TILE_SIZE / 2,
-            tileY + TILE_SIZE / 2
-          );
-        }
-      }
-
-      // Draw Players
-      const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
-      for (const p of players) {
-        const px = offsetX + p.x * TILE_SIZE;
-        const py = offsetY + p.y * TILE_SIZE;
-        const radius = TILE_SIZE * 0.35;
-
-        // Shadow
-        canvasCtx.beginPath();
-        canvasCtx.arc(px, py + 3, radius, 0, Math.PI * 2);
-        canvasCtx.fillStyle = "rgba(0, 0, 0, 0.4)";
-        canvasCtx.fill();
-
-        // Circle
-        canvasCtx.beginPath();
-        canvasCtx.arc(px, py, radius, 0, Math.PI * 2);
-        canvasCtx.fillStyle = p.color || "#ffffff";
-        canvasCtx.fill();
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = "#ffffff";
-        canvasCtx.stroke();
-
-        // Name label above player
-        canvasCtx.fillStyle = "#ffffff";
-        canvasCtx.font = "bold 13px sans-serif";
-        canvasCtx.textAlign = "center";
-        canvasCtx.textBaseline = "bottom";
-        canvasCtx.fillText(p.name, px, py - radius - 4);
-      }
-
-      canvasCtx.restore();
-    },
   });
 
   return {
     tick: (_dt: number) => {},
-    render: (_alpha: number) => {},
+    render: (_alpha: number) => {
+      draw();
+    },
     destroy: () => {
       loop.stop();
       unsubscribeResize();
