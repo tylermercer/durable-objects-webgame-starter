@@ -1,7 +1,7 @@
 import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
 import type { PlayerConnectionStatus } from "@host/console";
 import { TileGrid, type TileGridState } from "@utils/tileGrid";
-import { EntityRegistry, type EntityRegistryState } from "@utils/entityRegistry";
+import { EntityRegistry } from "@utils/entityRegistry";
 import { createFixedTickLoop } from "@utils/gameLoop";
 import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import { generateLevel, getLevelSpec } from "./level";
@@ -48,7 +48,7 @@ export function gamepadStateToJoystick(msg: { buttons: number[]; axes: number[] 
 
 interface SavedFadingIslesState {
   grid: TileGridState<Cell | null>;
-  players: EntityRegistryState<PlayerEntity>;
+  players: PlayerEntity[];
   sessionSeed: string;
   levelNumber: number;
   won: boolean;
@@ -84,7 +84,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let levelNumber = 1;
   let won = false;
 
-  const registry = new EntityRegistry<PlayerEntity>();
+  let registry = new EntityRegistry<PlayerEntity>();
   let grid: TileGrid<Cell | null>;
   let startPos = { x: 0, y: 0 };
   let endPos = { x: 0, y: 0 };
@@ -93,7 +93,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   const savedState = loadLocalGameState<SavedFadingIslesState>(ctx.session.roomCode);
   if (savedState) {
     grid = TileGrid.fromJSON<Cell | null>(savedState.grid);
-    registry.fromJSON(savedState.players);
+    if (Array.isArray(savedState.players)) {
+      registry = EntityRegistry.fromJSON<PlayerEntity>(savedState.players);
+    }
     sessionSeed = savedState.sessionSeed ?? sessionSeed;
     levelNumber = savedState.levelNumber ?? levelNumber;
     won = savedState.won ?? false;
