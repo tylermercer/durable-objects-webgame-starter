@@ -1,36 +1,61 @@
 import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
-import type { GamepadStateMessage } from "@transport/transport";
 
 export const controllerTypes = {
+  phone: {},
   gamepad: {},
 };
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
-  const container = document.createElement("div");
-  container.className = "gamepad-demo-console";
-  container.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = `
+    position: relative;
     width: 100%;
+    height: 100%;
+    overflow: hidden;
     background: #0f111a;
     color: #e2e8f0;
     font-family: sans-serif;
-    padding: 24px;
     box-sizing: border-box;
   `;
 
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    display: block;
+  `;
+  wrapper.appendChild(canvas);
+
+  const uiOverlay = document.createElement("div");
+  uiOverlay.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    box-sizing: border-box;
+    overflow-y: auto;
+  `;
+
   const header = document.createElement("h2");
-  header.textContent = "Gamepad Demo";
-  header.style.marginBottom = "16px";
-  container.appendChild(header);
+  header.textContent = "Input Demo";
+  header.style.cssText = "margin: 0 0 8px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.8);";
+  uiOverlay.appendChild(header);
 
   const status = document.createElement("p");
-  status.textContent = "Plug in or connect a gamepad to test input.";
-  status.style.marginBottom = "24px";
-  container.appendChild(status);
+  status.textContent = "Touch phone screen to track dots, or connect a gamepad to test inputs.";
+  status.style.cssText = "margin: 0 0 16px 0; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.8); opacity: 0.9;";
+  uiOverlay.appendChild(status);
 
   const padsContainer = document.createElement("div");
   padsContainer.style.cssText = `
@@ -40,9 +65,21 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     justify-content: center;
     width: 100%;
   `;
-  container.appendChild(padsContainer);
+  uiOverlay.appendChild(padsContainer);
 
-  ctx.viewport.container.appendChild(container);
+  ctx.viewport.container.appendChild(wrapper);
+
+  const ctx2d = canvas.getContext("2d");
+
+  function resizeCanvas(size: { width: number; height: number }) {
+    if (size.width > 0 && size.height > 0) {
+      canvas.width = size.width * window.devicePixelRatio;
+      canvas.height = size.height * window.devicePixelRatio;
+    }
+  }
+
+  resizeCanvas(ctx.viewport.initialSize);
+  const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
   const padStateMap = new Map<string, { buttons: number[]; axes: number[] }>();
   const unsubscribes = new Set<() => void>();
@@ -71,23 +108,57 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   });
 
   return {
-    render: () => {
-      padsContainer.innerHTML = "";
-      if (ctx.peers.size === 0) {
-        status.textContent = "No gamepads detected. Connect a gamepad and press any button.";
-      } else {
-        status.textContent = `${ctx.peers.size} gamepad(s) connected.`;
+    tick: (_dt: number) => {},
+    render: (_alpha: number) => {
+      // 1. Render touch dots on canvas
+      if (ctx2d) {
+        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (const controller of ctx.peers.values()) {
+          if (
+            controller.lastTouch &&
+            controller.lastTouch.phase !== "end" &&
+            controller.lastTouch.phase !== "cancel"
+          ) {
+            const x = controller.lastTouch.x * canvas.width;
+            const y = controller.lastTouch.y * canvas.height;
+
+            ctx2d.beginPath();
+            ctx2d.arc(x, y, 20 * window.devicePixelRatio, 0, Math.PI * 2);
+            ctx2d.fillStyle = controller.color;
+            ctx2d.globalAlpha = 0.7;
+            ctx2d.fill();
+
+            ctx2d.beginPath();
+            ctx2d.arc(x, y, 35 * window.devicePixelRatio, 0, Math.PI * 2);
+            ctx2d.strokeStyle = controller.color;
+            ctx2d.globalAlpha = 0.4;
+            ctx2d.lineWidth = 3 * window.devicePixelRatio;
+            ctx2d.stroke();
+
+            ctx2d.globalAlpha = 1.0;
+            ctx2d.fillStyle = "#ffffff";
+            ctx2d.font = `${14 * window.devicePixelRatio}px sans-serif`;
+            ctx2d.textAlign = "center";
+            ctx2d.fillText(controller.name, x, y - 25 * window.devicePixelRatio);
+          }
+        }
       }
 
-      for (const peer of ctx.peers.values()) {
+      // 2. Render gamepad status cards
+      padsContainer.innerHTML = "";
+      const gamepadPeers = Array.from(ctx.peers.values()).filter((p) => padStateMap.has(p.id));
+
+      for (const peer of gamepadPeers) {
         const card = document.createElement("div");
         card.style.cssText = `
-          background: #1e2230;
+          background: rgba(30, 34, 48, 0.85);
+          backdrop-filter: blur(4px);
           border: 2px solid ${peer.color};
           border-radius: 8px;
           padding: 16px;
           width: 280px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+          box-shadow: 0 4px 6px rgba(0,0,0,0.4);
         `;
 
         const title = document.createElement("h3");
@@ -138,10 +209,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
     },
     destroy: () => {
+      unsubscribeResize();
       unsubReady();
       unsubLeft();
       for (const unsub of unsubscribes) unsub();
-      container.remove();
+      wrapper.remove();
     },
   };
 }

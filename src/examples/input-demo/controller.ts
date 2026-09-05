@@ -28,6 +28,16 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
   }
 
   const surface = document.getElementById("touch-surface");
+  if (surface) {
+    surface.innerHTML = `
+      <div style="pointer-events: none; position: absolute; top: 16px; left: 16px; right: 16px; text-align: center; color: rgba(255, 255, 255, 0.7); font-family: sans-serif;">
+        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">Input Demo</h3>
+        <p style="margin: 0; font-size: 12px; opacity: 0.8;">Touch anywhere on screen to send position to console</p>
+      </div>
+    `;
+    surface.style.position = "relative";
+  }
+
   const onPointerDown = (e: PointerEvent) => handlePointer("start", e);
   const onPointerMove = (e: PointerEvent) => {
     if (e.buttons > 0) handlePointer("move", e);
@@ -72,6 +82,7 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
         cancelAnimationFrame(rafId);
       }
       if (surface) {
+        surface.innerHTML = "";
         surface.removeEventListener("pointerdown", onPointerDown);
         surface.removeEventListener("pointermove", onPointerMove);
         surface.removeEventListener("pointerup", onPointerUp);

@@ -68,12 +68,12 @@ flowchart TB
     bun ./scripts/init.ts
     ```
     Handles installing dependencies (via `pnpm`), customizing your project name and theme, setting up GitHub Secrets for deployment to Cloudflare, and — as its last step — verifying the production deploy pipeline and printing the deployed URL.
-4.  **Try the demo as-is** before changing anything: open the deployed URL from step 3 on your laptop, pick `touch-demo` from the switcher UI, and scan the QR code with your phone. You should see a live dot on the console tracking your finger on the phone. That confirms the console → DO → controller → WebRTC pipe works end-to-end before you touch any game logic.
+4.  **Try the demo as-is** before changing anything: open the deployed URL from step 3 on your laptop, pick `input-demo` from the switcher UI, and scan the QR code with your phone. You should see a live dot on the console tracking your finger on the phone. That confirms the console → DO → controller → WebRTC pipe works end-to-end before you touch any game logic.
 
 ## Trying the examples
 
 The switcher is the default experience out of the box with no setup needed.
-- `touch-demo`: Raw touch input tracking showing real-time dot visualization across WebRTC data channels.
+- `input-demo`: Raw touch input tracking and gamepad state visualization across WebRTC data channels and local gamepads.
 - `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
 - `flappy-royale`: Real-time simulation with per-player elimination, seeded/replayable procedural generation, and 60Hz tick-vs-render separation.
 - `grid-dungeon`: Tile-grid movement and collision, multi-target camera following, and NPC pathfinding via `TileGrid`/`Camera`/`EntityRegistry`.

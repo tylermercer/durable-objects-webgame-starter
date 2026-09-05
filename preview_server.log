@@ -1,0 +1,52 @@
+
+> astro-cloudflare-starter@0.0.1 preview /app
+> astro preview
+
+(node:195690) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+14:16:22 [@astrojs/cloudflare] Enabling image processing with Cloudflare Images for production with the "IMAGES" Images binding.
+14:16:22 [@astrojs/cloudflare]
+ astro  v14.2.4 ready in 95 ms
+
+┃ Local    http://localhost:4321/
+
+✨ Parsed 1 valid header rule.
+HEAD /play/input-demo 307 Temporary Redirect (8ms)
+GET /play/input-demo 307 Temporary Redirect (3ms)
+GET /play/input-demo/ 200 OK (4ms)
+GET /_astro/registry.rJeaAOtD.css 200 OK (4ms)
+GET /_astro/GameShell.astro_astro_type_script_index_0_lang.C9_tf6ij.js 200 OK (6ms)
+GET /_astro/GameShell.astro_astro_type_script_index_1_lang.AZmSY1gF.js 200 OK (6ms)
+GET /_astro/_game_.MjZbm0-D.css 200 OK (7ms)
+GET /_astro/connectionOrchestrator.D7kO7-BS.js 200 OK (3ms)
+GET /_astro/rolldown-runtime.BzAQb71D.js 200 OK (3ms)
+[GameSession] WebSocket connection upgrade requested for role: console
+GET /api/signaling 101 Switching Protocols (36ms)
+[GameSession] Console joined signaling session. Connected controllers count: 0
+[GameSession] WebSocket closed for role: console, id: console
+GET /play/input-demo 307 Temporary Redirect (3ms)
+GET /play/input-demo/ 200 OK (3ms)
+GET /_astro/registry.rJeaAOtD.css 200 OK (3ms)
+GET /_astro/_game_.MjZbm0-D.css 200 OK (2ms)
+GET /_astro/GameShell.astro_astro_type_script_index_1_lang.AZmSY1gF.js 200 OK (3ms)
+GET /_astro/GameShell.astro_astro_type_script_index_0_lang.C9_tf6ij.js 200 OK (4ms)
+GET /_astro/connectionOrchestrator.D7kO7-BS.js 200 OK (3ms)
+GET /_astro/rolldown-runtime.BzAQb71D.js 200 OK (6ms)
+[GameSession] WebSocket connection upgrade requested for role: console
+GET /api/signaling 101 Switching Protocols (21ms)
+[GameSession] Console joined signaling session. Connected controllers count: 0
+[GameSession] WebSocket closed for role: console, id: console
+GET /play/input-demo 307 Temporary Redirect (3ms)
+GET /play/input-demo/ 200 OK (2ms)
+GET /_astro/registry.rJeaAOtD.css 200 OK (2ms)
+GET /_astro/GameShell.astro_astro_type_script_index_1_lang.AZmSY1gF.js 200 OK (2ms)
+GET /_astro/_game_.MjZbm0-D.css 200 OK (2ms)
+GET /_astro/GameShell.astro_astro_type_script_index_0_lang.C9_tf6ij.js 200 OK (3ms)
+GET /_astro/connectionOrchestrator.D7kO7-BS.js 200 OK (3ms)
+GET /_astro/rolldown-runtime.BzAQb71D.js 200 OK (3ms)
+[GameSession] WebSocket connection upgrade requested for role: console
+GET /api/signaling 101 Switching Protocols (21ms)
+[GameSession] Console joined signaling session. Connected controllers count: 0
+GET /_astro/console.BhtZffwq.js 200 OK (5ms)
+[GameSession] WebSocket closed for role: console, id: console
+ ELIFECYCLE  Command failed with exit code 143.

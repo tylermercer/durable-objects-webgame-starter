@@ -8,10 +8,11 @@ export interface GameEntry {
 }
 
 export const EXAMPLES: Record<string, GameEntry> = {
-  "touch-demo": {
-    label: "Touch Demo",
-    console: () => import("@examples/touch-demo/console"),
-    controller: () => import("@examples/touch-demo/controller"),
+  "input-demo": {
+    label: "Input Demo",
+    controllerTypes: { phone: {}, gamepad: {} },
+    console: () => import("@examples/input-demo/console"),
+    controller: () => import("@examples/input-demo/controller"),
   },
   "liars-dice": {
     label: "Liar's Dice",
@@ -42,13 +43,7 @@ export const EXAMPLES: Record<string, GameEntry> = {
     console: () => import("@examples/othello/console"),
     controller: () => import("@examples/othello/controller"),
   },
-  "gamepad-demo": {
-    label: "Gamepad Demo",
-    controllerTypes: { gamepad: {} },
-    console: () => import("@examples/gamepad-demo/console"),
-    controller: () => import("@examples/gamepad-demo/controller"),
-  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;
-export const DEFAULT_EXAMPLE: ExampleId = "touch-demo";
+export const DEFAULT_EXAMPLE: ExampleId = "input-demo";
