@@ -26,6 +26,7 @@ export interface ShockwaveEntity {
   color: string;
   duration: number;
   maxDuration: number;
+  playerId: string;
 }
 
 export interface NpcEntity {

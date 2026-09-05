@@ -13,6 +13,7 @@ import {
   findWalkableSpawnPos,
   handlePlayerFiring,
   stepProjectiles,
+  stepShockwaves,
   checkPlayerMonsterCollisions,
   spawnPlayersInBottom,
   spawnWaveMonsters,
@@ -22,7 +23,7 @@ import {
   ROOM_HEIGHT,
 } from "./room";
 import { EntityRegistry } from "@utils/entityRegistry";
-import type { DungeonEntity, NpcEntity, PlayerEntity, ProjectileEntity } from "./types";
+import type { DungeonEntity, NpcEntity, PlayerEntity, ProjectileEntity, ShockwaveEntity } from "./types";
 import { createRng } from "@utils/rng";
 
 describe("Grid Dungeon room simulation", () => {
@@ -518,5 +519,30 @@ describe("Grid Dungeon room simulation", () => {
     // Shockwave visual entity added
     const shockwaves = registry.query((e) => e.kind === "shockwave");
     expect(shockwaves.length).toBe(1);
+  });
+
+  it("keeps active shockwave centered on player as player moves", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "P1", color: "#f00", x: 5.0, y: 5.0, attackType: "melee" };
+    registry.add(player);
+
+    // Trigger melee attack at x=5.0, y=5.0
+    handlePlayerFiring(player, true, registry, [], 0.05, grid);
+
+    let shockwaves = registry.query((e) => e.kind === "shockwave") as ShockwaveEntity[];
+    expect(shockwaves.length).toBe(1);
+    expect(shockwaves[0].x).toBe(5.0);
+
+    // Player moves to x=7.0, y=8.0
+    player.x = 7.0;
+    player.y = 8.0;
+
+    // Step shockwave
+    stepShockwaves(registry, 0.05);
+
+    // Shockwave coordinates should be updated to match player's new position!
+    expect(shockwaves[0].x).toBe(7.0);
+    expect(shockwaves[0].y).toBe(8.0);
   });
 });

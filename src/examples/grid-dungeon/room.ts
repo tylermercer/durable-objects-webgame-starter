@@ -432,6 +432,7 @@ export function handlePlayerFiring(
         color: player.color,
         duration: 0.2,
         maxDuration: 0.2,
+        playerId: player.id,
       });
 
       // Double damage (2 HP) to all monsters within 1.0 tile distance
@@ -725,10 +726,22 @@ export function stepShockwaves(
   registry: EntityRegistry<DungeonEntity>,
   dt: number
 ): void {
-  const shockwaves = registry.query((e) => e.kind === "shockwave") as any[];
+  const shockwaves = registry.query((e) => e.kind === "shockwave") as ShockwaveEntity[];
+  const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
+  const playerMap = new Map(players.map((p) => [p.id, p]));
+
   for (const sw of shockwaves) {
     sw.duration -= dt;
     sw.radius = sw.maxRadius * (1 - sw.duration / sw.maxDuration);
+
+    if (sw.playerId) {
+      const owner = playerMap.get(sw.playerId);
+      if (owner) {
+        sw.x = owner.x;
+        sw.y = owner.y;
+      }
+    }
+
     if (sw.duration <= 0) {
       registry.remove(sw.id);
     }
