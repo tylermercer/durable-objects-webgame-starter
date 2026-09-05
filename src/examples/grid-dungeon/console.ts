@@ -516,20 +516,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         npcWorldY + radius >= viewport.y &&
         npcWorldY - radius <= viewport.y + viewport.height
       ) {
-        // Draw path line preview if pathing
-        if (npc.currentPath.length > 0) {
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(npcWorldX, npcWorldY);
-          for (const step of npc.currentPath) {
-            canvasCtx.lineTo((step.x + 0.5) * TILE_SIZE, (step.y + 0.5) * TILE_SIZE);
-          }
-          canvasCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-          canvasCtx.setLineDash([4, 4]);
-          canvasCtx.lineWidth = 2;
-          canvasCtx.stroke();
-          canvasCtx.setLineDash([]);
-        }
-
         canvasCtx.fillStyle = npc.color;
         canvasCtx.beginPath();
         canvasCtx.arc(npcWorldX, npcWorldY, radius, 0, Math.PI * 2);

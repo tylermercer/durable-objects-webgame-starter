@@ -516,4 +516,127 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
 
     vi.useRealTimers();
   });
+
+  it("modal-close-btn click requests fullscreen and closes modal", () => {
+    let closeClickHandler: (() => void) | null = null;
+    const mockModalCloseBtn = {
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        if (event === "click") closeClickHandler = cb;
+      })
+    };
+
+    const elements: Record<string, any> = {
+      "modal-close-btn": mockModalCloseBtn,
+      "room-modal": { open: true, close: vi.fn(), addEventListener: vi.fn() }
+    };
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => elements[id] ?? null,
+      createElement: () => ({ addEventListener: vi.fn(), style: {}, classList: { add: vi.fn(), remove: vi.fn() } }),
+      documentElement: {}
+    });
+
+    const app = new ConsoleApp();
+    const fullscreenSpy = vi.spyOn(app, "requestFullscreen").mockResolvedValue(undefined);
+    const closeModalSpy = vi.spyOn(app, "closeModal").mockImplementation(() => {});
+
+    app.setupUIHandlers();
+
+    expect(closeClickHandler).not.toBeNull();
+    closeClickHandler!();
+
+    expect(fullscreenSpy).toHaveBeenCalled();
+    expect(closeModalSpy).toHaveBeenCalled();
+  });
+
+  it("updateControllerUI toggles gamepad-support-notice based on acceptsGamepads()", () => {
+    const mockNotice = {
+      classList: {
+        remove: vi.fn(),
+        add: vi.fn()
+      }
+    };
+    const mockList = { innerHTML: "", appendChild: vi.fn() };
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => {
+        if (id === "gamepad-support-notice") return mockNotice;
+        if (id === "controller-list") return mockList;
+        return null;
+      },
+      createElement: () => ({ addEventListener: vi.fn(), style: {}, classList: { add: vi.fn(), remove: vi.fn() } })
+    });
+
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+
+    app.updateControllerUI();
+    expect(mockNotice.classList.remove).toHaveBeenCalledWith("u-hidden");
+
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(false);
+    app.updateControllerUI();
+    expect(mockNotice.classList.add).toHaveBeenCalledWith("u-hidden");
+  });
+
+  it("updateControllerUI renders editable input for gamepad controllers and updates gamepad name", () => {
+    function createMockDomElement(tag: string) {
+      const children: any[] = [];
+      const listeners: Record<string, Function[]> = {};
+      return {
+        tag,
+        style: {},
+        children,
+        classList: { add: vi.fn(), remove: vi.fn() },
+        addEventListener: (evt: string, fn: Function) => {
+          listeners[evt] = listeners[evt] || [];
+          listeners[evt].push(fn);
+        },
+        triggerInput: (val: string) => {
+          for (const fn of listeners["input"] || []) fn({ target: { value: val } });
+        },
+        appendChild: vi.fn((child: any) => {
+          children.push(child);
+          return child;
+        }),
+        value: "",
+        placeholder: "",
+        type: "text",
+        textContent: ""
+      };
+    }
+
+    const mockList = createMockDomElement("div");
+
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => id === "controller-list" ? mockList : null,
+      createElement: (tag: string) => createMockDomElement(tag)
+    });
+
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+
+    const controllerState: any = {
+      id: "gamepad-0",
+      name: "Gamepad 1",
+      color: "#ff0000",
+      isFirstPlayer: false,
+      pc: null,
+      orchestrator: null,
+      state: "live",
+      status: "live",
+      signalingConnected: true
+    };
+    app.controllers.set("gamepad-0", controllerState);
+
+    app.updateControllerUI();
+
+    const row = mockList.children[0];
+    const nameInput = row.children[0];
+    expect(nameInput.tag).toBe("input");
+    expect(nameInput.value).toBe("Gamepad 1");
+
+    // Renaming gamepad
+    nameInput.triggerInput("Super Controller");
+    expect(controllerState.name).toBe("Super Controller");
+  });
 });
