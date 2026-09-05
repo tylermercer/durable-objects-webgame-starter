@@ -14,8 +14,6 @@ import type {
   PlayerEntity,
 } from "./types";
 
-const TILE_SIZE = 60; // Pixels per tile in Canvas world space
-
 export const controllerTypes = {
   phone: {},
   gamepad: {},
@@ -127,6 +125,11 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     // Reset player positions to startPos
     const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
     for (const p of players) {
+      p.tileX = startPos.x;
+      p.tileY = startPos.y;
+      p.targetTileX = undefined;
+      p.targetTileY = undefined;
+      p.moveProgress = undefined;
       p.x = startPos.x + 0.5;
       p.y = startPos.y + 0.5;
     }
@@ -145,6 +148,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         kind: "player",
         name: peer.name,
         color: peer.color,
+        tileX: startPos.x,
+        tileY: startPos.y,
         x: startPos.x + 0.5,
         y: startPos.y + 0.5,
       });
@@ -202,9 +207,15 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     canvasCtx.save();
     canvasCtx.scale(dpr, dpr);
 
-    // Board rendering offset to center
-    const boardPixelWidth = grid.width * TILE_SIZE;
-    const boardPixelHeight = grid.height * TILE_SIZE;
+    // Calculate dynamic tile size to maintain aspect ratio and preserve uniform board scaling
+    const margin = 60; // Leave margin for header and padding
+    const availWidth = Math.max(100, currentViewportSize.width - margin * 2);
+    const availHeight = Math.max(100, currentViewportSize.height - margin * 2);
+
+    const tileSize = Math.max(16, Math.min(availWidth / grid.width, availHeight / grid.height));
+
+    const boardPixelWidth = grid.width * tileSize;
+    const boardPixelHeight = grid.height * tileSize;
     const offsetX = Math.floor((currentViewportSize.width - boardPixelWidth) / 2);
     const offsetY = Math.floor((currentViewportSize.height - boardPixelHeight) / 2);
 
@@ -227,10 +238,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         const cell = grid.get({ x, y });
         if (!cell) continue; // Crumbled hole - skip drawing
 
-        const tileX = offsetX + x * TILE_SIZE;
-        const tileY = offsetY + y * TILE_SIZE;
-        const padding = 3;
-        const radius = 8;
+        const tileX = offsetX + x * tileSize;
+        const tileY = offsetY + y * tileSize;
+        const padding = Math.max(1, Math.floor(tileSize * 0.05));
+        const radius = Math.max(2, Math.floor(tileSize * 0.15));
 
         canvasCtx.fillStyle = capacityColor(cell.remaining);
 
@@ -239,8 +250,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         canvasCtx.roundRect(
           tileX + padding,
           tileY + padding,
-          TILE_SIZE - padding * 2,
-          TILE_SIZE - padding * 2,
+          tileSize - padding * 2,
+          tileSize - padding * 2,
           radius
         );
         canvasCtx.fill();
@@ -248,23 +259,23 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         // Stroke end or start tile
         if (cell.kind === "end") {
           canvasCtx.strokeStyle = "#f59e0b"; // gold/amber
-          canvasCtx.lineWidth = 3;
+          canvasCtx.lineWidth = Math.max(2, Math.floor(tileSize * 0.05));
           canvasCtx.stroke();
         } else if (cell.kind === "start") {
           canvasCtx.strokeStyle = "#10b981"; // green
-          canvasCtx.lineWidth = 2;
+          canvasCtx.lineWidth = Math.max(2, Math.floor(tileSize * 0.04));
           canvasCtx.stroke();
         }
 
         // Draw remaining uses text
         canvasCtx.fillStyle = "#ffffff";
-        canvasCtx.font = "bold 20px sans-serif";
+        canvasCtx.font = `bold ${Math.max(12, Math.floor(tileSize * 0.35))}px sans-serif`;
         canvasCtx.textAlign = "center";
         canvasCtx.textBaseline = "middle";
         canvasCtx.fillText(
           cell.kind === "end" ? `E (${cell.remaining})` : `${cell.remaining}`,
-          tileX + TILE_SIZE / 2,
-          tileY + TILE_SIZE / 2
+          tileX + tileSize / 2,
+          tileY + tileSize / 2
         );
       }
     }
@@ -272,9 +283,9 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     // Draw Players
     const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
     for (const p of players) {
-      const px = offsetX + p.x * TILE_SIZE;
-      const py = offsetY + p.y * TILE_SIZE;
-      const radius = TILE_SIZE * 0.35;
+      const px = offsetX + p.x * tileSize;
+      const py = offsetY + p.y * tileSize;
+      const radius = tileSize * 0.35;
 
       // Shadow
       canvasCtx.beginPath();
@@ -293,7 +304,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
       // Name label above player
       canvasCtx.fillStyle = "#ffffff";
-      canvasCtx.font = "bold 13px sans-serif";
+      canvasCtx.font = `bold ${Math.max(10, Math.floor(tileSize * 0.22))}px sans-serif`;
       canvasCtx.textAlign = "center";
       canvasCtx.textBaseline = "bottom";
       canvasCtx.fillText(p.name, px, py - radius - 4);
@@ -363,7 +374,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         grid: snapshotGrid,
         gridWidth: grid.width,
         gridHeight: grid.height,
-        tileSize: TILE_SIZE,
+        tileSize: 60,
         levelNumber,
         won,
       };

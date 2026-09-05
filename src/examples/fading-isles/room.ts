@@ -3,7 +3,8 @@ import { EntityRegistry } from "@utils/entityRegistry";
 import type { PlayerConnectionStatus } from "@host/console";
 import type { Cell, JoystickState, PlayerEntity } from "./types";
 
-export const PLAYER_SPEED = 3.5; // Tiles per second
+export const MOVE_SPEED_TPS = 4.0; // Tiles per second for grid step animation
+export const INPUT_THRESHOLD = 0.3; // Minimum joystick displacement to initiate grid move
 
 export function capacityColor(remaining: number, maxCapacity = 5): string {
   if (remaining <= 0) return "#475569"; // slate dark
@@ -46,6 +47,10 @@ export function syncPlayers(
     if (existing) {
       existing.name = peer.name;
       existing.color = peer.color;
+      if (existing.tileX === undefined) {
+        existing.tileX = Math.floor(existing.x);
+        existing.tileY = Math.floor(existing.y);
+      }
     } else {
       registry.add({
         id: peer.id,
@@ -54,6 +59,8 @@ export function syncPlayers(
         color: peer.color,
         x: startPos.x + 0.5,
         y: startPos.y + 0.5,
+        tileX: startPos.x,
+        tileY: startPos.y,
       });
     }
   }
@@ -67,39 +74,9 @@ export function isTileOccupiedByOtherPlayer(
   return players.some(
     (p) =>
       p.id !== playerId &&
-      Math.floor(p.x) === pos.x &&
-      Math.floor(p.y) === pos.y
+      ((p.tileX === pos.x && p.tileY === pos.y) ||
+        (p.targetTileX === pos.x && p.targetTileY === pos.y))
   );
-}
-
-export function movePointAgainstGrid<T>(
-  pos: { x: number; y: number },
-  dx: number,
-  dy: number,
-  grid: TileGrid<T>,
-  isWalkable: (pos: GridPos, cell: T) => boolean
-): { x: number; y: number } {
-  let { x, y } = pos;
-
-  // Try X axis move
-  const targetX = x + dx;
-  const tileX = Math.floor(targetX);
-  const curTileY = Math.floor(y);
-  const cellX = grid.get({ x: tileX, y: curTileY });
-  if (cellX !== undefined && isWalkable({ x: tileX, y: curTileY }, cellX)) {
-    x = targetX;
-  }
-
-  // Try Y axis move
-  const targetY = y + dy;
-  const curTileX = Math.floor(x);
-  const tileY = Math.floor(targetY);
-  const cellY = grid.get({ x: curTileX, y: tileY });
-  if (cellY !== undefined && isWalkable({ x: curTileX, y: tileY }, cellY)) {
-    y = targetY;
-  }
-
-  return { x, y };
 }
 
 export function stepRoom(
@@ -114,54 +91,100 @@ export function stepRoom(
   ).sort((a, b) => a.id.localeCompare(b.id));
 
   for (const player of players) {
-    const input = joystickInputs.get(player.id) ?? { x: 0, y: 0 };
-    if (input.x === 0 && input.y === 0) continue;
+    // Ensure tileX/tileY are initialized
+    if (player.tileX === undefined || player.tileY === undefined) {
+      player.tileX = Math.floor(player.x);
+      player.tileY = Math.floor(player.y);
+    }
 
-    const oldTile: GridPos = {
-      x: Math.floor(player.x),
-      y: Math.floor(player.y),
-    };
+    // 1. If player is not currently moving, check joystick input for a new step
+    if (player.targetTileX === undefined || player.targetTileY === undefined) {
+      const input = joystickInputs.get(player.id) ?? { x: 0, y: 0 };
+      const magSq = input.x * input.x + input.y * input.y;
 
-    const dx = input.x * PLAYER_SPEED * dt;
-    const dy = input.y * PLAYER_SPEED * dt;
+      if (magSq >= INPUT_THRESHOLD * INPUT_THRESHOLD) {
+        let dirX = 0;
+        let dirY = 0;
 
-    const result = movePointAgainstGrid(
-      player,
-      dx,
-      dy,
-      grid,
-      (pos, cell) => {
-        if (cell === null || cell === undefined) return false;
-        return !isTileOccupiedByOtherPlayer(pos, player.id, players);
-      }
-    );
+        if (Math.abs(input.x) > Math.abs(input.y)) {
+          dirX = Math.sign(input.x);
+        } else {
+          dirY = Math.sign(input.y);
+        }
 
-    player.x = result.x;
-    player.y = result.y;
+        const targetPos: GridPos = {
+          x: player.tileX + dirX,
+          y: player.tileY + dirY,
+        };
 
-    const newTile: GridPos = {
-      x: Math.floor(player.x),
-      y: Math.floor(player.y),
-    };
+        const targetCell = grid.get(targetPos);
+        const walkable =
+          targetCell !== null &&
+          targetCell !== undefined &&
+          !isTileOccupiedByOtherPlayer(targetPos, player.id, players);
 
-    // Check tile transition (arrival & departure)
-    if (newTile.x !== oldTile.x || newTile.y !== oldTile.y) {
-      // 1. Arrival on new tile
-      const targetCell = grid.get(newTile);
-      if (targetCell) {
-        targetCell.remaining = Math.max(0, targetCell.remaining - 1);
-      }
-
-      // 2. Departure from old tile
-      const oldCell = grid.get(oldTile);
-      if (oldCell && oldCell.remaining === 0) {
-        const stillOccupied = players.some(
-          (p) => Math.floor(p.x) === oldTile.x && Math.floor(p.y) === oldTile.y
-        );
-        if (!stillOccupied) {
-          grid.set(oldTile, null);
+        if (walkable) {
+          player.targetTileX = targetPos.x;
+          player.targetTileY = targetPos.y;
+          player.moveProgress = 0;
         }
       }
+    }
+
+    // 2. If player is currently moving along a tile transition
+    if (player.targetTileX !== undefined && player.targetTileY !== undefined) {
+      const currentProgress = player.moveProgress ?? 0;
+      const newProgress = currentProgress + MOVE_SPEED_TPS * dt;
+
+      if (newProgress >= 1.0) {
+        // Step completed!
+        const oldTile: GridPos = { x: player.tileX, y: player.tileY };
+        const newTile: GridPos = {
+          x: player.targetTileX,
+          y: player.targetTileY,
+        };
+
+        player.tileX = newTile.x;
+        player.tileY = newTile.y;
+        player.x = newTile.x + 0.5;
+        player.y = newTile.y + 0.5;
+
+        player.targetTileX = undefined;
+        player.targetTileY = undefined;
+        player.moveProgress = undefined;
+
+        // Arrival logic: decrement remaining uses on new tile
+        const targetCell = grid.get(newTile);
+        if (targetCell) {
+          targetCell.remaining = Math.max(0, targetCell.remaining - 1);
+        }
+
+        // Departure logic: crumble old tile if depleted and unoccupied
+        const oldCell = grid.get(oldTile);
+        if (oldCell && oldCell.remaining === 0) {
+          const stillOccupied = players.some(
+            (p) => p.tileX === oldTile.x && p.tileY === oldTile.y
+          );
+          if (!stillOccupied) {
+            grid.set(oldTile, null);
+          }
+        }
+      } else {
+        // Step in progress: update interpolated x/y position for drawing
+        player.moveProgress = newProgress;
+        player.x =
+          player.tileX +
+          0.5 +
+          (player.targetTileX - player.tileX) * newProgress;
+        player.y =
+          player.tileY +
+          0.5 +
+          (player.targetTileY - player.tileY) * newProgress;
+      }
+    } else {
+      // Stationary: align rendering x/y with tile center
+      player.x = player.tileX + 0.5;
+      player.y = player.tileY + 0.5;
     }
   }
 
@@ -177,7 +200,7 @@ export function stepRoom(
         nonNullCount++;
         if (cell.kind === "end" && cell.remaining === 0) {
           const playerOnEnd = players.some(
-            (p) => Math.floor(p.x) === x && Math.floor(p.y) === y
+            (p) => p.tileX === x && p.tileY === y
           );
           if (playerOnEnd) {
             endCellDepletedAndOccupied = true;

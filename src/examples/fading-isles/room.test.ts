@@ -19,28 +19,42 @@ describe("Fading Isles Room Logic", () => {
     });
 
     const registry = new EntityRegistry<PlayerEntity>();
-    registry.add({ id: "p1", kind: "player", name: "P1", color: "#f00", x: 0.5, y: 0.5 });
+    registry.add({
+      id: "p1",
+      kind: "player",
+      name: "P1",
+      color: "#f00",
+      x: 0.5,
+      y: 0.5,
+      tileX: 0,
+      tileY: 0,
+    });
 
     const inputs = new Map([["p1", { x: 1, y: 0 }]]);
 
-    // Move right onto tile (1,0) (dt=0.3 -> dx = 1.05 tiles)
-    let res = stepRoom(grid, registry, inputs, 0.3);
+    // First tick: initiates step from (0,0) towards (1,0)
+    let res = stepRoom(grid, registry, inputs, 0.1);
     expect(res.won).toBe(false);
-
-    // Player 1 should now be on (1,0)
     const p1 = registry.get("p1")!;
-    expect(Math.floor(p1.x)).toBe(1);
+    expect(p1.targetTileX).toBe(1);
+    expect(p1.targetTileY).toBe(0);
 
-    // Tile (1,0) capacity remaining decremented to 0
+    // Complete step onto tile (1,0) (dt=0.2, speed=4 tps => progress = 0.1 * 4 + 0.2 * 4 = 1.2 >= 1.0)
+    res = stepRoom(grid, registry, inputs, 0.2);
+    expect(p1.tileX).toBe(1);
+    expect(p1.targetTileX).toBeUndefined();
+
+    // Tile (1,0) capacity remaining decremented to 0 upon arrival
     expect(grid.get({ x: 1, y: 0 })?.remaining).toBe(0);
 
-    // Tile (0,0) had remaining 1, moved off, but it's not at remaining 0 so it stays tile
+    // Tile (0,0) had remaining 1, moved off, but not remaining 0 so it stays tile
     expect(grid.get({ x: 0, y: 0 })).not.toBeNull();
 
-    // Now move onto (2,0) which is end tile
-    res = stepRoom(grid, registry, inputs, 0.3);
+    // Now step onto (2,0) which is end tile
+    stepRoom(grid, registry, inputs, 0.1); // initiate
+    res = stepRoom(grid, registry, inputs, 0.2); // complete
 
-    expect(Math.floor(p1.x)).toBe(2);
+    expect(p1.tileX).toBe(2);
     // Tile (1,0) had remaining 0 and was vacated, so it crumbles (becomes null)
     expect(grid.get({ x: 1, y: 0 })).toBeNull();
   });
@@ -53,17 +67,41 @@ describe("Fading Isles Room Logic", () => {
     }));
 
     const registry = new EntityRegistry<PlayerEntity>();
-    registry.add({ id: "p1", kind: "player", name: "P1", color: "#f00", x: 0.5, y: 0.5 });
-    registry.add({ id: "p2", kind: "player", name: "P2", color: "#0f0", x: 1.5, y: 0.5 });
+    registry.add({
+      id: "p1",
+      kind: "player",
+      name: "P1",
+      color: "#f00",
+      x: 0.5,
+      y: 0.5,
+      tileX: 0,
+      tileY: 0,
+    });
+    registry.add({
+      id: "p2",
+      kind: "player",
+      name: "P2",
+      color: "#0f0",
+      x: 1.5,
+      y: 0.5,
+      tileX: 1,
+      tileY: 0,
+    });
 
-    expect(isTileOccupiedByOtherPlayer({ x: 1, y: 0 }, "p1", [registry.get("p1")!, registry.get("p2")!])).toBe(true);
+    expect(
+      isTileOccupiedByOtherPlayer({ x: 1, y: 0 }, "p1", [
+        registry.get("p1")!,
+        registry.get("p2")!,
+      ])
+    ).toBe(true);
 
     const inputs = new Map([["p1", { x: 1, y: 0 }]]); // p1 tries to move onto p2's tile
-    stepRoom(grid, registry, inputs, 0.3);
+    stepRoom(grid, registry, inputs, 0.1);
 
     const p1 = registry.get("p1")!;
-    // p1 should be blocked and stay on tile 0
-    expect(Math.floor(p1.x)).toBe(0);
+    // p1 should be blocked and stay on tile 0 without targetTileX set
+    expect(p1.tileX).toBe(0);
+    expect(p1.targetTileX).toBeUndefined();
   });
 
   it("triggers win condition when only E remains, depleted to 0, and occupied", () => {
@@ -73,12 +111,22 @@ describe("Fading Isles Room Logic", () => {
     });
 
     const registry = new EntityRegistry<PlayerEntity>();
-    // Player starts on (0,0) and moves onto (1,0)
-    registry.add({ id: "p1", kind: "player", name: "P1", color: "#f00", x: 0.5, y: 0.5 });
+    // Player starts on (0,0) and steps onto (1,0)
+    registry.add({
+      id: "p1",
+      kind: "player",
+      name: "P1",
+      color: "#f00",
+      x: 0.5,
+      y: 0.5,
+      tileX: 0,
+      tileY: 0,
+    });
 
     const inputs = new Map([["p1", { x: 1, y: 0 }]]);
 
-    const res = stepRoom(grid, registry, inputs, 0.3);
+    stepRoom(grid, registry, inputs, 0.1); // initiate step
+    const res = stepRoom(grid, registry, inputs, 0.2); // complete step
     expect(grid.get({ x: 1, y: 0 })?.remaining).toBe(0);
     expect(res.won).toBe(true);
   });

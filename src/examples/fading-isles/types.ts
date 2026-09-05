@@ -9,8 +9,13 @@ export interface PlayerEntity {
   kind: "player";
   name: string;
   color: string;
-  x: number; // continuous position in tile units
+  x: number; // continuous position for rendering (interpolated)
   y: number;
+  tileX: number; // discrete current tile X
+  tileY: number; // discrete current tile Y
+  targetTileX?: number; // discrete target tile X during step
+  targetTileY?: number; // discrete target tile Y during step
+  moveProgress?: number; // 0..1 transition progress
 }
 
 export interface LevelSpec {
