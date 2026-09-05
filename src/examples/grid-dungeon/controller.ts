@@ -132,6 +132,22 @@ export function createGame(ctx: ControllerContext): ControllerGameInstance {
         const livesLabel = snap.lives !== undefined ? ` | Lives: ${snap.lives}` : "";
         statusText.textContent = `${waveLabel}${livesLabel}`;
       }
+
+      if (snap.players) {
+        const playerName = sessionStorage.getItem("playerName");
+        const myPlayer = snap.players.find((p) => p.name === playerName) || (snap.players.length === 1 ? snap.players[0] : null);
+        if (myPlayer) {
+          if (myPlayer.attackType === "melee") {
+            fireButton.textContent = "MELEE";
+            fireButton.style.background = "#ff4136";
+            fireButton.style.borderColor = "#ff725c";
+          } else {
+            fireButton.textContent = "FIRE";
+            fireButton.style.background = "#ff4136";
+            fireButton.style.borderColor = "#ff725c";
+          }
+        }
+      }
     }
   });
 

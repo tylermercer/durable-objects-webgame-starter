@@ -12,6 +12,9 @@ import {
   syncPlayers,
   stepRoom,
   movePlayer,
+  handlePlayerFiring,
+  stepProjectiles,
+  stepShockwaves,
   stepLobbyCountdown,
   findWalkableSpawnPos,
   spawnPlayersInBottom,
@@ -22,6 +25,8 @@ import {
   LOBBY_LAYOUT,
   DUNGEON_LAYOUT,
   START_ZONE,
+  RANGED_TILE,
+  MELEE_TILE,
 } from "./room";
 import type {
   DungeonEntity,
@@ -105,8 +110,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
   function handlePeerReady(peer: ControllerPeer) {
     if (!registry.get(peer.id)) {
-      const preferredX = phase === "lobby" ? 2.5 : 1.5;
-      const preferredY = phase === "lobby" ? 2.5 : 12.5;
+      const preferredX = phase === "lobby" ? 2.5 : 10.0;
+      const preferredY = phase === "lobby" ? 2.5 : 13.5;
       const spawnPos = findWalkableSpawnPos(activeGrid, preferredX, preferredY);
       const player: PlayerEntity = {
         id: peer.id,
@@ -115,6 +120,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
         color: peer.color,
         x: spawnPos.x,
         y: spawnPos.y,
+        damageCooldown: 0,
       };
       registry.add(player);
     }
@@ -196,6 +202,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       players: registry.query((e) => e.kind === "player") as PlayerEntity[],
       npcs: registry.query((e) => e.kind === "npc") as NpcEntity[],
       projectiles: registry.query((e) => e.kind === "projectile") as ProjectileEntity[],
+      shockwaves: registry.query((e) => e.kind === "shockwave") as any[],
       gridWidth: ROOM_WIDTH,
       gridHeight: ROOM_HEIGHT,
       tileSize: TILE_SIZE,
@@ -238,10 +245,29 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
       if (phase === "lobby") {
         const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
+        const npcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
         for (const player of players) {
           const input = joystickInputs.get(player.id) ?? { x: 0, y: 0 };
           movePlayer(player, activeGrid, input, dt);
+          handlePlayerFiring(player, !!input.firing, registry, npcs, dt, activeGrid, input);
+
+          // Reset blinking invulnerability if present in lobby
+          if (player.damageCooldown) {
+            player.damageCooldown = 0;
+          }
+
+          // Standing on choice tiles in lobby selects attack type
+          const tileX = Math.floor(player.x);
+          const tileY = Math.floor(player.y);
+          if (tileX === RANGED_TILE.x && tileY === RANGED_TILE.y) {
+            player.attackType = "ranged";
+          } else if (tileX === MELEE_TILE.x && tileY === MELEE_TILE.y) {
+            player.attackType = "melee";
+          }
         }
+
+        stepProjectiles(registry, activeGrid, dt);
+        stepShockwaves(registry, dt);
 
         const result = stepLobbyCountdown(players, countdown, dt);
         countdown = result.nextCountdown;
@@ -283,6 +309,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
             const spawnPos = findWalkableSpawnPos(lobbyGrid, targetX, targetY);
             player.x = spawnPos.x;
             player.y = spawnPos.y;
+            player.damageCooldown = 0; // Clear blinking!
             idx++;
           }
         }
@@ -336,10 +363,18 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     for (let y = 0; y < ROOM_HEIGHT; y++) {
       for (let x = 0; x < ROOM_WIDTH; x++) {
         const isWall = currentLayout[y][x] === 1;
+        const cell = activeGrid.get({ x, y });
+        const isDestructible = cell?.destructible;
         const screenX = x * TILE_SIZE;
         const screenY = y * TILE_SIZE;
 
-        if (isWall) {
+        if (isDestructible) {
+          canvasCtx.fillStyle = "#8b5a2b";
+          canvasCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          canvasCtx.strokeStyle = "#5c3a21";
+          canvasCtx.lineWidth = 2;
+          canvasCtx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        } else if (isWall) {
           canvasCtx.fillStyle = "#2b2b36";
           canvasCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
           canvasCtx.strokeStyle = "#1a1a22";
@@ -364,8 +399,38 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
     }
 
-    // Render Start Zone floor outline and text label in Lobby
+    // Render Attack Choice Tiles & Start Zone floor outline in Lobby
     if (phase === "lobby") {
+      // Ranged Choice Tile
+      const rx = RANGED_TILE.x * TILE_SIZE;
+      const ry = RANGED_TILE.y * TILE_SIZE;
+      canvasCtx.fillStyle = "#0074d9";
+      canvasCtx.fillRect(rx, ry, TILE_SIZE, TILE_SIZE);
+      canvasCtx.strokeStyle = "#7fdbff";
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeRect(rx, ry, TILE_SIZE, TILE_SIZE);
+
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 9px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.textBaseline = "middle";
+      canvasCtx.fillText("RANGED", rx + TILE_SIZE / 2, ry + TILE_SIZE / 2);
+
+      // Melee Choice Tile
+      const mx = MELEE_TILE.x * TILE_SIZE;
+      const my = MELEE_TILE.y * TILE_SIZE;
+      canvasCtx.fillStyle = "#ff4136";
+      canvasCtx.fillRect(mx, my, TILE_SIZE, TILE_SIZE);
+      canvasCtx.strokeStyle = "#ff851b";
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeRect(mx, my, TILE_SIZE, TILE_SIZE);
+
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.font = "bold 9px sans-serif";
+      canvasCtx.textAlign = "center";
+      canvasCtx.textBaseline = "middle";
+      canvasCtx.fillText("MELEE", mx + TILE_SIZE / 2, my + TILE_SIZE / 2);
+
       const szX = START_ZONE.minX * TILE_SIZE;
       const szY = START_ZONE.minY * TILE_SIZE;
       const szW = (START_ZONE.maxX - START_ZONE.minX + 1) * TILE_SIZE;
@@ -395,6 +460,26 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     }
 
     const viewport = camera.getViewport();
+
+    // Render Shockwaves
+    const shockwaves = registry.query((e) => e.kind === "shockwave") as any[];
+    for (const sw of shockwaves) {
+      const swX = sw.x * TILE_SIZE;
+      const swY = sw.y * TILE_SIZE;
+      const swR = sw.radius * TILE_SIZE;
+      const alpha = Math.max(0, sw.duration / sw.maxDuration);
+
+      canvasCtx.save();
+      canvasCtx.globalAlpha = alpha;
+      canvasCtx.strokeStyle = sw.color || "#ffdc00";
+      canvasCtx.lineWidth = 4;
+      canvasCtx.beginPath();
+      canvasCtx.arc(swX, swY, swR, 0, Math.PI * 2);
+      canvasCtx.stroke();
+      canvasCtx.fillStyle = "rgba(255, 255, 255, 0.2)";
+      canvasCtx.fill();
+      canvasCtx.restore();
+    }
 
     // Render Projectiles
     const projectiles = registry.query((e) => e.kind === "projectile") as ProjectileEntity[];
@@ -498,7 +583,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       canvasCtx.fillStyle = "#ffffff";
       canvasCtx.font = "bold 14px sans-serif";
       canvasCtx.textAlign = "center";
-      canvasCtx.fillText(player.name, pWorldX, pWorldY - radius - 6);
+      const attackLabel = player.attackType === "melee" ? " [MELEE]" : "";
+      canvasCtx.fillText(`${player.name}${attackLabel}`, pWorldX, pWorldY - radius - 6);
     }
 
     canvasCtx.restore();

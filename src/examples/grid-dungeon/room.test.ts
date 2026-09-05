@@ -13,6 +13,7 @@ import {
   findWalkableSpawnPos,
   handlePlayerFiring,
   stepProjectiles,
+  stepShockwaves,
   checkPlayerMonsterCollisions,
   spawnPlayersInBottom,
   spawnWaveMonsters,
@@ -22,7 +23,7 @@ import {
   ROOM_HEIGHT,
 } from "./room";
 import { EntityRegistry } from "@utils/entityRegistry";
-import type { DungeonEntity, NpcEntity, PlayerEntity, ProjectileEntity } from "./types";
+import type { DungeonEntity, NpcEntity, PlayerEntity, ProjectileEntity, ShockwaveEntity } from "./types";
 import { createRng } from "@utils/rng";
 
 describe("Grid Dungeon room simulation", () => {
@@ -417,5 +418,131 @@ describe("Grid Dungeon room simulation", () => {
 
     // Verify player spawned in bottom half (y >= 7.5)
     expect(player.y).toBeGreaterThanOrEqual(7.5);
+  });
+
+  it("fires immediately on rapid press/release without waiting for held cooldown", () => {
+    const registry = new EntityRegistry<DungeonEntity>();
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "P1", color: "#f00", x: 2.5, y: 12.5 };
+    const monster: NpcEntity = { id: "npc1", kind: "npc", name: "Near", color: "#0f0", x: 2.5, y: 2.5, currentPath: [], wanderTimer: 1, hp: 10, maxHp: 10 };
+    registry.add(player);
+    registry.add(monster);
+
+    // Press 1 (firing = true, prevFiring = false) -> fires immediately!
+    handlePlayerFiring(player, true, registry, [monster], 0.1);
+    expect(registry.query((e) => e.kind === "projectile").length).toBe(1);
+
+    // Release button (firing = false) -> updates prevFiring = false
+    handlePlayerFiring(player, false, registry, [monster], 0.1);
+    expect(registry.query((e) => e.kind === "projectile").length).toBe(1);
+
+    // Press 2 immediately (0.1s later) -> fires again immediately on new press!
+    handlePlayerFiring(player, true, registry, [monster], 0.1);
+    expect(registry.query((e) => e.kind === "projectile").length).toBe(2);
+  });
+
+  it("resets damageCooldown to 0 when player returns to lobby after Game Over", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const rng = createRng(111);
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 5.0, damageCooldown: 0 };
+    const monster: NpcEntity = { id: "m1", kind: "npc", name: "Orc", color: "#0f0", x: 5.2, y: 5.0, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+    registry.add(player);
+    registry.add(monster);
+
+    const result = stepRoom(grid, registry, new Map([["p1", { x: 0, y: 0 }]]), 0.1, rng, {
+      phase: "dungeon",
+      wave: 1,
+      lives: 1,
+      gameOverSurvivedWaves: null,
+    });
+
+    expect(result.phase).toBe("lobby");
+    expect(player.damageCooldown).toBe(0); // Blinking reset!
+  });
+
+  it("destroys brown destructible blocks when hit by projectile", () => {
+    const grid = createLobbyGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+
+    // Tile (6, 4) is part of brown block ring in lobby
+    expect(grid.get({ x: 6, y: 4 })?.destructible).toBe(true);
+    expect(grid.get({ x: 6, y: 4 })?.walkable).toBe(false);
+
+    // Spawn a projectile inside tile (6, 4)
+    const proj: ProjectileEntity = { id: "p1", kind: "projectile", x: 6.5, y: 4.5, vx: 0, vy: 0, playerId: "p1" };
+    registry.add(proj);
+
+    stepProjectiles(registry, grid, 0.01);
+
+    // Block is destroyed -> walkable = true, destructible = false, projectile removed
+    expect(grid.get({ x: 6, y: 4 })?.destructible).toBe(false);
+    expect(grid.get({ x: 6, y: 4 })?.walkable).toBe(true);
+    expect(registry.get("p1")).toBeUndefined();
+  });
+
+  it("spawns players at the very bottom row of the dungeon", () => {
+    const grid = createDungeonGrid();
+    const players: PlayerEntity[] = [
+      { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 0, y: 0 },
+      { id: "p2", kind: "player", name: "Bob", color: "#0f0", x: 0, y: 0 },
+    ];
+
+    spawnPlayersInBottom(players, grid);
+
+    expect(players[0].y).toBe(13.5); // Bottommost row (y=13)
+    expect(players[1].y).toBe(13.5);
+    expect(players[0].x).toBe(10.5); // Centered
+  });
+
+  it("performs melee attack dealing double damage (2 HP) to nearby monsters and destroying brown blocks", () => {
+    const grid = createLobbyGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "P1", color: "#f00", x: 6.5, y: 5.5, attackType: "melee" };
+    const monster: NpcEntity = { id: "m1", kind: "npc", name: "Goblin", color: "#0f0", x: 6.5, y: 6.0, currentPath: [], wanderTimer: 1, hp: 5, maxHp: 5 };
+
+    registry.add(player);
+    registry.add(monster);
+
+    // Tile (6, 4) is a brown block in lobby
+    expect(grid.get({ x: 6, y: 4 })?.destructible).toBe(true);
+
+    handlePlayerFiring(player, true, registry, [monster], 0.1, grid);
+
+    // Monster HP reduced by 2 (double damage vs projectile 1 damage)
+    expect(monster.hp).toBe(3);
+
+    // Brown block destroyed
+    expect(grid.get({ x: 6, y: 4 })?.destructible).toBe(false);
+    expect(grid.get({ x: 6, y: 4 })?.walkable).toBe(true);
+
+    // Shockwave visual entity added
+    const shockwaves = registry.query((e) => e.kind === "shockwave");
+    expect(shockwaves.length).toBe(1);
+  });
+
+  it("keeps active shockwave centered on player as player moves", () => {
+    const grid = createDungeonGrid();
+    const registry = new EntityRegistry<DungeonEntity>();
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "P1", color: "#f00", x: 5.0, y: 5.0, attackType: "melee" };
+    registry.add(player);
+
+    // Trigger melee attack at x=5.0, y=5.0
+    handlePlayerFiring(player, true, registry, [], 0.05, grid);
+
+    let shockwaves = registry.query((e) => e.kind === "shockwave") as ShockwaveEntity[];
+    expect(shockwaves.length).toBe(1);
+    expect(shockwaves[0].x).toBe(5.0);
+
+    // Player moves to x=7.0, y=8.0
+    player.x = 7.0;
+    player.y = 8.0;
+
+    // Step shockwave
+    stepShockwaves(registry, 0.05);
+
+    // Shockwave coordinates should be updated to match player's new position!
+    expect(shockwaves[0].x).toBe(7.0);
+    expect(shockwaves[0].y).toBe(8.0);
   });
 });

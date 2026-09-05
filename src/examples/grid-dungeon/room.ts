@@ -68,16 +68,63 @@ export const START_ZONE: StartZone = {
   maxY: 8,
 };
 
+export const RANGED_TILE = { x: 4, y: 7 };
+export const MELEE_TILE = { x: 15, y: 7 };
+
 export function createLobbyGrid(): TileGrid<GridCell> {
-  return new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
+  const grid = new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
     walkable: LOBBY_LAYOUT[pos.y][pos.x] === 0,
+    destructible: false,
   }));
+
+  // Place brown destructible blocks in a ring around START_ZONE with a 1-tile gap
+  for (let x = 6; x <= 13; x++) {
+    for (let y = 4; y <= 10; y++) {
+      const isPerimeter = x === 6 || x === 13 || y === 4 || y === 10;
+      if (isPerimeter) {
+        grid.set({ x, y }, { walkable: false, destructible: true });
+      }
+    }
+  }
+
+  return grid;
 }
 
-export function createDungeonGrid(): TileGrid<GridCell> {
-  return new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
+export function createDungeonGrid(rng: () => number = Math.random): TileGrid<GridCell> {
+  const grid = new TileGrid<GridCell>(ROOM_WIDTH, ROOM_HEIGHT, (pos) => ({
     walkable: DUNGEON_LAYOUT[pos.y][pos.x] === 0,
+    destructible: false,
   }));
+
+  // Candidate lines connecting permanent wall chunks
+  const candidateLines: Array<Array<{ x: number; y: number }>> = [
+    [{ x: 6, y: 3 }, { x: 7, y: 3 }],
+    [{ x: 12, y: 3 }, { x: 13, y: 3 }],
+    [{ x: 6, y: 9 }, { x: 7, y: 9 }],
+    [{ x: 12, y: 9 }, { x: 13, y: 9 }],
+    [{ x: 9, y: 3 }, { x: 9, y: 4 }],
+    [{ x: 10, y: 3 }, { x: 10, y: 4 }],
+    [{ x: 4, y: 6 }, { x: 4, y: 7 }],
+    [{ x: 15, y: 6 }, { x: 15, y: 7 }],
+    [{ x: 9, y: 7 }, { x: 9, y: 8 }],
+    [{ x: 10, y: 7 }, { x: 10, y: 8 }],
+    [{ x: 1, y: 3 }, { x: 2, y: 3 }],
+    [{ x: 17, y: 3 }, { x: 18, y: 3 }],
+    [{ x: 1, y: 9 }, { x: 2, y: 9 }],
+    [{ x: 17, y: 9 }, { x: 18, y: 9 }],
+  ];
+
+  for (const line of candidateLines) {
+    if (rng() < 0.5) {
+      for (const pos of line) {
+        if (grid.get(pos)?.walkable) {
+          grid.set(pos, { walkable: false, destructible: true });
+        }
+      }
+    }
+  }
+
+  return grid;
 }
 
 export function createRoomGrid(): TileGrid<GridCell> {
@@ -216,9 +263,9 @@ export function findWalkableSpawnPos(
 
 export function getBottomSpawnPositions(grid: TileGrid<GridCell>): Array<{ x: number; y: number }> {
   const positions: Array<{ x: number; y: number }> = [];
-  const minY = Math.floor(grid.height / 2);
-  for (let y = minY; y < grid.height - 1; y++) {
-    for (let x = 1; x < grid.width - 1; x++) {
+  const xOrder = [10, 9, 11, 8, 12, 7, 13, 6, 14, 5, 15, 4, 16, 3, 17, 2, 18, 1];
+  for (let y = grid.height - 2; y >= grid.height - 3; y--) {
+    for (const x of xOrder) {
       if (grid.get({ x, y })?.walkable) {
         positions.push({ x: x + 0.5, y: y + 0.5 });
       }
@@ -331,39 +378,142 @@ export function findNearestNpc(player: PlayerEntity, npcs: NpcEntity[]): NpcEnti
   return nearest;
 }
 
+export function findNearestDestructibleBlock(
+  player: PlayerEntity,
+  grid: TileGrid<GridCell>
+): { x: number; y: number } | null {
+  let nearest: { x: number; y: number } | null = null;
+  let minDistSq = Infinity;
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (grid.get({ x, y })?.destructible) {
+        const blockX = x + 0.5;
+        const blockY = y + 0.5;
+        const dx = blockX - player.x;
+        const dy = blockY - player.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDistSq) {
+          minDistSq = distSq;
+          nearest = { x: blockX, y: blockY };
+        }
+      }
+    }
+  }
+  return nearest;
+}
+
 export function handlePlayerFiring(
   player: PlayerEntity,
   firing: boolean,
   registry: EntityRegistry<DungeonEntity>,
   npcs: NpcEntity[],
-  dt: number
+  dt: number,
+  grid?: TileGrid<GridCell>,
+  joystickInput?: JoystickState
 ): void {
   if (player.fireCooldown !== undefined && player.fireCooldown > 0) {
     player.fireCooldown = Math.max(0, player.fireCooldown - dt);
   }
 
-  if (firing && (player.fireCooldown === undefined || player.fireCooldown <= 0)) {
-    const target = findNearestNpc(player, npcs);
-    if (target) {
-      const dx = target.x - player.x;
-      const dy = target.y - player.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0) {
-        const vx = (dx / dist) * PROJECTILE_SPEED;
-        const vy = (dy / dist) * PROJECTILE_SPEED;
-        registry.add({
-          id: `proj-${player.id}-${Math.random().toString(36).slice(2)}`,
-          kind: "projectile",
-          x: player.x,
-          y: player.y,
-          vx,
-          vy,
-          playerId: player.id,
-        });
-        player.fireCooldown = 0.5; // 500ms
+  const isNewPress = firing && !player.prevFiring;
+  const isHeld = firing && player.prevFiring;
+  const canFire = isNewPress || (isHeld && (player.fireCooldown === undefined || player.fireCooldown <= 0));
+
+  if (canFire) {
+    if (player.attackType === "melee") {
+      // Perform Melee Shockwave Attack
+      registry.add({
+        id: `shockwave-${player.id}-${Math.random().toString(36).slice(2)}`,
+        kind: "shockwave",
+        x: player.x,
+        y: player.y,
+        radius: 0.2,
+        maxRadius: 1.0,
+        color: player.color,
+        duration: 0.2,
+        maxDuration: 0.2,
+        playerId: player.id,
+      });
+
+      // Double damage (2 HP) to all monsters within 1.0 tile distance
+      for (const npc of npcs) {
+        const dx = npc.x - player.x;
+        const dy = npc.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= 1.2) {
+          npc.hp -= 2;
+          if (npc.hp <= 0) {
+            registry.remove(npc.id);
+          }
+        }
       }
+
+      // Destroy destructible brown blocks within 1.0 tile distance
+      if (grid) {
+        const playerTileX = Math.floor(player.x);
+        const playerTileY = Math.floor(player.y);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const tx = playerTileX + dx;
+            const ty = playerTileY + dy;
+            if (grid.get({ x: tx, y: ty })?.destructible) {
+              grid.set({ x: tx, y: ty }, { walkable: true, destructible: false });
+            }
+          }
+        }
+      }
+
+      player.fireCooldown = 0.5;
+    } else {
+      // Ranged Attack (Projectile)
+      let vx = 0;
+      let vy = 0;
+
+      const targetNpc = findNearestNpc(player, npcs);
+      if (targetNpc) {
+        const dx = targetNpc.x - player.x;
+        const dy = targetNpc.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+          vx = (dx / dist) * PROJECTILE_SPEED;
+          vy = (dy / dist) * PROJECTILE_SPEED;
+        }
+      } else if (joystickInput && (joystickInput.x !== 0 || joystickInput.y !== 0)) {
+        const dist = Math.sqrt(joystickInput.x * joystickInput.x + joystickInput.y * joystickInput.y);
+        vx = (joystickInput.x / dist) * PROJECTILE_SPEED;
+        vy = (joystickInput.y / dist) * PROJECTILE_SPEED;
+      } else if (grid) {
+        const destBlock = findNearestDestructibleBlock(player, grid);
+        if (destBlock) {
+          const dx = destBlock.x - player.x;
+          const dy = destBlock.y - player.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 0) {
+            vx = (dx / dist) * PROJECTILE_SPEED;
+            vy = (dy / dist) * PROJECTILE_SPEED;
+          }
+        }
+      }
+
+      if (vx === 0 && vy === 0) {
+        // Default shoot UP
+        vy = -PROJECTILE_SPEED;
+      }
+
+      registry.add({
+        id: `proj-${player.id}-${Math.random().toString(36).slice(2)}`,
+        kind: "projectile",
+        x: player.x,
+        y: player.y,
+        vx,
+        vy,
+        playerId: player.id,
+      });
+      player.fireCooldown = 0.5;
     }
   }
+
+  player.prevFiring = firing;
 }
 
 export function stepProjectiles(
@@ -381,6 +531,14 @@ export function stepProjectiles(
     // Check grid bounds and wall collision
     const tileX = Math.floor(nextX);
     const tileY = Math.floor(nextY);
+
+    const cell = grid.get({ x: tileX, y: tileY });
+    if (cell && cell.destructible) {
+      grid.set({ x: tileX, y: tileY }, { walkable: true, destructible: false });
+      registry.remove(proj.id);
+      continue;
+    }
+
     if (!isWalkablePos(grid, tileX, tileY)) {
       registry.remove(proj.id);
       continue;
@@ -564,6 +722,32 @@ export interface DungeonStateUpdate {
   gameOverSurvivedWaves: number | null;
 }
 
+export function stepShockwaves(
+  registry: EntityRegistry<DungeonEntity>,
+  dt: number
+): void {
+  const shockwaves = registry.query((e) => e.kind === "shockwave") as ShockwaveEntity[];
+  const players = registry.query((e) => e.kind === "player") as PlayerEntity[];
+  const playerMap = new Map(players.map((p) => [p.id, p]));
+
+  for (const sw of shockwaves) {
+    sw.duration -= dt;
+    sw.radius = sw.maxRadius * (1 - sw.duration / sw.maxDuration);
+
+    if (sw.playerId) {
+      const owner = playerMap.get(sw.playerId);
+      if (owner) {
+        sw.x = owner.x;
+        sw.y = owner.y;
+      }
+    }
+
+    if (sw.duration <= 0) {
+      registry.remove(sw.id);
+    }
+  }
+}
+
 export function stepRoom(
   grid: TileGrid<GridCell>,
   registry: EntityRegistry<DungeonEntity>,
@@ -585,11 +769,12 @@ export function stepRoom(
   for (const player of players) {
     const input = joystickInputs.get(player.id) ?? { x: 0, y: 0 };
     movePlayer(player, grid, input, dt);
-    handlePlayerFiring(player, !!input.firing, registry, npcs, dt);
+    handlePlayerFiring(player, !!input.firing, registry, npcs, dt, grid, input);
   }
 
-  // 2. Step projectiles
+  // 2. Step projectiles & shockwaves
   stepProjectiles(registry, grid, dt);
+  stepShockwaves(registry, dt);
 
   // 3. Step NPCs
   const currentNpcs = registry.query((e) => e.kind === "npc") as NpcEntity[];
@@ -610,8 +795,13 @@ export function stepRoom(
       phase = "lobby";
       gameOverSurvivedWaves = wave - 1;
 
-      // Clear NPCs & projectiles
-      const toRemove = registry.query((e) => e.kind === "npc" || e.kind === "projectile");
+      // Reset damageCooldown for all players so blinking stops!
+      for (const p of players) {
+        p.damageCooldown = 0;
+      }
+
+      // Clear NPCs, projectiles & shockwaves
+      const toRemove = registry.query((e) => e.kind === "npc" || e.kind === "projectile" || e.kind === "shockwave");
       for (const entity of toRemove) {
         registry.remove(entity.id);
       }
