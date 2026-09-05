@@ -33,6 +33,9 @@ const { game } = Astro.props;
           <h1 id="player-name" class="u-step-2">Controller</h1>
           <p id="controller-status" class="u-step--1">Connecting...</p>
         </div>
+        <button id="join-different-game-btn" class="btn-join-different-game u-hidden" type="button">
+          Join a Different Game
+        </button>
         <button id="fullscreen-btn" class="btn-fullscreen u-hidden" type="button">
           Fullscreen ⛶
         </button>
@@ -513,6 +516,7 @@ const { game } = Astro.props;
     align-items: center;
   }
 
+  .btn-join-different-game,
   .btn-fullscreen {
     padding: 0.35rem 0.85rem;
     font-size: 0.85rem;
@@ -525,6 +529,7 @@ const { game } = Astro.props;
     transition: background-color 0.2s ease;
   }
 
+  .btn-join-different-game:hover,
   .btn-fullscreen:hover {
     background-color: rgba(0, 0, 0, 0.25);
   }

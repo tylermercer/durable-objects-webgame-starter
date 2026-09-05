@@ -123,6 +123,16 @@ export class ControllerApp {
     }
   }
 
+  updateJoinDifferentButtonVisibility(visible: boolean) {
+    const btn = document.getElementById("join-different-game-btn");
+    if (!btn) return;
+    if (visible) {
+      btn.classList.remove("u-hidden");
+    } else {
+      btn.classList.add("u-hidden");
+    }
+  }
+
   setupFullscreenAndWakeLockListeners() {
     const fullscreenEvents = [
       "fullscreenchange",
@@ -152,6 +162,11 @@ export class ControllerApp {
 
   async init() {
     this.setupFullscreenAndWakeLockListeners();
+
+    const joinDifferentBtn = document.getElementById("join-different-game-btn");
+    joinDifferentBtn?.addEventListener("click", () => {
+      window.location.href = "/";
+    });
 
     const savedName = getSavedName();
     const canAutoRejoin = hasRejoinToken(this.code);
@@ -245,6 +260,7 @@ export class ControllerApp {
           this.initiateWebRTC();
         } else {
           this.updateStatus(`Connected as ${this.name}. Waiting for console...`);
+          this.updateJoinDifferentButtonVisibility(true);
         }
       }).catch(err => {
         logger.error("Failed to join as controller:", err);
@@ -297,6 +313,7 @@ export class ControllerApp {
   }
 
   async initiateWebRTC() {
+    this.updateJoinDifferentButtonVisibility(false);
     logger.info("Initiating ConnectionOrchestrator for WebRTC/relay connection...");
     this.orchestrator?.close();
 
@@ -358,6 +375,7 @@ export class ControllerApp {
     this.activeGame = null;
     this.pc = null;
     this.updateStatus("Console disconnected. Waiting for console...");
+    this.updateJoinDifferentButtonVisibility(true);
   }
 
   handleKicked() {
@@ -395,6 +413,7 @@ export class ControllerApp {
     if (nameScreen) nameScreen.classList.remove("u-hidden");
     if (controllerMain) controllerMain.classList.add("u-hidden");
     this.updateFullscreenButtonVisibility();
+    this.updateJoinDifferentButtonVisibility(false);
   }
 
   handleSignal(signal: RTCSignal) {

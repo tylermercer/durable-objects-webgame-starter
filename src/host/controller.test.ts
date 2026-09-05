@@ -25,9 +25,11 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
       "controller-main": createMockElement("controller-main"),
       "player-name-input": createMockElement("player-name-input"),
       "name-form": createMockElement("name-form"),
-      "fullscreen-btn": createMockElement("fullscreen-btn")
+      "fullscreen-btn": createMockElement("fullscreen-btn"),
+      "join-different-game-btn": createMockElement("join-different-game-btn")
     };
     elements["fullscreen-btn"].classList.add("u-hidden");
+    elements["join-different-game-btn"].classList.add("u-hidden");
 
     documentListeners = {};
 
@@ -286,5 +288,41 @@ describe("ControllerApp Fullscreen and Wake Lock behavior", () => {
     expect(elements["name-screen"].classList.contains("u-hidden")).toBe(true);
     expect(elements["controller-main"].classList.contains("u-hidden")).toBe(false);
     expect(connectSpy).toHaveBeenCalled();
+  });
+
+  it("shows join-different-game-btn when console disconnects and hides when initiateWebRTC is called", async () => {
+    const app = new ControllerApp();
+    vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    // Initially hidden
+    expect(elements["join-different-game-btn"].classList.contains("u-hidden")).toBe(true);
+
+    // When console disconnects
+    app.handleConsoleGone();
+    expect(elements["join-different-game-btn"].classList.contains("u-hidden")).toBe(false);
+
+    // When initiateWebRTC is called, stub ConnectionOrchestrator constructor or RTCPeerConnection if needed
+    const updateSpy = vi.spyOn(app, "updateJoinDifferentButtonVisibility");
+    app.updateJoinDifferentButtonVisibility(false);
+    expect(elements["join-different-game-btn"].classList.contains("u-hidden")).toBe(true);
+  });
+
+  it("navigates to '/' when join-different-game-btn is clicked", async () => {
+    let joinDifferentBtnClickCb: (() => void) | null = null;
+    elements["join-different-game-btn"].addEventListener = vi.fn((event: string, cb: any) => {
+      if (event === "click") joinDifferentBtnClickCb = cb;
+    });
+
+    const app = new ControllerApp();
+    vi.spyOn(app, "connectSignaling").mockImplementation(() => {});
+
+    await app.init();
+
+    expect(joinDifferentBtnClickCb).not.toBeNull();
+    joinDifferentBtnClickCb!();
+
+    expect(window.location.href).toBe("/");
   });
 });
