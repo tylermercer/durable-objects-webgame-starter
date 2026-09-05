@@ -74,6 +74,7 @@ flowchart TB
 
 The switcher is the default experience out of the box with no setup needed.
 - `input-demo`: Raw touch input tracking and gamepad state visualization across WebRTC data channels and local gamepads.
+- `fading-isles`: Procedurally generated tile-depletion co-op puzzle — exercises `TileGrid` mutation, capacity-based level generation, and shared-board real-time multiplayer with any number of players.
 - `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
 - `flappy-royale`: Real-time simulation with per-player elimination, seeded/replayable procedural generation, and 60Hz tick-vs-render separation.
 - `grid-dungeon`: Tile-grid movement and collision, multi-target camera following, and NPC pathfinding via `TileGrid`/`Camera`/`EntityRegistry`.
