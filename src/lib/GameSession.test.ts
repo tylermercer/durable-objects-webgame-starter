@@ -379,7 +379,7 @@ describe("GameSession Durable Object", () => {
     expect(session.gracePeriodMs).toBe(15000);
   });
 
-  it("enforces maxPlayers limit for new controllers but permits rejoining", async () => {
+  it("enforces phoneMax limit for new controllers but permits rejoining", async () => {
     const storageMap = new Map<string, any>();
     const ctx = {
       storage: {
@@ -419,8 +419,8 @@ describe("GameSession Durable Object", () => {
     const consoleApi = (session as any).makeConsoleApi(consoleWs);
     await consoleApi.join(consoleCallbacks, undefined, undefined, 2);
 
-    expect(session.maxPlayers).toBe(2);
-    expect(ctx.storage.put).toHaveBeenCalledWith("maxPlayers", 2);
+    expect(session.phoneMax).toBe(2);
+    expect(ctx.storage.put).toHaveBeenCalledWith("phoneMax", 2);
 
     // Join player 1
     const cb1 = makeControllerCb();
@@ -434,7 +434,7 @@ describe("GameSession Durable Object", () => {
     const api2 = (session as any).makeControllerApi(ws2);
     await api2.join(cb2);
 
-    // Join player 3 -> should fail because maxPlayers is 2
+    // Join player 3 -> should fail because phoneMax is 2
     const cb3 = makeControllerCb();
     const ws3 = createMockWebSocket();
     const api3 = (session as any).makeControllerApi(ws3);
@@ -633,7 +633,7 @@ describe("GameSession Durable Object", () => {
       expect(session.rejoinTokens.size).toBe(0);
       expect(session.kickedTokens.size).toBe(0);
       expect(session.consoleToken).toBeNull();
-      expect(session.maxPlayers).toBeNull();
+      expect(session.phoneMax).toBeNull();
       expect((session as any).nextPlayerNumber).toBe(1);
 
       vi.useRealTimers();
@@ -749,7 +749,7 @@ describe("GameSession Durable Object", () => {
       const res2 = await consoleApi2.join(makeConsoleCb());
 
       expect(res2.consoleToken).not.toBe(oldConsoleToken);
-      expect(session.maxPlayers).toBeNull();
+      expect(session.phoneMax).toBeNull();
 
       // Controller join gets Player 1
       const controllerWs = createMockWebSocket();

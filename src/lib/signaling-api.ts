@@ -30,7 +30,7 @@ export interface ConsoleApi extends RpcTarget {
     callbacks: ConsoleCallbacks,
     consoleToken?: string,
     gracePeriodMs?: number,
-    maxPlayers?: number
+    phoneMax?: number
   ):
     | { controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }
     | Promise<{ controllers: { id: string; name: string }[]; firstPlayerId: string | null; consoleToken: string }>;

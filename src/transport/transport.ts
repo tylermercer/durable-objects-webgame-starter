@@ -31,11 +31,18 @@ export type ControlMessage =
   | PongMessage
   | UnknownControlMessage;
 
+export type GamepadStateMessage = {
+  type: "gamepad-state";
+  buttons: number[]; // analog value 0–1 per button, standard mapping index order
+  axes: number[];    // -1–1 per axis
+  t: number;
+};
+
 export type UnknownInputMessage = { type: string } & Record<string, unknown>;
 
-export type InputMessage = TouchMessage | UnknownInputMessage;
+export type InputMessage = TouchMessage | GamepadStateMessage | UnknownInputMessage;
 
-export type TransportMode = "p2p" | "relay";
+export type TransportMode = "p2p" | "relay" | "local";
 
 export interface GameTransport {
   readonly mode: TransportMode;
