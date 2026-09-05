@@ -1,12 +1,14 @@
 ---
 import Layout from '@layouts/Base.astro';
 import { EXAMPLES } from '@examples/registry';
+import { WipVersionsBadge } from '@components/WipVersionsBadge';
 
 export const prerender = true;
 ---
 
 <Layout>
   <main class="home-shell l-stack l-space-m">
+    <WipVersionsBadge client:load />
     <h1 class="u-step-2">Pick a game</h1>
     <div class="example-links" role="list">
       {Object.entries(EXAMPLES).map(([id, ex]) => (
