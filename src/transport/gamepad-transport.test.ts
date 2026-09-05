@@ -37,17 +37,26 @@ describe("LocalGamepadTransport", () => {
     // Advance animation frame timer
     vi.advanceTimersByTime(16);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    const msg = listener.mock.calls[0][0] as InputMessage;
-    expect(msg.type).toBe("gamepad-state");
-    if (msg.type === "gamepad-state") {
-      expect(msg.buttons).toEqual([0, 1]);
-      expect(msg.axes).toEqual([0.5, -0.5]);
+    expect(listener).toHaveBeenCalledTimes(2);
+    const msgState = listener.mock.calls[0][0] as InputMessage;
+    const msgJoystick = listener.mock.calls[1][0] as InputMessage;
+
+    expect(msgState.type).toBe("gamepad-state");
+    if (msgState.type === "gamepad-state") {
+      expect(msgState.buttons).toEqual([0, 1]);
+      expect(msgState.axes).toEqual([0.5, -0.5]);
+    }
+
+    expect(msgJoystick.type).toBe("joystick");
+    if (msgJoystick.type === "joystick") {
+      expect(msgJoystick.x).toBeCloseTo(0.5);
+      expect(msgJoystick.y).toBeCloseTo(-0.5);
+      expect(msgJoystick.firing).toBe(true);
     }
 
     // Tick again without changes -> listener should NOT be called again
     vi.advanceTimersByTime(16);
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(2);
 
     // Update gamepad state
     mockGamepads[0] = {
@@ -57,7 +66,7 @@ describe("LocalGamepadTransport", () => {
     } as any;
 
     vi.advanceTimersByTime(16);
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(4);
 
     transport.close();
   });
