@@ -60,7 +60,10 @@ export function gamepadStateToJoystick(msg: { buttons: number[]; axes: number[] 
     y /= mag;
   }
 
-  return { x, y };
+  // Fire button: face buttons (0, 1, 2, 3) or bumpers/triggers (4, 5, 6, 7)
+  const firing = buttons.slice(0, 8).some((b) => (b ?? 0) > 0.5);
+
+  return { x, y, firing };
 }
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
