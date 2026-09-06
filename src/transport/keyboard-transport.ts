@@ -39,7 +39,7 @@ export class LocalKeyboardTransport implements GameTransport {
   private onKeyUpBound = (e: KeyboardEvent) => this.handleKeyUp(e);
 
   constructor() {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("keydown", this.onKeyDownBound);
       window.addEventListener("keyup", this.onKeyUpBound);
     }
@@ -143,7 +143,7 @@ export class LocalKeyboardTransport implements GameTransport {
   }
 
   close() {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
       window.removeEventListener("keydown", this.onKeyDownBound);
       window.removeEventListener("keyup", this.onKeyUpBound);
     }
