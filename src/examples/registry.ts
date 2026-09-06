@@ -14,6 +14,12 @@ export const EXAMPLES: Record<string, GameEntry> = {
     console: () => import("@examples/input-demo/console"),
     controller: () => import("@examples/input-demo/controller"),
   },
+  "fading-isles": {
+    label: "Fading Isles",
+    controllerTypes: { phone: {}, gamepad: {} },
+    console: () => import("@examples/fading-isles/console"),
+    controller: () => import("@examples/fading-isles/controller"),
+  },
   "liars-dice": {
     label: "Liar's Dice",
     controllerTypes: { phone: { max: 6 } },
