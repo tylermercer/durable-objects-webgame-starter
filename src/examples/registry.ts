@@ -43,6 +43,12 @@ export const EXAMPLES: Record<string, GameEntry> = {
     console: () => import("@examples/othello/console"),
     controller: () => import("@examples/othello/controller"),
   },
+  "town-3d": {
+    label: "3D Town",
+    controllerTypes: { phone: {}, gamepad: {} },
+    console: () => import("@examples/town-3d/console"),
+    controller: () => import("@examples/town-3d/controller"),
+  },
 } as const;
 
 export type ExampleId = keyof typeof EXAMPLES;
