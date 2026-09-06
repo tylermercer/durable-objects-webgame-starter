@@ -88,7 +88,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   let endPos = { x: 0, y: 0 };
 
   // Attempt to restore saved state or initialize level 1
-  const savedState = loadLocalGameState<SavedFadingIslesState>(ctx.session.roomCode);
+  const savedState = loadLocalGameState<SavedFadingIslesState>(ctx.roomCode);
   if (savedState) {
     grid = TileGrid.fromJSON<Cell | null>(savedState.grid);
     if (Array.isArray(savedState.players)) {
@@ -352,7 +352,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
 
       // Persist game state
-      saveLocalGameState(ctx.session.roomCode, {
+      saveLocalGameState(ctx.roomCode, {
         grid: grid.toJSON(),
         players: registry.toJSON(),
         sessionSeed,
