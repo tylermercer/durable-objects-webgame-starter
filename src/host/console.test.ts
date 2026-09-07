@@ -431,6 +431,22 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
     expect(app.controllers.has("ctrl-1")).toBe(false);
   });
 
+  it("kickController calls close on keyboard transport when kicking gamepad-keyboard", () => {
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+
+    app.addKeyboardController();
+    const keyboardController = app.controllers.get("gamepad-keyboard")!;
+    expect(keyboardController).toBeDefined();
+
+    const closeSpy = vi.spyOn(keyboardController.pc!, "close");
+
+    app.kickController("gamepad-keyboard");
+
+    expect(closeSpy).toHaveBeenCalled();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+  });
+
   it("updateControllerUI implements 2-step kick confirmation with 5-second timer", () => {
     vi.useFakeTimers();
 
@@ -640,16 +656,62 @@ describe("ConsoleApp handleSignal and ICE restart preservation", () => {
     expect(controllerState.name).toBe("Super Controller");
   });
 
-  it("syncGamepadControllers creates gamepad-keyboard when acceptsGamepads is true and removes it when false", () => {
+  it("syncGamepadControllers does not create gamepad-keyboard when acceptsGamepads is true, but removes gamepad controllers when false", () => {
     const app = new ConsoleApp();
     vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
 
     app.syncGamepadControllers();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+
+    app.addKeyboardController();
     expect(app.controllers.has("gamepad-keyboard")).toBe(true);
     expect(app.controllers.get("gamepad-keyboard")?.name).toBe("Keyboard");
 
     vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(false);
     app.syncGamepadControllers();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+  });
+
+  it("addKeyboardController adds gamepad-keyboard when acceptsGamepads is true and keydown listener connects keyboard on 'Z' key", () => {
+    let keydownListener: ((e: any) => void) | null = null;
+    vi.stubGlobal("window", {
+      addEventListener: vi.fn((event: string, cb: any) => {
+        if (event === "keydown") keydownListener = cb;
+      })
+    });
+
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+    (app as any).setupGamepadListeners();
+
+    expect(keydownListener).not.toBeNull();
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+
+    // Press 'Z' key
+    keydownListener!({ code: "KeyZ", target: {} });
+    expect(app.controllers.has("gamepad-keyboard")).toBe(true);
+    expect(app.controllers.get("gamepad-keyboard")?.name).toBe("Keyboard");
+  });
+
+  it("keydown listener ignores 'Z' key when target is editable or acceptsGamepads is false", () => {
+    let keydownListener: ((e: any) => void) | null = null;
+    vi.stubGlobal("window", {
+      addEventListener: vi.fn((event: string, cb: any) => {
+        if (event === "keydown") keydownListener = cb;
+      })
+    });
+
+    const app = new ConsoleApp();
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(true);
+    (app as any).setupGamepadListeners();
+
+    // Event on editable input element
+    keydownListener!({ code: "KeyZ", target: { tagName: "INPUT" } });
+    expect(app.controllers.has("gamepad-keyboard")).toBe(false);
+
+    // Event when acceptsGamepads is false
+    vi.spyOn(app as any, "acceptsGamepads").mockReturnValue(false);
+    keydownListener!({ code: "KeyZ", target: {} });
     expect(app.controllers.has("gamepad-keyboard")).toBe(false);
   });
 });

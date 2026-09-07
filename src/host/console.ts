@@ -183,26 +183,40 @@ export class ConsoleApp {
     this.connectSignaling();
   }
 
+  private isEditableTarget(target: EventTarget | null): boolean {
+    if (!target || typeof target !== "object") return false;
+    const tagName = (target as any).tagName ? String((target as any).tagName).toLowerCase() : "";
+    return (
+      tagName === "input" ||
+      tagName === "textarea" ||
+      tagName === "select" ||
+      !!(target as any).isContentEditable
+    );
+  }
+
+  addKeyboardController() {
+    if (!this.acceptsGamepads()) return;
+    if (this.controllers.has("gamepad-keyboard")) return;
+
+    const controller: ControllerState = {
+      id: "gamepad-keyboard",
+      name: "Keyboard",
+      color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
+      isFirstPlayer: false,
+      pc: new LocalKeyboardTransport(),
+      orchestrator: null,
+      state: "live",
+      status: "live",
+      signalingConnected: true,
+    };
+    this.controllers.set("gamepad-keyboard", controller);
+    this.peerNotifier.notifyJoined(controller);
+    this.peerNotifier.notifyReady(controller);
+    this.updateControllerUI();
+  }
+
   syncGamepadControllers() {
-    if (this.acceptsGamepads()) {
-      if (!this.controllers.has("gamepad-keyboard")) {
-        const controller: ControllerState = {
-          id: "gamepad-keyboard",
-          name: "Keyboard",
-          color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
-          isFirstPlayer: false,
-          pc: new LocalKeyboardTransport(),
-          orchestrator: null,
-          state: "live",
-          status: "live",
-          signalingConnected: true,
-        };
-        this.controllers.set("gamepad-keyboard", controller);
-        this.peerNotifier.notifyJoined(controller);
-        this.peerNotifier.notifyReady(controller);
-        this.updateControllerUI();
-      }
-    } else {
+    if (!this.acceptsGamepads()) {
       for (const [id] of Array.from(this.controllers.entries())) {
         if (id.startsWith("gamepad-")) {
           this.removeController(id);
@@ -213,6 +227,14 @@ export class ConsoleApp {
 
   private setupGamepadListeners() {
     if (typeof window === "undefined") return;
+
+    window.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (!this.acceptsGamepads()) return;
+      if (e.code === "KeyZ") {
+        if (this.isEditableTarget(e.target)) return;
+        this.addKeyboardController();
+      }
+    });
 
     window.addEventListener("gamepadconnected", (e: GamepadEvent) => {
       if (!this.acceptsGamepads()) return;
@@ -633,6 +655,7 @@ export class ConsoleApp {
       logger.info(`Controller removed/purged: ${controller.name} (${id})`);
       controller.orchestrator?.close();
       controller.orchestrator = null;
+      controller.pc?.close();
       controller.pc = null;
       this.controllers.delete(id);
       this.peerNotifier.notifyLeft(id);
