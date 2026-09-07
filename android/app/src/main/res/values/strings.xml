@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WebGame Controller</string>
+    <string name="title_activity_main">WebGame Controller</string>
+    <string name="package_name">com.webgame.controller</string>
+    <string name="custom_url_scheme">com.webgame.controller</string>
+</resources>
