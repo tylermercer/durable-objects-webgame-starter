@@ -5,11 +5,11 @@ This document defines the interface contracts for console and controller game mo
 ## Table of Contents
 
 - [Game Entrypoint Contracts](#game-entrypoint-contracts)
-  - [ConsoleGameModule](#console-gamemodule)
-  - [ConsoleGameInstance](#console-gameinstance)
-  - [ControllerGameModule](#controller-gamemodule)
-  - [ControllerGameInstance](#controller-gameinstance)
-  - [ControllerTypeRange](#controller-typerange)
+  - [ConsoleGameModule](#consolegamemodule)
+  - [ConsoleGameInstance](#consolegameinstance)
+  - [ControllerGameModule](#controllergamemodule)
+  - [ControllerGameInstance](#controllergameinstance)
+  - [ControllerTypeRange](#controllertyperange)
 - [Execution Context Interfaces](#execution-context-interfaces)
   - [ConsoleContext](#consolecontext)
   - [ControllerContext](#controllercontext)
