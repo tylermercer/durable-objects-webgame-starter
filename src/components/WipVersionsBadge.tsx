@@ -208,7 +208,8 @@ export function WipVersionsBadge() {
           display: flex;
           flex-direction: column;
           gap: 1rem;
-          max-height: 85vh;
+          max-height: calc(100dvh - 2rem);
+          box-sizing: border-box;
           overflow-y: auto;
         }
 

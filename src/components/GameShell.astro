@@ -192,10 +192,16 @@ const { game } = Astro.props;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       width: 100%;
-      height: 100dvh;
-      padding: 1rem;
+      min-height: 100dvh;
+      height: auto;
+      padding: 1.5rem 1rem;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    .join-form-card > * {
+      margin-block: auto;
     }
   }
 
@@ -221,6 +227,13 @@ const { game } = Astro.props;
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+
+  .qr-container canvas {
+    max-width: 100%;
+    height: auto;
+    max-height: 140px;
+    object-fit: contain;
   }
 
   .console-topbar {
@@ -257,10 +270,15 @@ const { game } = Astro.props;
   .start-screen {
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    height: 100%;
-    padding: 3rem 1rem;
+    min-height: 100%;
+    padding: 1.5rem 1rem;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  .start-screen > * {
+    margin-block: auto;
   }
 
   .btn-new-game {
@@ -300,9 +318,18 @@ const { game } = Astro.props;
     padding: 1.5rem;
     max-width: 480px;
     width: 90%;
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    box-sizing: border-box;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     background: var(--gray-1, #ffffff);
     color: var(--gray-12, #000000);
+  }
+
+  .controller-list {
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 2px;
   }
 
   .room-modal::backdrop {
@@ -429,6 +456,7 @@ const { game } = Astro.props;
   .qr-video-container {
     position: relative;
     width: 100%;
+    max-height: 45dvh;
     aspect-ratio: 4 / 3;
     background: #000;
     border-radius: 8px;
@@ -471,7 +499,7 @@ const { game } = Astro.props;
 
   .controller-shell {
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     touch-action: none;
     user-select: none;
@@ -481,9 +509,16 @@ const { game } = Astro.props;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 100vh;
-    padding: 1rem;
+    width: 100%;
+    min-height: 100dvh;
+    height: auto;
+    padding: 1.5rem 1rem;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  .name-screen > * {
+    margin-block: auto;
   }
 
   .name-card {
@@ -495,7 +530,7 @@ const { game } = Astro.props;
   .controller-main-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     width: 100%;
   }
 

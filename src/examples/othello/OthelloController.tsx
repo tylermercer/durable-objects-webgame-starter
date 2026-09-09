@@ -116,7 +116,7 @@ export const OthelloController: React.FC<{ ctx: ControllerContext }> = ({ ctx })
 
   if (!gameState) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "#0f172a", color: "#94a3b8" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100dvh", background: "#0f172a", color: "#94a3b8" }}>
         Connecting to Othello session...
       </div>
     );
@@ -133,12 +133,13 @@ export const OthelloController: React.FC<{ ctx: ControllerContext }> = ({ ctx })
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "space-between",
-        minHeight: "100vh",
+        minHeight: "100dvh",
         width: "100%",
         background: "#0f172a",
         color: "#ffffff",
         padding: "1rem",
         boxSizing: "border-box",
+        overflowY: "auto",
         userSelect: "none",
         touchAction: "none",
         fontFamily: "system-ui, sans-serif",
