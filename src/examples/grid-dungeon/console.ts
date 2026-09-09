@@ -5,6 +5,7 @@ import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
 import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
+import { isButtonLabelPressed } from "@utils/gamepad";
 import {
   createLobbyGrid,
   createDungeonGrid,
@@ -40,15 +41,17 @@ import type {
 
 export const controllerTypes = {
   phone: {},
-  gamepad: {},
+  gamepad: {
+    buttonLabels: ["FIRE"],
+  },
 };
 
-export function gamepadStateToJoystick(msg: { buttons: number[]; axes: number[] }): JoystickState {
+export function gamepadStateToJoystick(msg: { buttons?: number[]; axes?: number[]; buttonLabel?: string; buttonLabels?: string[]; firing?: boolean }): JoystickState {
   let x = 0;
   let y = 0;
 
-  const rawX = msg.axes[0] ?? 0;
-  const rawY = msg.axes[1] ?? 0;
+  const rawX = msg.axes?.[0] ?? 0;
+  const rawY = msg.axes?.[1] ?? 0;
   const deadzone = 0.15;
   if (Math.abs(rawX) > deadzone) x += rawX;
   if (Math.abs(rawY) > deadzone) y += rawY;
@@ -65,8 +68,8 @@ export function gamepadStateToJoystick(msg: { buttons: number[]; axes: number[] 
     y /= mag;
   }
 
-  // Fire button: face buttons (0, 1, 2, 3) or bumpers/triggers (4, 5, 6, 7)
-  const firing = buttons.slice(0, 8).some((b) => (b ?? 0) > 0.5);
+  // Fire button determined via buttonLabel ("FIRE")
+  const firing = isButtonLabelPressed(msg, "FIRE");
 
   return { x, y, firing };
 }

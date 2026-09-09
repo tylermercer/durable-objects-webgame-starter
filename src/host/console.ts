@@ -159,6 +159,10 @@ export class ConsoleApp {
     return !!this.controllerTypes?.gamepad;
   }
 
+  private getGamepadButtonLabels(): string[] {
+    return this.controllerTypes?.gamepad?.buttonLabels ?? [];
+  }
+
   async requestFullscreen(element: HTMLElement = document.documentElement): Promise<void> {
     try {
       if (element.requestFullscreen) {
@@ -203,7 +207,7 @@ export class ConsoleApp {
       name: "Keyboard",
       color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
       isFirstPlayer: false,
-      pc: new LocalKeyboardTransport(),
+      pc: new LocalKeyboardTransport(this.getGamepadButtonLabels()),
       orchestrator: null,
       state: "live",
       status: "live",
@@ -216,10 +220,19 @@ export class ConsoleApp {
   }
 
   syncGamepadControllers() {
+    const labels = this.getGamepadButtonLabels();
     if (!this.acceptsGamepads()) {
       for (const [id] of Array.from(this.controllers.entries())) {
         if (id.startsWith("gamepad-")) {
           this.removeController(id);
+        }
+      }
+    } else {
+      for (const [id, controller] of this.controllers.entries()) {
+        if (id.startsWith("gamepad-") && controller.pc) {
+          if ("setButtonLabels" in controller.pc && typeof (controller.pc as any).setButtonLabels === "function") {
+            (controller.pc as any).setButtonLabels(labels);
+          }
         }
       }
     }
@@ -246,7 +259,7 @@ export class ConsoleApp {
         name: `Gamepad ${e.gamepad.index + 1}`,
         color: PLAYER_COLORS[this.controllers.size % PLAYER_COLORS.length],
         isFirstPlayer: false,
-        pc: new LocalGamepadTransport(e.gamepad.index),
+        pc: new LocalGamepadTransport(e.gamepad.index, this.getGamepadButtonLabels()),
         orchestrator: null,
         state: "live",
         status: "live",

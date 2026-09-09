@@ -60,11 +60,15 @@ export interface ControllerTypeRange {
   max?: number;
 }
 
+export interface GamepadControllerConfig extends ControllerTypeRange {
+  buttonLabels?: string[];
+}
+
 export interface ConsoleGameModule {
   createGame(ctx: ConsoleContext): ConsoleGameInstance;
   controllerTypes?: {
     phone?: ControllerTypeRange;
-    gamepad?: ControllerTypeRange;
+    gamepad?: GamepadControllerConfig;
   };
 }
 
