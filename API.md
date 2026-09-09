@@ -1,6 +1,6 @@
 # Console & Controller API Reference
 
-This document defines the interface contracts for console and controller game modules, execution contexts, platform interfaces, and network message schemas.
+This document defines the interface contracts for console and controller game modules, execution contexts, platform interfaces, network message schemas, and virtual gamepad components.
 
 ## Table of Contents
 
@@ -10,6 +10,7 @@ This document defines the interface contracts for console and controller game mo
   - [ControllerGameModule](#controllergamemodule)
   - [ControllerGameInstance](#controllergameinstance)
   - [ControllerTypeRange](#controllertyperange)
+  - [GamepadControllerConfig](#gamepadcontrollerconfig)
 - [Execution Context Interfaces](#execution-context-interfaces)
   - [ConsoleContext](#consolecontext)
   - [ControllerContext](#controllercontext)
@@ -24,6 +25,10 @@ This document defines the interface contracts for console and controller game mo
 - [Message Schemas](#message-schemas)
   - [Input Message Types](#input-message-types)
   - [Control Message Types](#control-message-types)
+- [Virtual Gamepad Component](#virtual-gamepad-component)
+  - [createVirtualGamepad](#createvirtualgamepad)
+  - [VirtualGamepadOptions](#virtualgamepadoptions)
+  - [VirtualGamepadInstance](#virtualgamepadinstance)
 
 ---
 
@@ -38,7 +43,7 @@ export interface ConsoleGameModule {
   createGame(ctx: ConsoleContext): ConsoleGameInstance;
   controllerTypes?: {
     phone?: ControllerTypeRange;
-    gamepad?: ControllerTypeRange;
+    gamepad?: GamepadControllerConfig;
   };
 }
 ```
@@ -53,7 +58,7 @@ export interface ConsoleGameModule {
   - **Description**: Declares player count constraints and supported controller input modalities.
   - **Properties**:
     - `phone` *(optional)*: Player count range constraints for phone-based web controllers.
-    - `gamepad` *(optional)*: Player count range constraints for local physical gamepads and keyboard controllers.
+    - `gamepad` *(optional)*: Player count range constraints and button label configurations for local physical gamepads, keyboard controllers, and generic virtual gamepads.
 
 ---
 
@@ -137,6 +142,24 @@ export interface ControllerTypeRange {
 
 - `min` *(optional)*: Minimum number of players required for this controller modality.
 - `max` *(optional)*: Maximum number of players supported for this controller modality.
+
+---
+
+### GamepadControllerConfig
+
+Extends `ControllerTypeRange` with gamepad-specific configuration including custom button labels.
+
+```typescript
+export interface GamepadControllerConfig extends ControllerTypeRange {
+  buttonLabels?: string[];
+}
+```
+
+#### Properties
+
+- `min` *(optional)*: Minimum number of gamepad players required.
+- `max` *(optional)*: Maximum number of gamepad players supported.
+- `buttonLabels` *(optional)*: Custom button label strings configured by the console for action buttons (e.g. `["FIRE", "BOOST"]`).
 
 ---
 
@@ -359,6 +382,7 @@ Input messages are transmitted via `sendInput` and received via `addInputListene
 export type InputMessage =
   | TouchMessage
   | GamepadStateMessage
+  | GamepadButtonMessage
   | JoystickInputMessage
   | UnknownInputMessage;
 ```
@@ -381,9 +405,24 @@ export interface TouchMessage {
 ```typescript
 export interface GamepadStateMessage {
   type: "gamepad-state";
-  buttons: number[]; // Analog values 0.0 to 1.0 per standard gamepad button mapping
-  axes: number[];    // Normalized axis values -1.0 to 1.0 per standard axis mapping
-  t: number;         // Timestamp (performance.now())
+  buttons: number[];       // Analog values 0.0 to 1.0 per standard gamepad button mapping
+  axes: number[];          // Normalized axis values -1.0 to 1.0 per standard axis mapping
+  buttonLabels?: string[]; // Optional array of custom button label strings
+  buttonLabel?: string;    // Optional primary active button label string
+  t: number;               // Timestamp (performance.now())
+}
+```
+
+#### GamepadButtonMessage
+
+```typescript
+export interface GamepadButtonMessage {
+  type: "gamepad-button";
+  button: number;        // Button index
+  value: number;         // Analog press value (0.0 to 1.0)
+  pressed: boolean;      // True if button state is pressed (> 0.5)
+  buttonLabel?: string;  // Optional custom button label string
+  t: number;             // Timestamp (performance.now())
 }
 ```
 
@@ -392,11 +431,13 @@ export interface GamepadStateMessage {
 ```typescript
 export interface JoystickInputMessage {
   type: "joystick";
-  x: number;          // Normalized vector X axis (-1.0 to 1.0)
-  y: number;          // Normalized vector Y axis (-1.0 to 1.0)
-  buttons?: number[]; // Optional button states
-  firing?: boolean;   // Action / firing state flag
-  t: number;          // Timestamp (performance.now())
+  x: number;              // Normalized vector X axis (-1.0 to 1.0)
+  y: number;              // Normalized vector Y axis (-1.0 to 1.0)
+  buttons?: number[];     // Optional button states
+  buttonLabels?: string[]; // Optional array of custom button label strings
+  buttonLabel?: string;   // Optional primary active button label string
+  firing?: boolean;       // Action / firing state flag
+  t: number;              // Timestamp (performance.now())
 }
 ```
 
@@ -457,3 +498,59 @@ export type UnknownControlMessage = {
   type: string;
 } & Record<string, unknown>;
 ```
+
+---
+
+## Virtual Gamepad Component
+
+The prebuilt generic virtual gamepad UI component (`src/components/VirtualGamepad.ts`) for mobile touch controllers that present as virtual gamepads.
+
+### createVirtualGamepad
+
+```typescript
+export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGamepadInstance;
+```
+
+#### Parameters
+
+- `options`: `VirtualGamepadOptions` — Configuration options for mounting the virtual gamepad UI.
+
+#### Returns
+
+- `VirtualGamepadInstance` — Instance object containing a cleanup `destroy()` method.
+
+---
+
+### VirtualGamepadOptions
+
+```typescript
+export interface VirtualGamepadOptions {
+  container: HTMLElement;
+  peerConnection: GameTransport | null;
+  buttonLabels?: string[];
+  title?: string;
+  description?: string;
+}
+```
+
+#### Properties
+
+- `container`: `HTMLElement` — DOM element in which to mount the virtual gamepad.
+- `peerConnection`: `GameTransport | null` — Transport connection used to send `gamepad-state`, `gamepad-button`, and `joystick` input messages to the console host.
+- `buttonLabels` *(optional)*: `string[]` — Labels for action buttons (defaults to `["FIRE", "BOOST"]`).
+- `title` *(optional)*: `string` — Title header text (defaults to `"Virtual Gamepad"`).
+- `description` *(optional)*: `string` — Subtitle/description text (defaults to `"Use joystick and buttons to play"`).
+
+---
+
+### VirtualGamepadInstance
+
+```typescript
+export interface VirtualGamepadInstance {
+  destroy: () => void;
+}
+```
+
+#### Methods
+
+- `destroy()`: Cleans up event listeners, web haptics instance, and removes the gamepad element from `container`.
