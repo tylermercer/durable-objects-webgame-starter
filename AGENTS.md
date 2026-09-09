@@ -1,5 +1,9 @@
 # Agent Instructions
 
+## API Documentation Maintenance (API.md)
+
+`API.md` contains the formal interface reference documentation for all console, controller, context, transport, and message contracts exposed to game logic. **Whenever you make changes to console or controller APIs, execution contexts (`ConsoleContext`, `ControllerContext`), platform interfaces (`GameViewport`, `GameTransport`, `ControllerPeer`, `ConsoleApi`), or network message schemas (`InputMessage`, `ControlMessage`), you MUST update `API.md` to reflect those changes.**
+
 ## tsconfig.json Import Aliases
 
 The `tsconfig.json` file defines import aliases for cleaner and more maintainable import paths. **Always prefer using these path aliases everywhere** across the codebase instead of relative paths (`../` or `../../`):
