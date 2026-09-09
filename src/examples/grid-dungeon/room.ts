@@ -455,7 +455,7 @@ export function handlePlayerFiring(
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= 1.2) {
           npc.hp -= 2;
-          npc.targetPlayerId = player.id;
+          onMonsterAttacked(npc, player.id, { x: player.x, y: player.y }, grid, 0.4);
           if (npc.hp <= 0) {
             registry.remove(npc.id);
           }
@@ -566,7 +566,11 @@ export function stepProjectiles(
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < 0.45) {
         npc.hp -= 1;
-        npc.targetPlayerId = proj.playerId;
+        // Projectile push source is opposite its movement direction
+        const projSpeed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
+        const sourceX = projSpeed > 0 ? proj.x - proj.vx / projSpeed : proj.x;
+        const sourceY = projSpeed > 0 ? proj.y - proj.vy / projSpeed : proj.y;
+        onMonsterAttacked(npc, proj.playerId, { x: sourceX, y: sourceY }, grid, 0.4);
         registry.remove(proj.id);
         hitNpc = true;
         if (npc.hp <= 0) {
@@ -583,10 +587,54 @@ export function stepProjectiles(
   }
 }
 
+export function onMonsterAttacked(
+  npc: NpcEntity,
+  attackerId: string,
+  sourcePos: { x: number; y: number },
+  grid?: TileGrid<GridCell>,
+  kickbackDist: number = 0.4
+): void {
+  // Abort current path immediately and target attacking player
+  npc.currentPath = [];
+  npc.wanderTimer = 0;
+  npc.targetPlayerId = attackerId;
+
+  // Gain 10% speed upon being attacked
+  if (!npc.speedBoosted) {
+    npc.speed = (npc.speed ?? NPC_SPEED) * 1.1;
+    npc.speedBoosted = true;
+  }
+
+  // Kickback displacement
+  if (grid) {
+    let dx = npc.x - sourcePos.x;
+    let dy = npc.y - sourcePos.y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) {
+      dx = 0;
+      dy = -1;
+      dist = 1;
+    }
+    const kx = (dx / dist) * kickbackDist;
+    const ky = (dy / dist) * kickbackDist;
+    const move = moveCircleAgainstGrid(
+      npc,
+      0.35,
+      kx,
+      ky,
+      grid,
+      (_pos, cell) => cell.walkable
+    );
+    npc.x = move.x;
+    npc.y = move.y;
+  }
+}
+
 export function checkPlayerMonsterCollisions(
   players: PlayerEntity[],
   npcs: NpcEntity[],
-  dt: number
+  dt: number,
+  grid?: TileGrid<GridCell>
 ): boolean {
   let playerHit = false;
   for (const player of players) {
@@ -601,6 +649,46 @@ export function checkPlayerMonsterCollisions(
       if (dist < 0.6) {
         player.damageCooldown = 1.5; // 1.5s invulnerability
         playerHit = true;
+
+        if (grid) {
+          let nx = dx;
+          let ny = dy;
+          let norm = dist;
+          if (norm === 0) {
+            nx = 0;
+            ny = -1;
+            norm = 1;
+          }
+          nx /= norm;
+          ny /= norm;
+
+          const knockbackDist = 0.4;
+
+          // Monster knockback away from player
+          const npcMove = moveCircleAgainstGrid(
+            npc,
+            0.35,
+            nx * knockbackDist,
+            ny * knockbackDist,
+            grid,
+            (_pos, cell) => cell.walkable
+          );
+          npc.x = npcMove.x;
+          npc.y = npcMove.y;
+
+          // Player knockback away from monster
+          const playerMove = moveCircleAgainstGrid(
+            player,
+            0.35,
+            -nx * knockbackDist,
+            -ny * knockbackDist,
+            grid,
+            (_pos, cell) => cell.walkable
+          );
+          player.x = playerMove.x;
+          player.y = playerMove.y;
+        }
+
         break;
       }
     }
@@ -849,7 +937,7 @@ export function stepRoom(
   }
 
   // 4. Check collisions between players and NPCs
-  const wasHit = checkPlayerMonsterCollisions(players, currentNpcs, dt);
+  const wasHit = checkPlayerMonsterCollisions(players, currentNpcs, dt, grid);
   if (wasHit) {
     lives -= 1;
     if (lives <= 0) {

@@ -41,6 +41,7 @@ export interface NpcEntity {
   hp: number;
   maxHp: number;
   speed?: number;
+  speedBoosted?: boolean;
   targetPlayerId?: string;
 }
 

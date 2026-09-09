@@ -602,6 +602,76 @@ describe("Grid Dungeon room simulation", () => {
     expect(lastStep.y).toBe(10);
   });
 
+  it("aborts monster's current path, increases speed by 10%, and applies kickback when attacked", () => {
+    const grid = createDungeonGrid(() => 1.0); // Clear grid with no destructible walls
+    const registry = new EntityRegistry<DungeonEntity>();
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.5, y: 7.5 };
+    const monster: NpcEntity = {
+      id: "m1",
+      kind: "npc",
+      name: "Goblin",
+      color: "#0f0",
+      x: 2.5,
+      y: 7.5,
+      currentPath: [{ x: 1, y: 1 }, { x: 1, y: 2 }],
+      wanderTimer: 2.0,
+      hp: 5,
+      maxHp: 5,
+      speed: 2.0,
+    };
+    registry.add(player);
+    registry.add(monster);
+
+    const initialX = monster.x;
+
+    // Hit monster with projectile coming from player at x=5.5 (vx < 0)
+    const proj: ProjectileEntity = { id: "proj1", kind: "projectile", x: 2.5, y: 7.5, vx: -12, vy: 0, playerId: "p1" };
+    registry.add(proj);
+    stepProjectiles(registry, grid, 0.01);
+
+    // Current path cleared and wanderTimer set to 0 for immediate re-pathing
+    expect(monster.currentPath.length).toBe(0);
+    expect(monster.wanderTimer).toBe(0);
+
+    // Speed increased by 10% (2.0 * 1.1 = 2.2)
+    expect(monster.speed).toBeCloseTo(2.2);
+    expect(monster.speedBoosted).toBe(true);
+
+    // Monster experiences kickback away from attack source (p1 is to the right at x=5.5, so monster pushed left x < 2.5)
+    expect(monster.x).toBeLessThan(initialX);
+  });
+
+  it("applies mutual knockback on player and monster upon collision", () => {
+    const grid = createDungeonGrid(() => 1.0); // Clear grid with no destructible walls
+
+    const player: PlayerEntity = { id: "p1", kind: "player", name: "Alice", color: "#f00", x: 5.0, y: 7.5 };
+    const monster: NpcEntity = {
+      id: "m1",
+      kind: "npc",
+      name: "Orc",
+      color: "#0f0",
+      x: 5.2,
+      y: 7.5,
+      currentPath: [],
+      wanderTimer: 1,
+      hp: 5,
+      maxHp: 5,
+    };
+
+    const initialPlayerX = player.x;
+    const initialMonsterX = monster.x;
+
+    const isHit = checkPlayerMonsterCollisions([player], [monster], 0.1, grid);
+    expect(isHit).toBe(true);
+
+    // Monster (was at x=5.2 relative to player at x=5.0) gets knocked back right (x > 5.2)
+    expect(monster.x).toBeGreaterThan(initialMonsterX);
+
+    // Player (was at x=5.0 relative to monster at x=5.2) gets knocked back left (x < 5.0)
+    expect(player.x).toBeLessThan(initialPlayerX);
+  });
+
   it("resets brown destructible walls in dungeon grid on wave completion", () => {
     const grid = createDungeonGrid(() => 0.1); // Fixed RNG forces walls on
     const registry = new EntityRegistry<DungeonEntity>();
