@@ -1,15 +1,14 @@
 import type { GameTransport, InputMessage, ControlMessage, TransportMode } from "./transport";
 
-export type { GamepadStateMessage } from "./transport";
-
 export class LocalGamepadTransport implements GameTransport {
   readonly mode: TransportMode = "local";
   readonly connectionState: RTCPeerConnectionState = "connected"; // no ICE, always "connected"
 
   private inputListeners = new Set<(msg: InputMessage) => void>();
   private pollHandle: number | null = null;
-  private lastButtons: number[] = [];
-  private lastAxes: number[] = [];
+  private lastX: number | null = null;
+  private lastY: number | null = null;
+  private lastButtonsObj: Record<string, number> | null = null;
 
   constructor(private gamepadIndex: number, private buttonLabels: string[] = []) {
     this.startPolling();
@@ -25,69 +24,53 @@ export class LocalGamepadTransport implements GameTransport {
         const gamepads = navigator.getGamepads();
         const gp = gamepads[this.gamepadIndex];
         if (gp) {
-          const buttons = gp.buttons.map((b) => b.value);
-          const axes = [...gp.axes];
-          if (changed(buttons, this.lastButtons) || changed(axes, this.lastAxes)) {
-            const previousButtons = this.lastButtons;
-            this.lastButtons = buttons;
-            this.lastAxes = axes;
-            const now = performance.now();
-            const { x, y, firing } = gamepadToJoystick(buttons, axes);
+          const rawButtons = gp.buttons.map((b) => b.value);
+          const rawAxes = [...gp.axes];
+          const now = performance.now();
 
-            // Find pressed button label if any
-            let activeLabel: string | undefined;
-            for (let i = 0; i < buttons.length; i++) {
-              if (buttons[i] > 0.5 && this.buttonLabels[i]) {
-                activeLabel = this.buttonLabels[i];
-                break;
-              }
+          const { x, y } = gamepadToJoystick(rawButtons, rawAxes);
+
+          const buttonsObj: Record<string, number> = {};
+          for (let i = 0; i < this.buttonLabels.length; i++) {
+            const label = this.buttonLabels[i];
+            if (label) {
+              buttonsObj[label] = rawButtons[i] ?? 0;
             }
+          }
 
-            const stateMsg: InputMessage = {
-              type: "gamepad-state",
-              buttons,
-              axes,
-              buttonLabels: this.buttonLabels,
-              buttonLabel: activeLabel,
-              t: now,
-            };
+          const joystickChanged =
+            this.lastX === null ||
+            this.lastY === null ||
+            Math.abs(x - this.lastX) > 0.001 ||
+            Math.abs(y - this.lastY) > 0.001;
+
+          const buttonsChanged =
+            this.lastButtonsObj === null ||
+            buttonsObjChanged(this.lastButtonsObj, buttonsObj);
+
+          if (joystickChanged) {
+            this.lastX = x;
+            this.lastY = y;
             const joystickMsg: InputMessage = {
               type: "joystick",
               x,
               y,
-              buttons,
-              buttonLabels: this.buttonLabels,
-              buttonLabel: activeLabel,
-              firing,
               t: now,
             };
-
-            // Emit button change events for buttons whose pressed state changed
-            const buttonEvents: InputMessage[] = [];
-            const maxLen = Math.max(buttons.length, previousButtons.length);
-            for (let i = 0; i < maxLen; i++) {
-              const prevVal = previousButtons[i] ?? 0;
-              const currVal = buttons[i] ?? 0;
-              const prevPressed = prevVal > 0.5;
-              const currPressed = currVal > 0.5;
-              if (prevPressed !== currPressed || (currPressed && Math.abs(currVal - prevVal) > 0.01)) {
-                buttonEvents.push({
-                  type: "gamepad-button",
-                  button: i,
-                  value: currVal,
-                  pressed: currPressed,
-                  buttonLabel: this.buttonLabels[i],
-                  t: now,
-                });
-              }
-            }
-
             for (const l of this.inputListeners) {
-              l(stateMsg);
               l(joystickMsg);
-              for (const btnEvt of buttonEvents) {
-                l(btnEvt);
-              }
+            }
+          }
+
+          if (buttonsChanged) {
+            this.lastButtonsObj = buttonsObj;
+            const buttonsMsg: InputMessage = {
+              type: "buttons",
+              buttons: buttonsObj,
+              t: now,
+            };
+            for (const l of this.inputListeners) {
+              l(buttonsMsg);
             }
           }
         }
@@ -98,6 +81,7 @@ export class LocalGamepadTransport implements GameTransport {
         this.pollHandle = setTimeout(tick, 16) as any;
       }
     };
+
     if (typeof requestAnimationFrame !== "undefined") {
       this.pollHandle = requestAnimationFrame(tick);
     } else if (typeof setInterval !== "undefined") {
@@ -105,15 +89,19 @@ export class LocalGamepadTransport implements GameTransport {
     }
   }
 
-  sendInput() {}       // nowhere to send — this peer *is* the input source
-  sendControl() {}     // no-op
+  sendInput() {} // nowhere to send — this peer *is* the input source
+  sendControl() {} // no-op
   sendControlCoalesced() {}
   addInputListener(l: (msg: InputMessage) => void) {
     this.inputListeners.add(l);
     return () => this.inputListeners.delete(l);
   }
-  addControlListener() { return () => {}; }
-  onModeChange() { return () => {}; }
+  addControlListener() {
+    return () => {};
+  }
+  onModeChange() {
+    return () => {};
+  }
   close() {
     if (this.pollHandle !== null) {
       if (typeof cancelAnimationFrame !== "undefined") {
@@ -126,32 +114,51 @@ export class LocalGamepadTransport implements GameTransport {
   }
 }
 
-export function gamepadToJoystick(buttons: number[], axes: number[]): { x: number; y: number; firing: boolean } {
+export function gamepadToJoystick(
+  buttons: number[],
+  axes: number[]
+): { x: number; y: number } {
   let x = 0;
   let y = 0;
 
-  const rawX = axes[0] ?? 0;
-  const rawY = axes[1] ?? 0;
   const deadzone = 0.15;
-  if (Math.abs(rawX) > deadzone) x += rawX;
-  if (Math.abs(rawY) > deadzone) y += rawY;
 
+  // Search pairs of axes for first active stick
+  for (let i = 0; i < axes.length - 1; i += 2) {
+    const rawX = axes[i] ?? 0;
+    const rawY = axes[i + 1] ?? 0;
+    const mag = Math.hypot(rawX, rawY);
+    if (mag > deadzone) {
+      x = rawX;
+      y = rawY;
+      break;
+    }
+  }
+
+  // D-pad support (buttons 12: up, 13: down, 14: left, 15: right)
   if ((buttons[12] ?? 0) > 0.5) y -= 1;
   if ((buttons[13] ?? 0) > 0.5) y += 1;
   if ((buttons[14] ?? 0) > 0.5) x -= 1;
   if ((buttons[15] ?? 0) > 0.5) x += 1;
 
-  const mag = Math.sqrt(x * x + y * y);
+  const mag = Math.hypot(x, y);
   if (mag > 1.0) {
     x /= mag;
     y /= mag;
   }
 
-  const firing = buttons.slice(0, 8).some((b) => (b ?? 0) > 0.5);
-
-  return { x, y, firing };
+  return { x, y };
 }
 
-function changed(a: number[], b: number[]) {
-  return a.length !== b.length || a.some((v, i) => v !== b[i]);
+function buttonsObjChanged(
+  a: Record<string, number>,
+  b: Record<string, number>
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return true;
+  for (const k of keysA) {
+    if (b[k] === undefined || Math.abs(a[k] - b[k]) > 0.001) return true;
+  }
+  return false;
 }

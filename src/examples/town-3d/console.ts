@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
 import { createFixedTickLoop } from "@utils/gameLoop";
-import { isButtonLabelPressed } from "@utils/gamepad";
 
 export const controllerTypes = {
   phone: {},
@@ -14,34 +13,6 @@ export interface TownInputState {
   x: number;
   y: number;
   jump: boolean;
-}
-
-export function gamepadStateToTownInput(msg: { buttons?: number[]; axes?: number[]; buttonLabel?: string; buttonLabels?: string[] }): TownInputState {
-  let x = 0;
-  let y = 0;
-
-  const rawX = msg.axes?.[0] ?? 0;
-  const rawY = msg.axes?.[1] ?? 0;
-  const deadzone = 0.15;
-  if (Math.abs(rawX) > deadzone) x += rawX;
-  if (Math.abs(rawY) > deadzone) y += rawY;
-
-  const buttons = msg.buttons ?? [];
-  if ((buttons[12] ?? 0) > 0.5) y -= 1; // D-pad Up
-  if ((buttons[13] ?? 0) > 0.5) y += 1; // D-pad Down
-  if ((buttons[14] ?? 0) > 0.5) x -= 1; // D-pad Left
-  if ((buttons[15] ?? 0) > 0.5) x += 1; // D-pad Right
-
-  const mag = Math.sqrt(x * x + y * y);
-  if (mag > 1.0) {
-    x /= mag;
-    y /= mag;
-  }
-
-  // Jump button determined via buttonLabel ("JUMP")
-  const jump = isButtonLabelPressed(msg, "JUMP");
-
-  return { x, y, jump };
 }
 
 interface Obstacle {
@@ -407,12 +378,27 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     if (peer.pc) {
       peer.pc.addInputListener((msg: unknown) => {
-        const input = msg as { type?: string; state?: TownInputState; buttons?: number[]; axes?: number[] };
+        const input = msg as {
+          type?: string;
+          x?: number;
+          y?: number;
+          state?: TownInputState;
+          buttons?: Record<string, number>;
+        };
         if (input) {
-          if (input.type === "state" && input.state) {
+          if (input.type === "joystick" && typeof input.x === "number" && typeof input.y === "number") {
+            const current = playerInputs.get(peer.id) ?? { x: 0, y: 0, jump: false };
+            playerInputs.set(peer.id, { ...current, x: input.x, y: input.y });
+          } else if (
+            input.type === "buttons" &&
+            input.buttons &&
+            typeof input.buttons === "object" &&
+            !Array.isArray(input.buttons)
+          ) {
+            const current = playerInputs.get(peer.id) ?? { x: 0, y: 0, jump: false };
+            playerInputs.set(peer.id, { ...current, jump: (input.buttons["JUMP"] ?? 0) > 0.5 });
+          } else if (input.type === "state" && input.state) {
             playerInputs.set(peer.id, input.state);
-          } else if (input.type === "gamepad-state" && Array.isArray(input.buttons) && Array.isArray(input.axes)) {
-            playerInputs.set(peer.id, gamepadStateToTownInput(input as { buttons: number[]; axes: number[] }));
           }
         }
       });

@@ -1,20 +1,18 @@
-import type { GameTransport, InputMessage, ControlMessage, TransportMode, JoystickInputMessage } from "./transport";
+import type { GameTransport, InputMessage, ControlMessage, TransportMode } from "./transport";
 
 const UP_KEYS = new Set(["KeyW", "ArrowUp"]);
 const DOWN_KEYS = new Set(["KeyS", "ArrowDown"]);
 const LEFT_KEYS = new Set(["KeyA", "ArrowLeft"]);
 const RIGHT_KEYS = new Set(["KeyD", "ArrowRight"]);
-const ACTION_KEYS = new Set([
-  "Space",
-  "Enter",
-  "KeyZ",
-  "KeyX",
-  "KeyC",
-  "KeyJ",
-  "KeyK",
-  "KeyL",
-  "ShiftLeft",
-  "ShiftRight",
+
+const BTN_0_KEYS = new Set(["Space", "Enter", "KeyZ", "KeyJ", "ShiftLeft"]);
+const BTN_1_KEYS = new Set(["KeyX", "KeyK", "ShiftRight"]);
+const BTN_2_KEYS = new Set(["KeyC", "KeyL"]);
+
+const ALL_ACTION_KEYS = new Set([
+  ...BTN_0_KEYS,
+  ...BTN_1_KEYS,
+  ...BTN_2_KEYS,
 ]);
 
 const ALL_GAMEPAD_KEYS = new Set([
@@ -22,7 +20,7 @@ const ALL_GAMEPAD_KEYS = new Set([
   ...DOWN_KEYS,
   ...LEFT_KEYS,
   ...RIGHT_KEYS,
-  ...ACTION_KEYS,
+  ...ALL_ACTION_KEYS,
 ]);
 
 export class LocalKeyboardTransport implements GameTransport {
@@ -31,9 +29,9 @@ export class LocalKeyboardTransport implements GameTransport {
 
   private inputListeners = new Set<(msg: InputMessage) => void>();
   private pressedKeys = new Set<string>();
-  private lastX = 0;
-  private lastY = 0;
-  private lastFiring = false;
+  private lastX: number | null = null;
+  private lastY: number | null = null;
+  private lastButtonsObj: Record<string, number> | null = null;
 
   private onKeyDownBound = (e: KeyboardEvent) => this.handleKeyDown(e);
   private onKeyUpBound = (e: KeyboardEvent) => this.handleKeyUp(e);
@@ -93,7 +91,7 @@ export class LocalKeyboardTransport implements GameTransport {
       if (RIGHT_KEYS.has(k)) rawX += 1;
     }
 
-    const mag = Math.sqrt(rawX * rawX + rawY * rawY);
+    const mag = Math.hypot(rawX, rawY);
     let x = rawX;
     let y = rawY;
     if (mag > 1.0) {
@@ -101,62 +99,64 @@ export class LocalKeyboardTransport implements GameTransport {
       y /= mag;
     }
 
-    let firing = false;
-    for (const k of this.pressedKeys) {
-      if (ACTION_KEYS.has(k)) {
-        firing = true;
-        break;
+    const buttonsObj: Record<string, number> = {};
+    for (let i = 0; i < this.buttonLabels.length; i++) {
+      const label = this.buttonLabels[i];
+      if (!label) continue;
+
+      let pressed = false;
+      for (const k of this.pressedKeys) {
+        if (i === 0 && (BTN_0_KEYS.has(k) || (this.buttonLabels.length === 1 && ALL_ACTION_KEYS.has(k)))) {
+          pressed = true;
+          break;
+        }
+        if (i === 1 && BTN_1_KEYS.has(k)) {
+          pressed = true;
+          break;
+        }
+        if (i === 2 && BTN_2_KEYS.has(k)) {
+          pressed = true;
+          break;
+        }
       }
+      buttonsObj[label] = pressed ? 1 : 0;
     }
 
-    const firingChanged = firing !== this.lastFiring;
+    const now = performance.now();
 
-    if (x !== this.lastX || y !== this.lastY || firingChanged) {
+    const joystickChanged =
+      this.lastX === null ||
+      this.lastY === null ||
+      Math.abs(x - this.lastX) > 0.001 ||
+      Math.abs(y - this.lastY) > 0.001;
+
+    const buttonsChanged =
+      this.lastButtonsObj === null ||
+      buttonsObjChanged(this.lastButtonsObj, buttonsObj);
+
+    if (joystickChanged) {
       this.lastX = x;
       this.lastY = y;
-      this.lastFiring = firing;
-
-      const activeLabel = firing ? (this.buttonLabels[0] ?? undefined) : undefined;
-      const now = performance.now();
-
-      const stateMsg: InputMessage = {
-        type: "gamepad-state",
-        buttons: firing ? [1] : [0],
-        axes: [x, y],
-        buttonLabels: this.buttonLabels,
-        buttonLabel: activeLabel,
-        t: now,
-      };
-
-      const msg: JoystickInputMessage = {
+      const joystickMsg: InputMessage = {
         type: "joystick",
         x,
         y,
-        buttons: firing ? [1] : [0],
-        buttonLabels: this.buttonLabels,
-        buttonLabel: activeLabel,
-        firing,
         t: now,
       };
-
-      const buttonEvents: InputMessage[] = [];
-      if (firingChanged) {
-        buttonEvents.push({
-          type: "gamepad-button",
-          button: 0,
-          value: firing ? 1 : 0,
-          pressed: firing,
-          buttonLabel: this.buttonLabels[0],
-          t: now,
-        });
-      }
-
       for (const listener of this.inputListeners) {
-        listener(stateMsg);
-        listener(msg);
-        for (const btnEvt of buttonEvents) {
-          listener(btnEvt);
-        }
+        listener(joystickMsg);
+      }
+    }
+
+    if (buttonsChanged && this.buttonLabels.length > 0) {
+      this.lastButtonsObj = buttonsObj;
+      const buttonsMsg: InputMessage = {
+        type: "buttons",
+        buttons: buttonsObj,
+        t: now,
+      };
+      for (const listener of this.inputListeners) {
+        listener(buttonsMsg);
       }
     }
   }
@@ -186,4 +186,17 @@ export class LocalKeyboardTransport implements GameTransport {
     this.inputListeners.clear();
     this.pressedKeys.clear();
   }
+}
+
+function buttonsObjChanged(
+  a: Record<string, number>,
+  b: Record<string, number>
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return true;
+  for (const k of keysA) {
+    if (b[k] === undefined || Math.abs(a[k] - b[k]) > 0.001) return true;
+  }
+  return false;
 }

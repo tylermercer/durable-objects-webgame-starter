@@ -84,11 +84,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   resizeCanvas(ctx.viewport.initialSize);
   const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
-  const padStateMap = new Map<string, { x: number; y: number; firing: boolean; buttons: number[]; axes: number[]; buttonLabels?: string[]; buttonLabel?: string }>();
+  const padStateMap = new Map<string, { x: number; y: number; buttons: Record<string, number> }>();
   const cardElementsMap = new Map<string, {
     card: HTMLDivElement;
     joystickEl: HTMLDivElement;
-    axisEls: HTMLSpanElement[];
     btnEls: HTMLSpanElement[];
   }>();
   const unsubscribes = new Set<() => void>();
@@ -97,27 +96,17 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     if (peer.pc) {
       const unsub = peer.pc.addInputListener((msg: any) => {
         if (msg.type === "joystick") {
+          const current = padStateMap.get(peer.id) ?? { x: 0, y: 0, buttons: {} };
           padStateMap.set(peer.id, {
+            ...current,
             x: msg.x ?? 0,
             y: msg.y ?? 0,
-            firing: !!msg.firing,
-            buttons: msg.buttons ?? [],
-            axes: [msg.x ?? 0, msg.y ?? 0],
-            buttonLabels: msg.buttonLabels,
-            buttonLabel: msg.buttonLabel,
           });
-        } else if (msg.type === "gamepad-state") {
-          const rawX = msg.axes[0] ?? 0;
-          const rawY = msg.axes[1] ?? 0;
-          const firing = Array.isArray(msg.buttons) && msg.buttons.some((b: number) => b > 0.5);
+        } else if (msg.type === "buttons") {
+          const current = padStateMap.get(peer.id) ?? { x: 0, y: 0, buttons: {} };
           padStateMap.set(peer.id, {
-            x: rawX,
-            y: rawY,
-            firing,
-            buttons: msg.buttons ?? [],
-            axes: msg.axes ?? [],
-            buttonLabels: msg.buttonLabels,
-            buttonLabel: msg.buttonLabel,
+            ...current,
+            buttons: msg.buttons ?? {},
           });
         }
       });
@@ -201,7 +190,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       }
 
       for (const peer of gamepadPeers) {
-        const state = padStateMap.get(peer.id) ?? { x: 0, y: 0, firing: false, buttons: [], axes: [] };
+        const state = padStateMap.get(peer.id) ?? { x: 0, y: 0, buttons: {} };
         let cardObj = cardElementsMap.get(peer.id);
 
         if (!cardObj) {
@@ -225,58 +214,34 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
           joystickEl.style.cssText = "font-family: monospace; font-size: 13px; font-weight: bold; margin-bottom: 12px; color: #7fdbff;";
           card.appendChild(joystickEl);
 
-          const axesHeader = document.createElement("div");
-          axesHeader.textContent = `Axes (${state.axes.length}):`;
-          axesHeader.style.fontWeight = "bold";
-          axesHeader.style.fontSize = "12px";
-          card.appendChild(axesHeader);
-
-          const axesList = document.createElement("div");
-          axesList.style.cssText = "display: flex; gap: 8px; font-family: monospace; font-size: 12px; margin-bottom: 12px;";
-          card.appendChild(axesList);
-
           const buttonsHeader = document.createElement("div");
-          buttonsHeader.textContent = `Buttons (${state.buttons.length}):`;
+          buttonsHeader.textContent = `Buttons:`;
           buttonsHeader.style.fontWeight = "bold";
           buttonsHeader.style.fontSize = "12px";
           card.appendChild(buttonsHeader);
 
           const buttonsGrid = document.createElement("div");
-          buttonsGrid.style.cssText = "display: flex; flex-wrap: wrap; gap: 4px; font-family: monospace; font-size: 11px;";
+          buttonsGrid.style.cssText = "display: flex; flex-wrap: wrap; gap: 4px; font-family: monospace; font-size: 11px; margin-top: 4px;";
           card.appendChild(buttonsGrid);
 
           padsContainer.appendChild(card);
 
-          cardObj = { card, joystickEl, axisEls: [], btnEls: [] };
+          cardObj = { card, joystickEl, btnEls: [] };
           cardElementsMap.set(peer.id, cardObj);
         }
 
         // Update joystick state display
-        cardObj.joystickEl.textContent = `Joystick: X=${state.x.toFixed(2)}, Y=${state.y.toFixed(2)}${state.firing ? " [FIRE]" : ""}`;
+        cardObj.joystickEl.textContent = `Joystick: X=${state.x.toFixed(2)}, Y=${state.y.toFixed(2)}`;
 
-        // Efficiently update axis elements
-        const axesList = cardObj.card.children[3] as HTMLDivElement;
-        while (cardObj.axisEls.length < state.axes.length) {
-          const idx = cardObj.axisEls.length;
-          const axisEl = document.createElement("span");
-          axesList.appendChild(axisEl);
-          cardObj.axisEls.push(axisEl);
-        }
-        state.axes.forEach((val, idx) => {
-          if (cardObj.axisEls[idx]) {
-            cardObj.axisEls[idx].textContent = `A${idx}: ${val.toFixed(2)}`;
-          }
-        });
-
-        // Efficiently update button elements
-        const buttonsGrid = cardObj.card.children[5] as HTMLDivElement;
-        while (cardObj.btnEls.length < state.buttons.length) {
-          const idx = cardObj.btnEls.length;
+        // Update button elements
+        const buttonEntries = Object.entries(state.buttons);
+        const buttonsGrid = cardObj.card.children[3] as HTMLDivElement;
+        while (cardObj.btnEls.length < buttonEntries.length) {
           const btnEl = document.createElement("span");
           buttonsGrid.appendChild(btnEl);
           cardObj.btnEls.push(btnEl);
         }
-        state.buttons.forEach((val, idx) => {
+        buttonEntries.forEach(([label, val], idx) => {
           const btnEl = cardObj.btnEls[idx];
           if (btnEl) {
             btnEl.style.cssText = `
@@ -286,7 +251,6 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
               color: ${val > 0.1 ? "#000000" : "#ffffff"};
               font-weight: ${val > 0.1 ? "bold" : "normal"};
             `;
-            const label = state.buttonLabels?.[idx] ?? `B${idx}`;
             btnEl.textContent = `${label}: ${val.toFixed(1)}`;
           }
         });
