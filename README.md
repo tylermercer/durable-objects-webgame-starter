@@ -10,7 +10,7 @@ A starter template for browser-based multiplayer party games in the "Jackbox" mo
 - Once connected, the console and each controller talk directly over WebRTC data channels; the Durable Object is only involved in the initial handshake.
 - The console is the single authoritative game simulator; controllers just report player input and render local UI (buttons, joysticks).
 
-For the full design — Durable Object structure, the signaling protocol, WebRTC negotiation, data channel layout — see [`design-docs/2026-08-24-001-core-architecture.md`](./design-docs/2026-08-24-001-core-architecture.md). This README covers how to actually build a game on top of what's here.
+For the full design — Durable Object structure, the signaling protocol, WebRTC negotiation, data channel layout — see [`design-docs/2026-08-24-001-core-architecture.md`](./design-docs/2026-08-24-001-core-architecture.md). For complete console, controller, context, and transport interface specifications, see [`API.md`](./API.md). This README covers how to actually build a game on top of what's here.
 
 ## System architecture
 
@@ -87,6 +87,7 @@ The switcher is the default experience out of the box with no setup needed.
 | WebRTC data channels | `src/transport/peer-connection.ts` | Two channels per console↔controller pair: `input` (unreliable/unordered, for high-frequency input) and `control` (reliable/ordered, for state that must arrive). |
 | Game source seam | `src/contract/gameSource.ts` | The single seam between example switcher mode (State 1) and your own game mode (State 2). |
 | Examples & Switcher | `src/examples/`, `src/components/DemoSwitcher.astro` | Out-of-the-box examples registry and UI switcher for testing before building your own game. |
+| API Reference | `API.md` | Interface reference documentation for console, controller, context, transport, and message contracts. |
 | Custom Game Logic location | `src/logic/` | The scaffolded directory (`console.ts` & `controller.ts`) where your own game's logic will live. |
 | Console app | `src/host/console.ts` | Generic console bootstrap handling QR rendering, connection tracking, and fixed-tick animation loop through `gameSource.ts`. |
 | Controller app | `src/host/controller.ts` | Generic controller bootstrap handling WebRTC connection setup through `gameSource.ts`. |
