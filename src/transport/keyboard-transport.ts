@@ -38,11 +38,15 @@ export class LocalKeyboardTransport implements GameTransport {
   private onKeyDownBound = (e: KeyboardEvent) => this.handleKeyDown(e);
   private onKeyUpBound = (e: KeyboardEvent) => this.handleKeyUp(e);
 
-  constructor() {
+  constructor(private buttonLabels: string[] = []) {
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("keydown", this.onKeyDownBound);
       window.addEventListener("keyup", this.onKeyUpBound);
     }
+  }
+
+  setButtonLabels(labels: string[]) {
+    this.buttonLabels = [...labels];
   }
 
   private isEditableTarget(target: EventTarget | null): boolean {
@@ -105,22 +109,54 @@ export class LocalKeyboardTransport implements GameTransport {
       }
     }
 
-    if (x !== this.lastX || y !== this.lastY || firing !== this.lastFiring) {
+    const firingChanged = firing !== this.lastFiring;
+
+    if (x !== this.lastX || y !== this.lastY || firingChanged) {
       this.lastX = x;
       this.lastY = y;
       this.lastFiring = firing;
+
+      const activeLabel = firing ? (this.buttonLabels[0] ?? undefined) : undefined;
+      const now = performance.now();
+
+      const stateMsg: InputMessage = {
+        type: "gamepad-state",
+        buttons: firing ? [1] : [0],
+        axes: [x, y],
+        buttonLabels: this.buttonLabels,
+        buttonLabel: activeLabel,
+        t: now,
+      };
 
       const msg: JoystickInputMessage = {
         type: "joystick",
         x,
         y,
         buttons: firing ? [1] : [0],
+        buttonLabels: this.buttonLabels,
+        buttonLabel: activeLabel,
         firing,
-        t: performance.now(),
+        t: now,
       };
 
+      const buttonEvents: InputMessage[] = [];
+      if (firingChanged) {
+        buttonEvents.push({
+          type: "gamepad-button",
+          button: 0,
+          value: firing ? 1 : 0,
+          pressed: firing,
+          buttonLabel: this.buttonLabels[0],
+          t: now,
+        });
+      }
+
       for (const listener of this.inputListeners) {
+        listener(stateMsg);
         listener(msg);
+        for (const btnEvt of buttonEvents) {
+          listener(btnEvt);
+        }
       }
     }
   }

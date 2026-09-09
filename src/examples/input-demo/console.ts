@@ -2,7 +2,9 @@ import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 
 export const controllerTypes = {
   phone: {},
-  gamepad: {},
+  gamepad: {
+    buttonLabels: ["FIRE", "BOOST"],
+  },
 };
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
@@ -82,7 +84,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   resizeCanvas(ctx.viewport.initialSize);
   const unsubscribeResize = ctx.viewport.onResize(resizeCanvas);
 
-  const padStateMap = new Map<string, { x: number; y: number; firing: boolean; buttons: number[]; axes: number[] }>();
+  const padStateMap = new Map<string, { x: number; y: number; firing: boolean; buttons: number[]; axes: number[]; buttonLabels?: string[]; buttonLabel?: string }>();
   const cardElementsMap = new Map<string, {
     card: HTMLDivElement;
     joystickEl: HTMLDivElement;
@@ -101,17 +103,21 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
             firing: !!msg.firing,
             buttons: msg.buttons ?? [],
             axes: [msg.x ?? 0, msg.y ?? 0],
+            buttonLabels: msg.buttonLabels,
+            buttonLabel: msg.buttonLabel,
           });
         } else if (msg.type === "gamepad-state") {
           const rawX = msg.axes[0] ?? 0;
           const rawY = msg.axes[1] ?? 0;
-          const firing = Array.isArray(msg.buttons) && msg.buttons.slice(0, 8).some((b: number) => b > 0.5);
+          const firing = Array.isArray(msg.buttons) && msg.buttons.some((b: number) => b > 0.5);
           padStateMap.set(peer.id, {
             x: rawX,
             y: rawY,
             firing,
             buttons: msg.buttons ?? [],
             axes: msg.axes ?? [],
+            buttonLabels: msg.buttonLabels,
+            buttonLabel: msg.buttonLabel,
           });
         }
       });
@@ -280,7 +286,8 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
               color: ${val > 0.1 ? "#000000" : "#ffffff"};
               font-weight: ${val > 0.1 ? "bold" : "normal"};
             `;
-            btnEl.textContent = `B${idx}: ${val.toFixed(1)}`;
+            const label = state.buttonLabels?.[idx] ?? `B${idx}`;
+            btnEl.textContent = `${label}: ${val.toFixed(1)}`;
           }
         });
       }

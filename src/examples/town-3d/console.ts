@@ -1,10 +1,13 @@
 import * as THREE from "three";
 import type { ConsoleContext, ConsoleGameInstance, ControllerPeer } from "@contract/gameTypes";
 import { createFixedTickLoop } from "@utils/gameLoop";
+import { isButtonLabelPressed } from "@utils/gamepad";
 
 export const controllerTypes = {
   phone: {},
-  gamepad: {},
+  gamepad: {
+    buttonLabels: ["JUMP"],
+  },
 };
 
 export interface TownInputState {
@@ -13,12 +16,12 @@ export interface TownInputState {
   jump: boolean;
 }
 
-export function gamepadStateToTownInput(msg: { buttons: number[]; axes: number[] }): TownInputState {
+export function gamepadStateToTownInput(msg: { buttons?: number[]; axes?: number[]; buttonLabel?: string; buttonLabels?: string[] }): TownInputState {
   let x = 0;
   let y = 0;
 
-  const rawX = msg.axes[0] ?? 0;
-  const rawY = msg.axes[1] ?? 0;
+  const rawX = msg.axes?.[0] ?? 0;
+  const rawY = msg.axes?.[1] ?? 0;
   const deadzone = 0.15;
   if (Math.abs(rawX) > deadzone) x += rawX;
   if (Math.abs(rawY) > deadzone) y += rawY;
@@ -35,8 +38,8 @@ export function gamepadStateToTownInput(msg: { buttons: number[]; axes: number[]
     y /= mag;
   }
 
-  // Jump button: Face buttons (0..3) or bumpers (4..7)
-  const jump = buttons.slice(0, 8).some((b) => (b ?? 0) > 0.5);
+  // Jump button determined via buttonLabel ("JUMP")
+  const jump = isButtonLabelPressed(msg, "JUMP");
 
   return { x, y, jump };
 }

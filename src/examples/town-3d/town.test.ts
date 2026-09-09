@@ -3,7 +3,7 @@ import { gamepadStateToTownInput, controllerTypes } from "./console";
 
 describe("3D Town Gamepad Input Processing", () => {
   it("exports gamepad and phone controller types", () => {
-    expect(controllerTypes).toEqual({ phone: {}, gamepad: {} });
+    expect(controllerTypes).toEqual({ phone: {}, gamepad: { buttonLabels: ["JUMP"] } });
   });
 
   it("filters deadzones on analog sticks", () => {
@@ -48,22 +48,21 @@ describe("3D Town Gamepad Input Processing", () => {
   });
 
   it("triggers jump action when face buttons or shoulder triggers are pressed", () => {
-    // Button 0 (A / Cross)
+    // Button 0 (JUMP) via buttonLabels
+    expect(gamepadStateToTownInput({ axes: [0, 0], buttons: [1, 0, 0, 0], buttonLabels: ["JUMP"] }).jump).toBe(true);
+
+    // Via buttonLabel explicitly
+    expect(gamepadStateToTownInput({ axes: [0, 0], buttonLabel: "JUMP" }).jump).toBe(true);
+
+    // Legacy fallback
     expect(gamepadStateToTownInput({ axes: [0, 0], buttons: [1, 0, 0, 0] }).jump).toBe(true);
-
-    // Button 1 (B / Circle)
-    expect(gamepadStateToTownInput({ axes: [0, 0], buttons: [0, 1, 0, 0] }).jump).toBe(true);
-
-    // Button 7 (Right Trigger)
-    expect(
-      gamepadStateToTownInput({ axes: [0, 0], buttons: [0, 0, 0, 0, 0, 0, 0, 1] }).jump
-    ).toBe(true);
 
     // D-pad button (button 12) alone should NOT trigger jump
     expect(
       gamepadStateToTownInput({
         axes: [0, 0],
         buttons: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        buttonLabels: ["JUMP"],
       }).jump
     ).toBe(false);
   });

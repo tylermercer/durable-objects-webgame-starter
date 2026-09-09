@@ -54,41 +54,47 @@ describe("LocalKeyboardTransport", () => {
     const listener = vi.fn();
     transport.addInputListener(listener);
 
-    // Press KeyW (Up)
+    // Press KeyW (Up) -> emits gamepad-state and joystick
     dispatchKey("keydown", "KeyW");
-    expect(listener).toHaveBeenCalledTimes(1);
-    let msg = listener.mock.calls[0][0] as JoystickInputMessage;
-    expect(msg.type).toBe("joystick");
-    expect(msg.x).toBe(0);
-    expect(msg.y).toBe(-1);
-    expect(msg.firing).toBe(false);
+    const msgs1 = listener.mock.calls.map((c) => c[0]);
+    const joystickMsg1 = msgs1.find((m) => m.type === "joystick") as JoystickInputMessage;
+    expect(joystickMsg1).toBeDefined();
+    expect(joystickMsg1.x).toBe(0);
+    expect(joystickMsg1.y).toBe(-1);
+    expect(joystickMsg1.firing).toBe(false);
+
+    listener.mockClear();
 
     // Press KeyD (Right) -> Diagonal Up-Right
     dispatchKey("keydown", "KeyD");
-    expect(listener).toHaveBeenCalledTimes(2);
-    msg = listener.mock.calls[1][0] as JoystickInputMessage;
-    expect(msg.x).toBeCloseTo(Math.SQRT1_2);
-    expect(msg.y).toBeCloseTo(-Math.SQRT1_2);
+    const msgs2 = listener.mock.calls.map((c) => c[0]);
+    const joystickMsg2 = msgs2.find((m) => m.type === "joystick") as JoystickInputMessage;
+    expect(joystickMsg2.x).toBeCloseTo(Math.SQRT1_2);
+    expect(joystickMsg2.y).toBeCloseTo(-Math.SQRT1_2);
+
+    listener.mockClear();
 
     // Release KeyW -> Right only
     dispatchKey("keyup", "KeyW");
-    expect(listener).toHaveBeenCalledTimes(3);
-    msg = listener.mock.calls[2][0] as JoystickInputMessage;
-    expect(msg.x).toBe(1);
-    expect(msg.y).toBe(0);
+    const msgs3 = listener.mock.calls.map((c) => c[0]);
+    const joystickMsg3 = msgs3.find((m) => m.type === "joystick") as JoystickInputMessage;
+    expect(joystickMsg3.x).toBe(1);
+    expect(joystickMsg3.y).toBe(0);
+
+    listener.mockClear();
 
     // Release KeyD -> Zero vector
     dispatchKey("keyup", "KeyD");
-    expect(listener).toHaveBeenCalledTimes(4);
-    msg = listener.mock.calls[3][0] as JoystickInputMessage;
-    expect(msg.x).toBe(0);
-    expect(msg.y).toBe(0);
+    const msgs4 = listener.mock.calls.map((c) => c[0]);
+    const joystickMsg4 = msgs4.find((m) => m.type === "joystick") as JoystickInputMessage;
+    expect(joystickMsg4.x).toBe(0);
+    expect(joystickMsg4.y).toBe(0);
 
     transport.close();
   });
 
   it("handles Arrow keys and action keys (Space) for firing", () => {
-    const transport = new LocalKeyboardTransport();
+    const transport = new LocalKeyboardTransport(["FIRE"]);
     const listener = vi.fn();
     transport.addInputListener(listener);
 
@@ -96,12 +102,18 @@ describe("LocalKeyboardTransport", () => {
     dispatchKey("keydown", "ArrowDown");
     dispatchKey("keydown", "Space");
 
-    expect(listener).toHaveBeenCalledTimes(2);
-    const msg = listener.mock.calls[1][0] as JoystickInputMessage;
-    expect(msg.type).toBe("joystick");
-    expect(msg.x).toBe(0);
-    expect(msg.y).toBe(1);
-    expect(msg.firing).toBe(true);
+    const allMsgs = listener.mock.calls.map((c) => c[0]);
+    const joystickMsg = allMsgs.find((m) => m.type === "joystick" && m.firing) as JoystickInputMessage;
+    expect(joystickMsg).toBeDefined();
+    expect(joystickMsg.x).toBe(0);
+    expect(joystickMsg.y).toBe(1);
+    expect(joystickMsg.firing).toBe(true);
+    expect(joystickMsg.buttonLabel).toBe("FIRE");
+
+    const btnMsg = allMsgs.find((m) => m.type === "gamepad-button");
+    expect(btnMsg).toBeDefined();
+    expect(btnMsg.buttonLabel).toBe("FIRE");
+    expect(btnMsg.pressed).toBe(true);
 
     transport.close();
   });

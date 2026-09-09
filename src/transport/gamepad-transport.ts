@@ -11,8 +11,12 @@ export class LocalGamepadTransport implements GameTransport {
   private lastButtons: number[] = [];
   private lastAxes: number[] = [];
 
-  constructor(private gamepadIndex: number) {
+  constructor(private gamepadIndex: number, private buttonLabels: string[] = []) {
     this.startPolling();
+  }
+
+  setButtonLabels(labels: string[]) {
+    this.buttonLabels = [...labels];
   }
 
   private startPolling() {
@@ -24,15 +28,66 @@ export class LocalGamepadTransport implements GameTransport {
           const buttons = gp.buttons.map((b) => b.value);
           const axes = [...gp.axes];
           if (changed(buttons, this.lastButtons) || changed(axes, this.lastAxes)) {
+            const previousButtons = this.lastButtons;
             this.lastButtons = buttons;
             this.lastAxes = axes;
             const now = performance.now();
             const { x, y, firing } = gamepadToJoystick(buttons, axes);
-            const stateMsg: InputMessage = { type: "gamepad-state", buttons, axes, t: now };
-            const joystickMsg: InputMessage = { type: "joystick", x, y, buttons, firing, t: now };
+
+            // Find pressed button label if any
+            let activeLabel: string | undefined;
+            for (let i = 0; i < buttons.length; i++) {
+              if (buttons[i] > 0.5 && this.buttonLabels[i]) {
+                activeLabel = this.buttonLabels[i];
+                break;
+              }
+            }
+
+            const stateMsg: InputMessage = {
+              type: "gamepad-state",
+              buttons,
+              axes,
+              buttonLabels: this.buttonLabels,
+              buttonLabel: activeLabel,
+              t: now,
+            };
+            const joystickMsg: InputMessage = {
+              type: "joystick",
+              x,
+              y,
+              buttons,
+              buttonLabels: this.buttonLabels,
+              buttonLabel: activeLabel,
+              firing,
+              t: now,
+            };
+
+            // Emit button change events for buttons whose pressed state changed
+            const buttonEvents: InputMessage[] = [];
+            const maxLen = Math.max(buttons.length, previousButtons.length);
+            for (let i = 0; i < maxLen; i++) {
+              const prevVal = previousButtons[i] ?? 0;
+              const currVal = buttons[i] ?? 0;
+              const prevPressed = prevVal > 0.5;
+              const currPressed = currVal > 0.5;
+              if (prevPressed !== currPressed || (currPressed && Math.abs(currVal - prevVal) > 0.01)) {
+                buttonEvents.push({
+                  type: "gamepad-button",
+                  button: i,
+                  value: currVal,
+                  pressed: currPressed,
+                  buttonLabel: this.buttonLabels[i],
+                  t: now,
+                });
+              }
+            }
+
             for (const l of this.inputListeners) {
               l(stateMsg);
               l(joystickMsg);
+              for (const btnEvt of buttonEvents) {
+                l(btnEvt);
+              }
             }
           }
         }

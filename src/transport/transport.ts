@@ -35,6 +35,17 @@ export type GamepadStateMessage = {
   type: "gamepad-state";
   buttons: number[]; // analog value 0–1 per button, standard mapping index order
   axes: number[];    // -1–1 per axis
+  buttonLabels?: string[];
+  buttonLabel?: string;
+  t: number;
+};
+
+export type GamepadButtonMessage = {
+  type: "gamepad-button";
+  button: number;
+  value: number;
+  pressed: boolean;
+  buttonLabel?: string;
   t: number;
 };
 
@@ -43,13 +54,15 @@ export type JoystickInputMessage = {
   x: number;        // normalized -1 to 1
   y: number;        // normalized -1 to 1
   buttons?: number[];
+  buttonLabels?: string[];
+  buttonLabel?: string;
   firing?: boolean;
   t: number;
 };
 
 export type UnknownInputMessage = { type: string } & Record<string, unknown>;
 
-export type InputMessage = TouchMessage | GamepadStateMessage | JoystickInputMessage | UnknownInputMessage;
+export type InputMessage = TouchMessage | GamepadStateMessage | GamepadButtonMessage | JoystickInputMessage | UnknownInputMessage;
 
 export type TransportMode = "p2p" | "relay" | "local";
 

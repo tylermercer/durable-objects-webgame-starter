@@ -10,7 +10,7 @@ export interface GameEntry {
 export const EXAMPLES: Record<string, GameEntry> = {
   "input-demo": {
     label: "Input Demo",
-    controllerTypes: { phone: {}, gamepad: {} },
+    controllerTypes: { phone: {}, gamepad: { buttonLabels: ["FIRE", "BOOST"] } },
     console: () => import("@examples/input-demo/console"),
     controller: () => import("@examples/input-demo/controller"),
   },
@@ -27,7 +27,7 @@ export const EXAMPLES: Record<string, GameEntry> = {
   },
   "grid-dungeon": {
     label: "Grid Dungeon",
-    controllerTypes: { phone: {}, gamepad: {} },
+    controllerTypes: { phone: {}, gamepad: { buttonLabels: ["FIRE"] } },
     console: () => import("@examples/grid-dungeon/console"),
     controller: () => import("@examples/grid-dungeon/controller"),
   },
@@ -45,7 +45,7 @@ export const EXAMPLES: Record<string, GameEntry> = {
   },
   "town-3d": {
     label: "3D Town",
-    controllerTypes: { phone: {}, gamepad: {} },
+    controllerTypes: { phone: {}, gamepad: { buttonLabels: ["JUMP"] } },
     console: () => import("@examples/town-3d/console"),
     controller: () => import("@examples/town-3d/controller"),
   },
