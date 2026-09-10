@@ -84,10 +84,9 @@ describe("VirtualGamepad", () => {
     fireBtn.dispatchEvent({ type: "pointerdown", pointerId: 1, preventDefault: vi.fn() });
 
     expect(sentInputs.length).toBeGreaterThan(0);
-    const btnMsg = sentInputs.find((m) => m.type === "gamepad-button");
+    const btnMsg = sentInputs.find((m) => m.type === "buttons");
     expect(btnMsg).toBeDefined();
-    expect(btnMsg.buttonLabel).toBe("FIRE");
-    expect(btnMsg.pressed).toBe(true);
+    expect(btnMsg.buttons).toEqual({ FIRE: 1, BOOST: 0 });
 
     gamepad.destroy();
   });

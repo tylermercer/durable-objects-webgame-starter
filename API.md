@@ -381,8 +381,7 @@ Input messages are transmitted via `sendInput` and received via `addInputListene
 ```typescript
 export type InputMessage =
   | TouchMessage
-  | GamepadStateMessage
-  | GamepadButtonMessage
+  | GamepadButtonsInputMessage
   | JoystickInputMessage
   | UnknownInputMessage;
 ```
@@ -400,29 +399,13 @@ export interface TouchMessage {
 }
 ```
 
-#### GamepadStateMessage
+#### GamepadButtonsInputMessage
 
 ```typescript
-export interface GamepadStateMessage {
-  type: "gamepad-state";
-  buttons: number[];       // Analog values 0.0 to 1.0 per standard gamepad button mapping
-  axes: number[];          // Normalized axis values -1.0 to 1.0 per standard axis mapping
-  buttonLabels?: string[]; // Optional array of custom button label strings
-  buttonLabel?: string;    // Optional primary active button label string
-  t: number;               // Timestamp (performance.now())
-}
-```
-
-#### GamepadButtonMessage
-
-```typescript
-export interface GamepadButtonMessage {
-  type: "gamepad-button";
-  button: number;        // Button index
-  value: number;         // Analog press value (0.0 to 1.0)
-  pressed: boolean;      // True if button state is pressed (> 0.5)
-  buttonLabel?: string;  // Optional custom button label string
-  t: number;             // Timestamp (performance.now())
+export interface GamepadButtonsInputMessage {
+  type: "buttons";
+  buttons: Record<string, number>; // Keys are button labels, values are numbers indicating pressed state (0.0 to 1.0)
+  t: number;                      // Timestamp (performance.now())
 }
 ```
 
@@ -433,10 +416,6 @@ export interface JoystickInputMessage {
   type: "joystick";
   x: number;              // Normalized vector X axis (-1.0 to 1.0)
   y: number;              // Normalized vector Y axis (-1.0 to 1.0)
-  buttons?: number[];     // Optional button states
-  buttonLabels?: string[]; // Optional array of custom button label strings
-  buttonLabel?: string;   // Optional primary active button label string
-  firing?: boolean;       // Action / firing state flag
   t: number;              // Timestamp (performance.now())
 }
 ```
@@ -536,7 +515,7 @@ export interface VirtualGamepadOptions {
 #### Properties
 
 - `container`: `HTMLElement` — DOM element in which to mount the virtual gamepad.
-- `peerConnection`: `GameTransport | null` — Transport connection used to send `gamepad-state`, `gamepad-button`, and `joystick` input messages to the console host.
+- `peerConnection`: `GameTransport | null` — Transport connection used to send `buttons` and `joystick` input messages to the console host.
 - `buttonLabels` *(optional)*: `string[]` — Labels for action buttons (defaults to `["FIRE", "BOOST"]`).
 - `title` *(optional)*: `string` — Title header text (defaults to `"Virtual Gamepad"`).
 - `description` *(optional)*: `string` — Subtitle/description text (defaults to `"Use joystick and buttons to play"`).

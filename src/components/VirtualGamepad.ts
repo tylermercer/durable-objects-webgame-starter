@@ -121,6 +121,29 @@ export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGam
 
   let activePointerId: number | null = null;
 
+  function sendJoystickState() {
+    if (!options.peerConnection) return;
+    options.peerConnection.sendInput({
+      type: "joystick",
+      x: activeX,
+      y: activeY,
+      t: performance.now(),
+    });
+  }
+
+  function sendButtonsState() {
+    if (!options.peerConnection) return;
+    const buttonsObj: Record<string, number> = {};
+    buttonLabels.forEach((label, idx) => {
+      buttonsObj[label] = buttonStates[idx] ? 1 : 0;
+    });
+    options.peerConnection.sendInput({
+      type: "buttons",
+      buttons: buttonsObj,
+      t: performance.now(),
+    });
+  }
+
   function updateJoystickFromPointer(e: PointerEvent) {
     const rect = joystickBase.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -148,7 +171,7 @@ export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGam
       activeY = dy / maxRadius;
     }
 
-    sendInputState();
+    sendJoystickState();
   }
 
   const onJoystickDown = (e: PointerEvent) => {
@@ -173,7 +196,7 @@ export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGam
       activeX = 0;
       activeY = 0;
       joystickKnob.style.transform = "translate(0px, 0px)";
-      sendInputState();
+      sendJoystickState();
     }
   };
 
@@ -226,19 +249,7 @@ export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGam
           btn.style.filter = "none";
         }
 
-        // Send discrete gamepad-button event for press/release
-        if (options.peerConnection) {
-          options.peerConnection.sendInput({
-            type: "gamepad-button",
-            button: idx,
-            value: pressed ? 1 : 0,
-            pressed,
-            buttonLabel: label,
-            t: performance.now(),
-          });
-        }
-
-        sendInputState();
+        sendButtonsState();
       }
     };
 
@@ -258,43 +269,6 @@ export function createVirtualGamepad(options: VirtualGamepadOptions): VirtualGam
     buttonElements.push(btn);
     buttonsArea.appendChild(btn);
   });
-
-  function sendInputState() {
-    if (!options.peerConnection) return;
-
-    const now = performance.now();
-    const numericButtons = buttonStates.map((s) => (s ? 1 : 0));
-
-    let activeLabel: string | undefined;
-    for (let i = 0; i < buttonStates.length; i++) {
-      if (buttonStates[i]) {
-        activeLabel = buttonLabels[i];
-        break;
-      }
-    }
-
-    const firing = buttonStates.some((s) => s);
-
-    options.peerConnection.sendInput({
-      type: "gamepad-state",
-      buttons: numericButtons,
-      axes: [activeX, activeY],
-      buttonLabels,
-      buttonLabel: activeLabel,
-      t: now,
-    });
-
-    options.peerConnection.sendInput({
-      type: "joystick",
-      x: activeX,
-      y: activeY,
-      buttons: numericButtons,
-      buttonLabels,
-      buttonLabel: activeLabel,
-      firing,
-      t: now,
-    });
-  }
 
   options.container.appendChild(wrapper);
 

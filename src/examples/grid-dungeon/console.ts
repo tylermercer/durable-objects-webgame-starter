@@ -5,7 +5,6 @@ import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
 import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
-import { isButtonLabelPressed } from "@utils/gamepad";
 import {
   createLobbyGrid,
   createDungeonGrid,
@@ -45,34 +44,6 @@ export const controllerTypes = {
     buttonLabels: ["FIRE"],
   },
 };
-
-export function gamepadStateToJoystick(msg: { buttons?: number[]; axes?: number[]; buttonLabel?: string; buttonLabels?: string[]; firing?: boolean }): JoystickState {
-  let x = 0;
-  let y = 0;
-
-  const rawX = msg.axes?.[0] ?? 0;
-  const rawY = msg.axes?.[1] ?? 0;
-  const deadzone = 0.15;
-  if (Math.abs(rawX) > deadzone) x += rawX;
-  if (Math.abs(rawY) > deadzone) y += rawY;
-
-  const buttons = msg.buttons ?? [];
-  if ((buttons[12] ?? 0) > 0.5) y -= 1;
-  if ((buttons[13] ?? 0) > 0.5) y += 1;
-  if ((buttons[14] ?? 0) > 0.5) x -= 1;
-  if ((buttons[15] ?? 0) > 0.5) x += 1;
-
-  const mag = Math.sqrt(x * x + y * y);
-  if (mag > 1.0) {
-    x /= mag;
-    y /= mag;
-  }
-
-  // Fire button determined via buttonLabel ("FIRE")
-  const firing = isButtonLabelPressed(msg, "FIRE");
-
-  return { x, y, firing };
-}
 
 export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   // Create dedicated canvas
@@ -130,14 +101,27 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
 
     if (peer.pc) {
       peer.pc.addInputListener((msg: unknown) => {
-        const input = msg as { type?: string; x?: number; y?: number; firing?: boolean; state?: JoystickState; buttons?: number[]; axes?: number[] };
+        const input = msg as {
+          type?: string;
+          x?: number;
+          y?: number;
+          state?: JoystickState;
+          buttons?: Record<string, number>;
+        };
         if (input) {
           if (input.type === "joystick" && typeof input.x === "number" && typeof input.y === "number") {
-            joystickInputs.set(peer.id, { x: input.x, y: input.y, firing: !!input.firing });
+            const current = joystickInputs.get(peer.id) ?? { x: 0, y: 0, firing: false };
+            joystickInputs.set(peer.id, { ...current, x: input.x, y: input.y });
+          } else if (
+            input.type === "buttons" &&
+            input.buttons &&
+            typeof input.buttons === "object" &&
+            !Array.isArray(input.buttons)
+          ) {
+            const current = joystickInputs.get(peer.id) ?? { x: 0, y: 0, firing: false };
+            joystickInputs.set(peer.id, { ...current, firing: (input.buttons["FIRE"] ?? 0) > 0.5 });
           } else if (input.type === "state" && input.state) {
             joystickInputs.set(peer.id, input.state);
-          } else if (input.type === "gamepad-state" && Array.isArray(input.buttons) && Array.isArray(input.axes)) {
-            joystickInputs.set(peer.id, gamepadStateToJoystick(input as { buttons: number[]; axes: number[] }));
           }
         }
       });

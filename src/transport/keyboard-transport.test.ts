@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { LocalKeyboardTransport } from "./keyboard-transport";
-import type { JoystickInputMessage } from "./transport";
+import type { JoystickInputMessage, GamepadButtonsInputMessage } from "./transport";
 
 describe("LocalKeyboardTransport", () => {
   let listeners: Record<string, Function[]> = {};
@@ -54,14 +54,13 @@ describe("LocalKeyboardTransport", () => {
     const listener = vi.fn();
     transport.addInputListener(listener);
 
-    // Press KeyW (Up) -> emits gamepad-state and joystick
+    // Press KeyW (Up) -> emits joystick event
     dispatchKey("keydown", "KeyW");
     const msgs1 = listener.mock.calls.map((c) => c[0]);
     const joystickMsg1 = msgs1.find((m) => m.type === "joystick") as JoystickInputMessage;
     expect(joystickMsg1).toBeDefined();
     expect(joystickMsg1.x).toBe(0);
     expect(joystickMsg1.y).toBe(-1);
-    expect(joystickMsg1.firing).toBe(false);
 
     listener.mockClear();
 
@@ -93,27 +92,26 @@ describe("LocalKeyboardTransport", () => {
     transport.close();
   });
 
-  it("handles Arrow keys and action keys (Space) for firing", () => {
+  it("handles Arrow keys and action keys (Space) for button state events", () => {
     const transport = new LocalKeyboardTransport(["FIRE"]);
     const listener = vi.fn();
     transport.addInputListener(listener);
 
-    // Press ArrowDown + Space
+    // Press ArrowDown
     dispatchKey("keydown", "ArrowDown");
+    // Press Space
     dispatchKey("keydown", "Space");
 
     const allMsgs = listener.mock.calls.map((c) => c[0]);
-    const joystickMsg = allMsgs.find((m) => m.type === "joystick" && m.firing) as JoystickInputMessage;
+    const joystickMsg = allMsgs.find((m) => m.type === "joystick") as JoystickInputMessage;
     expect(joystickMsg).toBeDefined();
     expect(joystickMsg.x).toBe(0);
     expect(joystickMsg.y).toBe(1);
-    expect(joystickMsg.firing).toBe(true);
-    expect(joystickMsg.buttonLabel).toBe("FIRE");
 
-    const btnMsg = allMsgs.find((m) => m.type === "gamepad-button");
-    expect(btnMsg).toBeDefined();
-    expect(btnMsg.buttonLabel).toBe("FIRE");
-    expect(btnMsg.pressed).toBe(true);
+    const btnMsgs = allMsgs.filter((m) => m.type === "buttons") as GamepadButtonsInputMessage[];
+    const lastBtnMsg = btnMsgs[btnMsgs.length - 1];
+    expect(lastBtnMsg).toBeDefined();
+    expect(lastBtnMsg.buttons).toEqual({ FIRE: 1 });
 
     transport.close();
   });
