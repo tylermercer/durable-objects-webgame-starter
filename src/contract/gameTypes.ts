@@ -79,6 +79,11 @@ export interface ConsoleGameModule {
   };
 }
 
+export interface ControllerContext {
+  peerConnection: GameTransport | null;
+  isFirstPlayer: () => boolean;
+}
+
 export interface ControllerGameModule {
-  createGame(ctx: { peerConnection: GameTransport | null; isFirstPlayer: () => boolean }): ControllerGameInstance;
+  createGame(ctx: ControllerContext): ControllerGameInstance;
 }
