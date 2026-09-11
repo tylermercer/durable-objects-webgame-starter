@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "./localGameState";
+import { saveRoomState, getSavedRoomState, clearSavedRoomState, createConsoleStorage } from "./localGameState";
 
-describe("localGameState", () => {
+describe("localGameState and ConsoleStorage", () => {
   let mockStorage: Record<string, string> = {};
 
   beforeEach(() => {
@@ -27,8 +27,8 @@ describe("localGameState", () => {
     const roomCode = "ROOM123";
     const state = { score: 42, player: "Alice" };
 
-    saveLocalGameState(roomCode, state);
-    const loaded = loadLocalGameState<typeof state>(roomCode);
+    saveRoomState(roomCode, state);
+    const loaded = getSavedRoomState<typeof state>(roomCode);
 
     expect(loaded).toEqual(state);
     expect(mockStorage["game_state_ROOM123"]).toBe(JSON.stringify(state));
@@ -36,12 +36,26 @@ describe("localGameState", () => {
 
   it("clears stored game state for a room code", () => {
     const roomCode = "ROOM123";
-    saveLocalGameState(roomCode, { score: 100 });
-    expect(loadLocalGameState(roomCode)).toEqual({ score: 100 });
+    saveRoomState(roomCode, { score: 100 });
+    expect(getSavedRoomState(roomCode)).toEqual({ score: 100 });
 
-    clearLocalGameState(roomCode);
-    expect(loadLocalGameState(roomCode)).toBeNull();
+    clearSavedRoomState(roomCode);
+    expect(getSavedRoomState(roomCode)).toBeNull();
     expect(mockStorage["game_state_ROOM123"]).toBeUndefined();
+  });
+
+  it("provides createConsoleStorage with saveRoomState, getSavedRoomState, and clearSavedRoomState", () => {
+    const roomCode = "CONSOLE_ROOM";
+    const storage = createConsoleStorage(roomCode);
+    const state = { level: 5, coins: 99 };
+
+    expect(storage.getSavedRoomState()).toBeNull();
+
+    storage.saveRoomState(state);
+    expect(storage.getSavedRoomState()).toEqual(state);
+
+    storage.clearSavedRoomState();
+    expect(storage.getSavedRoomState()).toBeNull();
   });
 
   it("falls back gracefully when localStorage throws error", () => {
@@ -58,10 +72,10 @@ describe("localGameState", () => {
     });
 
     const roomCode = "ROOM_FALLBACK";
-    saveLocalGameState(roomCode, { value: 123 });
-    expect(loadLocalGameState(roomCode)).toEqual({ value: 123 });
+    saveRoomState(roomCode, { value: 123 });
+    expect(getSavedRoomState(roomCode)).toEqual({ value: 123 });
 
-    clearLocalGameState(roomCode);
-    expect(loadLocalGameState(roomCode)).toBeNull();
+    clearSavedRoomState(roomCode);
+    expect(getSavedRoomState(roomCode)).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ This document defines the interface contracts for console and controller game mo
   - [GamepadControllerConfig](#gamepadcontrollerconfig)
 - [Execution Context Interfaces](#execution-context-interfaces)
   - [ConsoleContext](#consolecontext)
+  - [ConsoleStorage](#consolestorage)
   - [ControllerContext](#controllercontext)
 - [Platform Interfaces](#platform-interfaces)
   - [GameViewport](#gameviewport)
@@ -175,6 +176,7 @@ export interface ConsoleContext {
   roomCode: string;
   peers: Map<string, ControllerPeer>;
   viewport: GameViewport;
+  storage: ConsoleStorage;
   onPeerJoined: (cb: (peer: ControllerPeer) => void) => () => void;
   onPeerReady: (cb: (peer: ControllerPeer) => void) => () => void;
   onPeerLeft: (cb: (id: string) => void) => () => void;
@@ -187,9 +189,30 @@ export interface ConsoleContext {
 - `roomCode`: `string` — The uppercase room code identifier for the current session.
 - `peers`: `Map<string, ControllerPeer>` — Live map of peer IDs to `ControllerPeer` objects representing all currently registered controllers.
 - `viewport`: `GameViewport` — The DOM container and viewport management interface for game rendering.
+- `storage`: `ConsoleStorage` — Interface for local room simulation state persistence (`saveRoomState`, `getSavedRoomState`, `clearSavedRoomState`).
 - `onPeerJoined(cb: (peer: ControllerPeer) => void): () => void` — Subscribes a callback to peer registration events (fired when a peer joins signaling). Returns an unsubscribe function.
 - `onPeerReady(cb: (peer: ControllerPeer) => void): () => void` — Subscribes a callback to peer readiness events (fired when a transport connection `pc` is established). Returns an unsubscribe function.
 - `onPeerLeft(cb: (id: string) => void): () => void` — Subscribes a callback to peer departure events (fired when a peer disconnects or is purged). Returns an unsubscribe function.
+
+---
+
+### ConsoleStorage
+
+The storage interface provided via `ctx.storage` on the `ConsoleContext`.
+
+```typescript
+export interface ConsoleStorage {
+  saveRoomState: (data: unknown) => void;
+  getSavedRoomState: <T = unknown>() => T | null;
+  clearSavedRoomState: () => void;
+}
+```
+
+#### Properties & Methods
+
+- `saveRoomState(data: unknown): void` — Serializes and persists simulation state in local storage namespaced to the current room code.
+- `getSavedRoomState<T = unknown>(): T | null` — Retrieves and deserializes saved simulation state for the current room code, or returns `null` if not found.
+- `clearSavedRoomState(): void` — Removes saved simulation state for the current room code from local storage.
 
 ---
 

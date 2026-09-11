@@ -35,11 +35,18 @@ export interface ControllerPeer {
   lastTouch?: TouchMessage;
 }
 
+export interface ConsoleStorage {
+  saveRoomState: (data: unknown) => void;
+  getSavedRoomState: <T = unknown>() => T | null;
+  clearSavedRoomState: () => void;
+}
+
 export interface ConsoleContext {
   session: RpcStub<ConsoleApi> | null;
   roomCode: string;
   peers: Map<string, ControllerPeer>;
   viewport: GameViewport;
+  storage: ConsoleStorage;
   onPeerJoined: (cb: (peer: ControllerPeer) => void) => () => void;
   onPeerReady: (cb: (peer: ControllerPeer) => void) => () => void;
   onPeerLeft: (cb: (id: string) => void) => () => void;

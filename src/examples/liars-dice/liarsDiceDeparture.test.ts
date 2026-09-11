@@ -37,6 +37,11 @@ function createMockConsoleContext(): {
       peerLeftCb = cb;
       return () => { peerLeftCb = null; };
     },
+    storage: {
+      saveRoomState: vi.fn(),
+      getSavedRoomState: vi.fn(() => null),
+      clearSavedRoomState: vi.fn(),
+    },
     viewport: {
       container,
       initialSize: { width: 800, height: 600 },

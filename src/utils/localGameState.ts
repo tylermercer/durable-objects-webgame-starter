@@ -1,6 +1,8 @@
+import type { ConsoleStorage } from "@contract/gameTypes";
+
 const memoryStore = new Map<string, string>();
 
-export function saveLocalGameState(roomCode: string, state: unknown): void {
+export function saveRoomState(roomCode: string, state: unknown): void {
   if (!roomCode) return;
   const key = `game_state_${roomCode}`;
   const serialized = JSON.stringify(state);
@@ -15,7 +17,7 @@ export function saveLocalGameState(roomCode: string, state: unknown): void {
   memoryStore.set(key, serialized);
 }
 
-export function loadLocalGameState<T = unknown>(roomCode: string): T | null {
+export function getSavedRoomState<T = unknown>(roomCode: string): T | null {
   if (!roomCode) return null;
   const key = `game_state_${roomCode}`;
   try {
@@ -40,7 +42,7 @@ export function loadLocalGameState<T = unknown>(roomCode: string): T | null {
   return null;
 }
 
-export function clearLocalGameState(roomCode: string): void {
+export function clearSavedRoomState(roomCode: string): void {
   if (!roomCode) return;
   const key = `game_state_${roomCode}`;
   memoryStore.delete(key);
@@ -51,4 +53,12 @@ export function clearLocalGameState(roomCode: string): void {
   } catch (err) {
     console.error("Failed to clear local game state from localStorage:", err);
   }
+}
+
+export function createConsoleStorage(roomCode: string): ConsoleStorage {
+  return {
+    saveRoomState: (data: unknown) => saveRoomState(roomCode, data),
+    getSavedRoomState: <T = unknown>() => getSavedRoomState<T>(roomCode),
+    clearSavedRoomState: () => clearSavedRoomState(roomCode),
+  };
 }

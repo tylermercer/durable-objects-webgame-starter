@@ -88,6 +88,11 @@ describe("OthelloConsole integration", () => {
       onPeerJoined: () => () => {},
       onPeerReady: () => () => {},
       onPeerLeft: () => () => {},
+      storage: {
+        saveRoomState: vi.fn(),
+        getSavedRoomState: vi.fn(() => null),
+        clearSavedRoomState: vi.fn(),
+      },
     };
 
     const instance = createGame(ctx);

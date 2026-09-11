@@ -74,7 +74,7 @@ flowchart TB
 
 The switcher is the default experience out of the box with no setup needed.
 - `input-demo`: Raw touch input tracking and gamepad state visualization across WebRTC data channels and local gamepads.
-- `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`saveGameState`), and coalesced state broadcasts.
+- `liars-dice`: Full turn-based game demonstrating private player state, turn timers, reconnect handling, state persistence (`ctx.storage.saveRoomState`), and coalesced state broadcasts.
 - `flappy-royale`: Real-time simulation with per-player elimination, seeded/replayable procedural generation, and 60Hz tick-vs-render separation.
 - `grid-dungeon`: Tile-grid movement and collision, multi-target camera following, and NPC pathfinding via `TileGrid`/`Camera`/`EntityRegistry`.
 
@@ -105,7 +105,7 @@ bun ./scripts/eject.ts
 This automates removing example routes, replacing `src/pages/index.astro` with the single-game `GameShell`, updating `src/contract/gameSource.ts` to point to `src/logic/`, and verifying the build with `pnpm astro check` and `pnpm build`.
 
 Under the hood, ejection performs the following steps:
-1. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `saveGameState`, `TileGrid.findPath`, `simplifyPath`, `steerToward`).
+1. Implement `src/logic/console.ts` and `src/logic/controller.ts` per the `createGame` contract, using the framework primitives (`InputStateSync`, `createFixedTickLoop`, `createRng`, `sendControlCoalesced`, `rejoinToken`, `ctx.storage.saveRoomState`, `TileGrid.findPath`, `simplifyPath`, `steerToward`).
 2. Delete `src/pages/play/` and `src/examples/`.
 3. Replace `src/pages/index.astro` with `<Layout><GameShell /></Layout>`.
 4. Replace `src/contract/gameSource.ts` with the State 2 logic (`src/contract/gameSource.state2.ts`).
@@ -181,19 +181,17 @@ The `control` channel is reliable and ordered — good for state you can't affor
 
 The console browser tab is the sole authoritative game simulator for a room. Simulation state (world state, player scores, card hands) only needs to survive same-device browser refreshes and belongs in `localStorage` on the console rather than the Durable Object server.
 
-Use `saveLocalGameState`, `loadLocalGameState`, and `clearLocalGameState` (`src/utils/localGameState.ts`) to persist console game states namespaced by room code (`game_state_${roomCode}`):
+Use the `storage` API on the console context (`ctx.storage`) to persist, load, and clear console game states namespaced by room code automatically:
 
 ```ts
-import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
-
 // Load saved state on console init
-const saved = loadLocalGameState<MyGameState>(ctx.roomCode);
+const saved = ctx.storage.getSavedRoomState<MyGameState>();
 
 // Save state on updates
-saveLocalGameState(ctx.roomCode, currentState);
+ctx.storage.saveRoomState(currentState);
 
 // Clear state when a game genuinely resets or ends
-clearLocalGameState(ctx.roomCode);
+ctx.storage.clearSavedRoomState();
 ```
 
 > **Durable Object Storage Best Practices**:

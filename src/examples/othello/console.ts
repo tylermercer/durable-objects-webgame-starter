@@ -7,7 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { OthelloConsole } from "./OthelloConsole";
 import { applyMove, countPieces, createInitialBoard, hasAnyLegalMove, isValidMove } from "./rules";
-import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   CellState,
   OthelloControlMessage,
@@ -115,7 +114,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function startNextGame() {
     const livePeers = Array.from(ctx.peers.values()).filter(isConnected);
     if (livePeers.length < 2) {
-      clearLocalGameState(ctx.roomCode);
+      ctx.storage.clearSavedRoomState();
       roundFlow.transition("waiting");
       broadcastState();
       return;
@@ -252,10 +251,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       whiteId,
       winner,
     };
-    saveLocalGameState(ctx.roomCode, stateToSave);
+    ctx.storage.saveRoomState(stateToSave);
   }
 
-  const saved = loadLocalGameState<PersistedOthelloState>(ctx.roomCode);
+  const saved = ctx.storage.getSavedRoomState<PersistedOthelloState>();
   if (saved && typeof saved === "object") {
     if (saved.board) board = TileGrid.fromJSON(saved.board);
     if (saved.turnOrder) turnOrder = new TurnOrder([], saved.turnOrder);

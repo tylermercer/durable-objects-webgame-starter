@@ -11,9 +11,17 @@ export interface ControllerPeer {
   lastTouch?: TouchMessage;
 }
 
+export interface ConsoleStorage {
+  saveRoomState: (data: unknown) => void;
+  getSavedRoomState: <T = unknown>() => T | null;
+  clearSavedRoomState: () => void;
+}
+
 export interface ConsoleContext {
   session: RpcStub<ConsoleApi> | null;
+  roomCode: string;
   peers: Map<string, ControllerPeer>;
+  storage: ConsoleStorage;
 }
 
 export function createGame(_ctx: ConsoleContext) {
