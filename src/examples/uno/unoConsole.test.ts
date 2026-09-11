@@ -85,6 +85,11 @@ describe("UnoConsole integration", () => {
       onPeerJoined: () => () => {},
       onPeerReady: () => () => {},
       onPeerLeft: () => () => {},
+      storage: {
+        saveRoomState: vi.fn(),
+        getSavedRoomState: vi.fn(() => null),
+        clearSavedRoomState: vi.fn(),
+      },
     };
 
     const instance = createGame(ctx);
@@ -185,6 +190,11 @@ describe("UnoConsole integration", () => {
       onPeerJoined: () => () => {},
       onPeerReady: () => () => {},
       onPeerLeft: () => () => {},
+      storage: {
+        saveRoomState: vi.fn(),
+        getSavedRoomState: vi.fn(() => null),
+        clearSavedRoomState: vi.fn(),
+      },
     };
 
     const instance = createGame(ctx);
@@ -252,6 +262,11 @@ describe("UnoConsole integration", () => {
         return () => {};
       },
       onPeerLeft: () => () => {},
+      storage: {
+        saveRoomState: vi.fn(),
+        getSavedRoomState: vi.fn(() => null),
+        clearSavedRoomState: vi.fn(),
+      },
     };
 
     const instance = createGame(ctx);

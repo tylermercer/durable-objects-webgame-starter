@@ -4,7 +4,6 @@ import { createFixedTickLoop } from "../../utils/gameLoop";
 import { Camera } from "../../utils/camera";
 import { EntityRegistry } from "../../utils/entityRegistry";
 import { createRng } from "../../utils/rng";
-import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createLobbyGrid,
   createDungeonGrid,
@@ -160,7 +159,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
     gameOverSurvivedWaves?: number | null;
     entities?: DungeonEntity[];
   }
-  const saved = loadLocalGameState<SavedState | DungeonEntity[]>(ctx.roomCode);
+  const saved = ctx.storage.getSavedRoomState<SavedState | DungeonEntity[]>();
   if (saved) {
     if (Array.isArray(saved)) {
       registry = EntityRegistry.fromJSON<DungeonEntity>(saved);
@@ -175,7 +174,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   activeGrid = phase === "lobby" ? lobbyGrid : dungeonGrid;
 
   function persistState() {
-    saveLocalGameState(ctx.roomCode, {
+    ctx.storage.saveRoomState({
       phase,
       wave,
       lives,

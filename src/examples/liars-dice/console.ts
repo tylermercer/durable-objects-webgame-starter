@@ -5,7 +5,6 @@ import { isValidBid, resolveChallenge } from "./rules";
 import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { LiarsDiceConsole } from "./LiarsDiceConsole";
-import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   Bid,
   ChallengeResult,
@@ -133,7 +132,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       ctx,
       onStartRound: (keepRoundNumber) => startNextRound(keepRoundNumber),
       onNewGame: () => {
-        clearLocalGameState(ctx.roomCode);
+        ctx.storage.clearSavedRoomState();
         playerDiceCounts.clear();
         roundNumber = 0;
         lastChallengeResult = null;
@@ -144,7 +143,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   );
 
   // Load persisted state if available
-  const saved = loadLocalGameState<PersistedGameState>(ctx.roomCode);
+  const saved = ctx.storage.getSavedRoomState<PersistedGameState>();
   if (saved && typeof saved === "object") {
     if (saved.roundNumber) roundNumber = saved.roundNumber;
     if (saved.roundSeed) roundSeed = saved.roundSeed;
@@ -266,7 +265,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       winner
     };
 
-    saveLocalGameState(ctx.roomCode, stateToSave);
+    ctx.storage.saveRoomState(stateToSave);
   }
 
   function handleControlMessage(fromId: string, msg: LiarsDiceControlMessage) {

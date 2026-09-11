@@ -9,7 +9,6 @@ import { createRoot, type Root } from "react-dom/client";
 import React from "react";
 import { UnoConsole } from "./UnoConsole";
 import { CARD_COLORS, createUnoDeck, drawPenaltyOf, hasPlayableCard, isPlayable, isWild } from "./rules";
-import { saveLocalGameState, loadLocalGameState, clearLocalGameState } from "@utils/localGameState";
 import type {
   CardColor,
   PersistedUnoState,
@@ -92,7 +91,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   function startNextGame() {
     const activePlayerIds = Array.from(ctx.peers.keys());
     if (activePlayerIds.length < 2) {
-      clearLocalGameState(ctx.roomCode);
+      ctx.storage.clearSavedRoomState();
       roundFlow.transition("waiting");
       broadcastState();
       return;
@@ -293,10 +292,10 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       roundSeed,
       winner,
     };
-    saveLocalGameState(ctx.roomCode, stateToSave);
+    ctx.storage.saveRoomState(stateToSave);
   }
 
-  const saved = loadLocalGameState<PersistedUnoState>(ctx.roomCode);
+  const saved = ctx.storage.getSavedRoomState<PersistedUnoState>();
   if (saved && typeof saved === "object") {
     roundSeed = saved.roundSeed ?? roundSeed;
     deck = Deck.fromJSON(saved.deck ?? { drawPile: [], discardPile: [] }, createRng(roundSeed));

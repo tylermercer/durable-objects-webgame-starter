@@ -1,10 +1,8 @@
-import type { GameTransport } from "@transport/transport";
+import type { ControllerContext, ControllerGameInstance } from "@contract/gameTypes";
 
-export interface ControllerContext {
-  peerConnection: GameTransport | null;
-}
+export type { ControllerContext, ControllerGameInstance };
 
-export function createGame(_ctx: ControllerContext) {
+export function createGame(_ctx: ControllerContext): ControllerGameInstance {
   // Implement your custom controller game logic here.
   // See src/examples/ for reference implementations and README.md for transition steps.
   return {};

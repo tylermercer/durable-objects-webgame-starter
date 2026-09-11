@@ -12,6 +12,7 @@ import { buildJoinUrl } from "../utils/buildJoinUrl";
 import { isController } from "../utils/isController";
 import type { ConsoleGameInstance, ConsoleGameModule, ControllerPeer, ViewportSize } from "../contract/gameTypes";
 import { createPeerNotifier, type PeerNotifier } from "../utils/peerDeparture";
+import { createConsoleStorage } from "../utils/localGameState";
 import { createLogger } from "@utils/logger";
 import { QRScannerController } from "@utils/qrScannerController";
 
@@ -325,6 +326,7 @@ export class ConsoleApp {
         onPeerJoined: this.peerNotifier.onPeerJoined,
         onPeerReady: this.peerNotifier.onPeerReady,
         onPeerLeft: this.peerNotifier.onPeerLeft,
+        storage: createConsoleStorage(this.code),
         viewport: {
           container: surface ?? document.createElement("div"),
           initialSize: { width: rect.width, height: rect.height },

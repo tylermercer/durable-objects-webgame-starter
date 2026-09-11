@@ -1,7 +1,6 @@
 import { Application, Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { ConsoleContext, ConsoleGameInstance } from "@contract/gameTypes";
 import { createFixedTickLoop } from "../../utils/gameLoop";
-import { saveLocalGameState, loadLocalGameState } from "@utils/localGameState";
 import {
   createInitialRoundState,
   stepRound,
@@ -228,7 +227,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
   }
 
   // Load persisted game state if available
-  const saved = loadLocalGameState<PersistedFlappyState>(ctx.roomCode);
+  const saved = ctx.storage.getSavedRoomState<PersistedFlappyState>();
   if (saved && typeof saved === "object" && saved.seed && saved.phase) {
     roundSeed = saved.seed;
     const players = Object.values(saved.birds).map((b) => ({
@@ -275,7 +274,7 @@ export function createGame(ctx: ConsoleContext): ConsoleGameInstance {
       birds: currentState.birds,
       winner: currentState.winner,
     };
-    saveLocalGameState(ctx.roomCode, stateToSave);
+    ctx.storage.saveRoomState(stateToSave);
   }
 
   function getSnapshot(): RoundStateSnapshot {
