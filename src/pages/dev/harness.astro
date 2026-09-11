@@ -45,7 +45,6 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
           <iframe
             id="console-frame"
             src={consoleSrc}
-            allow="fullscreen 'none'"
             sandbox="allow-scripts allow-same-origin allow-forms"
             title="Console Frame"
           ></iframe>
@@ -63,7 +62,6 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
               <div class="frame-container controller-container">
                 <iframe
                   class="ctrl-frame"
-                  allow="fullscreen 'none'"
                   sandbox="allow-scripts allow-forms"
                   title={`Controller ${index + 1} Frame`}
                 ></iframe>
@@ -79,28 +77,16 @@ const consoleSrc = `/play/${game}?${transportQuery ? transportQuery.slice(1) : '
 <script define:vars={{ game, transportQuery }}>
   const consoleFrame = document.getElementById('console-frame');
   if (consoleFrame) {
-    let paired = false;
-
-    window.addEventListener('message', (event) => {
-      if (paired) return;
-      if (event.data && event.data.type === 'CONSOLE_ROOM_READY' && event.data.code) {
-        paired = true;
-        const code = event.data.code;
+    const gate = setInterval(() => {
+      try {
+        const code = consoleFrame.contentWindow?.sessionStorage?.getItem('console_room_code');
+        if (!code) return;
+        clearInterval(gate);
         document.querySelectorAll('.ctrl-frame').forEach((frame) => {
           frame.src = `/play/${game}?code=${encodeURIComponent(code)}${transportQuery}`;
         });
-      }
-    });
-
-    const poll = setInterval(() => {
-      if (paired) {
-        clearInterval(poll);
-        return;
-      }
-      try {
-        consoleFrame.contentWindow?.postMessage({ type: 'GET_CONSOLE_ROOM_CODE' }, '*');
       } catch (e) {
-        // ignore cross-origin/loading errors
+        // storage access error while loading
       }
     }, 200);
   }
