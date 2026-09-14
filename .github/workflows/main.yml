@@ -161,7 +161,9 @@ jobs:
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b
         with:
           comment-tag: deploy_preview
-          mode: recreate
+          # Use upsert mode to edit the existing deployment comment instead of creating a new comment,
+          # reducing notification noise for PR authors.
+          mode: upsert
           message: |
             ## Preview Worker Cleaned Up :wastebasket:
 
