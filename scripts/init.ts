@@ -46,7 +46,8 @@ async function main() {
   
   const filesToUpdate = [
     "./wrangler.jsonc", 
-    "./.github/workflows/main.yml",
+    "./.github/workflows/prod.yml",
+    "./.github/workflows/pr-deploy.yml",
     "./package.json",
     "./astro.config.mjs"
   ];
@@ -56,8 +57,8 @@ async function main() {
       let content = readFileSync(path, "utf-8");
       content = content.replaceAll(TEMPLATE_NAME, newProjectName);
       content = content.replaceAll(TEMPLATE_SUBDOMAIN, cfSubdomain);
-      if (path === "./.github/workflows/main.yml") {
-        content = content.replace(/\s&& github\.repository == 'tylermercer\/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init/, "");
+      if (path.startsWith("./.github/workflows/")) {
+        content = content.replaceAll(/\s&& github\.repository == 'tylermercer\/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init/g, "");
       }
       writeFileSync(path, content);
     } catch (e) {

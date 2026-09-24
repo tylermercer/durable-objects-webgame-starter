@@ -1,18 +1,10 @@
-name: Build and Deploy to Cloudflare Workers
+name: Pull Request Deploy Preview
 
 # Expects these secrets to be configured in your GitHub repo:
 # - CLOUDFLARE_API_TOKEN
 # - CLOUDFLARE_ACCOUNT_ID
 
 on:
-  # schedule: # Run at 15:00 UTC every day --- enable if you want to do something like scheduled blog posts
-  #   - cron: "0 15 * * *"
-  push: # Run on pushes to main
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
-      - 'design-docs/**'
   pull_request: # Run on pull requests
     types:
       - opened
@@ -24,8 +16,8 @@ on:
   workflow_dispatch: # Allows running this workflow manually
 
 jobs:
-  build:
-    if: (github.event_name != 'pull_request' || github.event.action != 'closed') && github.repository == 'tylermercer/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init
+  build-and-preview:
+    if: github.event.action != 'closed' && github.repository == 'tylermercer/durable-objects-webgame-starter' # repo check prevents failure before init; remove on init
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -50,7 +42,7 @@ jobs:
           key: assets-${{ github.run_id }} # Save each run's cache
           restore-keys: | # Restore most recent cache
             assets-
-            
+
       - name: Cache pnpm store
         uses: actions/cache@v3
         with:
@@ -62,12 +54,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22.12.0'
-    
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 10
-            
+
       - name: Build site
         id: build_site
         env:
@@ -97,24 +89,15 @@ jobs:
           echo "sha_short=${commit_sha:0:7}" >> $GITHUB_OUTPUT
           echo "datetime=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Cloudflare (main)
-        id: deploy-main
-        if: github.event_name != 'pull_request' # wrangler deploy only for main
-        run: pnpm exec wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
       - name: Deploy to Cloudflare (pull request)
         id: deploy-pr
-        if: github.event_name == 'pull_request'
         run: pnpm exec wrangler preview --name ${{ steps.extract_vars.outputs.slugified_branch }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Add preview URL to pull request
-        if: github.event_name == 'pull_request' && steps.build_site.outputs.result == 'built'
+        if: steps.build_site.outputs.result == 'built'
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b
         with:
           comment-tag: deploy_preview
