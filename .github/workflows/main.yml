@@ -152,7 +152,7 @@ jobs:
           echo "slugified_branch=${truncated_slugified_branch}" >> $GITHUB_OUTPUT
 
       - name: Delete preview worker
-        run: pnpm exec wrangler preview delete --name ${{ steps.extract_vars.outputs.slugified_branch }} --force
+        run: npx wrangler preview delete --name ${{ steps.extract_vars.outputs.slugified_branch }} --force
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
